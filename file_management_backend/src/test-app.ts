@@ -15,7 +15,16 @@ const PORT = process.env.PORT || 3000;
 
 // 中间件
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:5174'
+  origin: (origin, callback) => {
+    // 开发环境允许所有 localhost 端口
+    if (!origin || /^http:\/\/localhost:\d+$/.test(origin)) {
+      callback(null, true);
+    } else if (process.env.CORS_ORIGIN) {
+      callback(null, process.env.CORS_ORIGIN);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  }
 }));
 app.use(express.json());
 

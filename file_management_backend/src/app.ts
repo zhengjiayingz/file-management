@@ -22,11 +22,20 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // 创建 Express 应用
-const app = express();
+const app: express.Application = express();
 
 // 中间件配置
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:5174',
+  origin: (origin, callback) => {
+    // 开发环境允许所有 localhost 端口
+    if (!origin || /^http:\/\/localhost:\d+$/.test(origin)) {
+      callback(null, true);
+    } else if (process.env.CORS_ORIGIN) {
+      callback(null, process.env.CORS_ORIGIN);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true
 }));
 app.use(express.json());

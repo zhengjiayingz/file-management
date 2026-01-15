@@ -10,36 +10,5 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// 用户模型
-model User {
-  id        Int      @id @default(autoincrement())
-  username  String   @unique @db.VarChar(50)
-  password  String   @db.VarChar(255)
-  email     String?  @db.VarChar(100)
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+// 数据模型将在需求讨论后添加
 
-  // 关联关系
-  files File[]
-
-  @@map("users")
-}
-
-// 文件模型
-model File {
-  id           Int      @id @default(autoincrement())
-  originalName String   @map("original_name") @db.VarChar(255)
-  filename     String   @unique @db.VarChar(255)
-  mimetype     String   @db.VarChar(100)
-  size         Int
-  path         String   @db.VarChar(500)
-  userId       Int      @map("user_id")
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
-
-  // 关联关系
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@map("files")
-}
