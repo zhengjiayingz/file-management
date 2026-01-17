@@ -132,18 +132,170 @@ const JWT_SECRET = process.env.JWT_SECRET!;
 const PORT = process.env.PORT || 3000;
 ```
 
-### 数据验证
+### 数据库操作规范
 
-#### 输入验证
+#### 🎯 核心原则：优先使用 ORM
+
+**强制规则：尽可能使用 Prisma ORM，避免直接编写 SQL 语句**
+
+##### ✅ 推荐做法
+
+1. **使用 Prisma Client 进行数据库操作**
+   ```typescript
+   // ✅ 好的做法
+   const user = await prisma.user.findUnique({
+     where: { username }
+   });
+   
+   // ✅ 使用事务
+   const result = await prisma.$transaction(async (tx) => {
+     const user = await tx.user.create({ data: userData });
+     await tx.loginLog.create({ data: logData });
+     return user;
+   });
+   ```
+
+2. **使用 Prisma 的类型安全特性**
+   ```typescript
+   // ✅ 利用 Prisma 生成的类型
+   const users: User[] = await prisma.user.findMany({
+     select: {
+       id: true,
+       username: true,
+       email: true
+     }
+   });
+   ```
+
+3. **使用 Prisma 的关联查询**
+   ```typescript
+   // ✅ 使用 include 或 select 进行关联查询
+   const userWithFiles = await prisma.user.findUnique({
+     where: { id: userId },
+     include: {
+       userFiles: {
+         where: { isDeleted: false }
+       }
+     }
+   });
+   ```
+
+##### ❌ 避免的做法
+
+1. **直接编写 SQL 语句**
+   ```typescript
+   // ❌ 避免这样做
+   const [users] = await connection.execute(
+     'SELECT * FROM users WHERE username = ?',
+     [username]
+   );
+   ```
+
+2. **手动管理数据库连接**
+   ```typescript
+   // ❌ 避免这样做
+   const connection = await mysql.createConnection(config);
+   // ... 操作
+   await connection.end();
+   ```
+
+##### 🔄 例外情况
+
+只有在以下情况下才考虑使用原生 SQL：
+
+1. **复杂的聚合查询**：Prisma 无法表达的复杂统计查询
+2. **性能关键场景**：经过测试证明 ORM 性能不足的场景
+3. **数据库特定功能**：需要使用 MySQL 特有功能的场景
+
+即使在这些情况下，也应该：
+- 使用 Prisma 的 `$queryRaw` 或 `$executeRaw`
+- 保持类型安全
+- 添加详细注释说明为什么不使用 ORM
+
 ```typescript
-// 验证必填字段
-if (!username || !password) {
-  res.status(400).json({
-    success: false,
-    message: '请提供用户名和密码'
-  });
-  return;
+// 🔄 例外情况的正确做法
+const result = await prisma.$queryRaw`
+  SELECT 
+    DATE(created_at) as date,
+    COUNT(*) as count
+  FROM users 
+  WHERE created_at >= ${startDate}
+  GROUP BY DATE(created_at)
+`;
+```
+
+##### 数据库架构管理
+
+1. **使用 Prisma Schema 定义数据模型**
+   - 所有表结构在 `prisma/schema.prisma` 中定义
+   - 使用 `prisma db push` 同步到数据库
+
+2. **保持 Schema 和数据库同步**
+   ```bash
+   # 生成 Prisma Client
+   pnpm prisma:generate
+   
+   # 同步 Schema 到数据库
+   pnpm prisma:db:push
+   ```
+
+##### 统一的 Prisma Client 实例
+
+```typescript
+// 使用 src/lib/prisma.ts 中的单例实例
+import prisma from '../lib/prisma.js';
+
+// ✅ 正确使用
+const user = await prisma.user.findUnique({ where: { id } });
+
+// ❌ 避免创建新实例
+const newPrisma = new PrismaClient(); // 不推荐
+```
+
+##### 错误处理
+
+```typescript
+import { Prisma } from '@prisma/client';
+
+try {
+  const result = await prisma.user.create({ data });
+  return result;
+} catch (error) {
+  if (error instanceof Prisma.PrismaClientKnownRequestError) {
+    // 处理已知的 Prisma 错误
+    if (error.code === 'P2002') {
+      throw new Error('用户名已存在');
+    }
+  }
+  throw error;
 }
+```
+
+##### 查询优化
+
+```typescript
+// ✅ 选择性查询 - 只查询需要的字段
+const user = await prisma.user.findUnique({
+  where: { id },
+  select: {
+    id: true,
+    username: true,
+    email: true
+  }
+});
+
+// ✅ 批量操作
+await prisma.user.createMany({
+  data: users,
+  skipDuplicates: true
+});
+
+// ✅ 使用事务保证数据一致性
+const result = await prisma.$transaction(async (tx) => {
+  const user = await tx.user.create({ data: userData });
+  await tx.operationLog.create({ data: logData });
+  return user;
+});
 ```
 
 ### 代码格式

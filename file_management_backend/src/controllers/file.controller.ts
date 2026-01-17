@@ -1,8 +1,17 @@
 import { Response } from 'express';
 import path from 'path';
 import fs from 'fs';
+import crypto from 'crypto';
 import prisma from '../lib/prisma.js';
 import { AuthRequest } from '../types/index.js';
+
+/**
+ * 计算文件 MD5 哈希
+ */
+const calculateFileHash = (filePath: string): string => {
+  const fileBuffer = fs.readFileSync(filePath);
+  return crypto.createHash('md5').update(fileBuffer).digest('hex');
+};
 
 /**
  * 上传文件
@@ -25,27 +34,71 @@ export const uploadFile = async (req: AuthRequest, res: Response): Promise<void>
       return;
     }
 
-    // 创建文件记录
-    const fileRecord = await prisma.file.create({
-      data: {
-        originalName: req.file.originalname,
-        filename: req.file.filename,
-        mimetype: req.file.mimetype,
-        size: req.file.size,
-        path: req.file.path,
-        userId: req.user.id
+    // 计算文件哈希
+    const fileHash = calculateFileHash(req.file.path);
+    
+    // 使用事务处理文件上传
+    const result = await prisma.$transaction(async (tx) => {
+      // 检查文件是否已存在（去重）
+      let fileStorage = await tx.fileStorage.findUnique({
+        where: { fileHash }
+      });
+
+      // 如果文件不存在，创建新的存储记录
+      if (!fileStorage) {
+        fileStorage = await tx.fileStorage.create({
+          data: {
+            fileHash,
+            filePath: req.file!.path,
+            fileSize: BigInt(req.file!.size),
+            mimeType: req.file!.mimetype,
+            referenceCount: 1,
+            status: 'active'
+          }
+        });
+      } else {
+        // 文件已存在，增加引用计数
+        fileStorage = await tx.fileStorage.update({
+          where: { id: fileStorage.id },
+          data: { referenceCount: { increment: 1 } }
+        });
+        
+        // 删除重复的物理文件
+        if (fs.existsSync(req.file!.path)) {
+          fs.unlinkSync(req.file!.path);
+        }
       }
+
+      // 创建用户文件记录
+      const userFile = await tx.userFile.create({
+        data: {
+          userId: req.user!.id,
+          storageId: fileStorage.id,
+          fileName: req.file!.originalname,
+          fileType: 'file'
+        }
+      });
+
+      // 更新用户存储使用量
+      await tx.user.update({
+        where: { id: req.user!.id },
+        data: {
+          storageUsed: { increment: BigInt(req.file!.size) }
+        }
+      });
+
+      return { userFile, fileStorage };
     });
 
     res.status(201).json({
       success: true,
       message: '文件上传成功',
       data: {
-        id: fileRecord.id,
-        originalName: fileRecord.originalName,
-        filename: fileRecord.filename,
-        size: fileRecord.size,
-        createdAt: fileRecord.createdAt
+        id: result.userFile.id,
+        fileName: result.userFile.fileName,
+        fileSize: Number(result.fileStorage.fileSize),
+        mimeType: result.fileStorage.mimeType,
+        createdAt: result.userFile.createdAt
       }
     });
   } catch (error) {
@@ -70,19 +123,32 @@ export const getFiles = async (req: AuthRequest, res: Response): Promise<void> =
       return;
     }
 
-    // 只返回当前用户上传的文件
-    const files = await prisma.file.findMany({
-      where: { userId: req.user.id },
-      select: {
-        id: true,
-        originalName: true,
-        filename: true,
-        mimetype: true,
-        size: true,
-        createdAt: true
+    // 获取当前用户的文件列表
+    const userFiles = await prisma.userFile.findMany({
+      where: { 
+        userId: req.user.id,
+        isDeleted: false
+      },
+      include: {
+        storage: {
+          select: {
+            fileSize: true,
+            mimeType: true
+          }
+        }
       },
       orderBy: { createdAt: 'desc' }
     });
+
+    const files = userFiles.map(file => ({
+      id: file.id,
+      fileName: file.fileName,
+      fileType: file.fileType,
+      fileSize: file.storage ? Number(file.storage.fileSize) : 0,
+      mimeType: file.storage?.mimeType || 'unknown',
+      createdAt: file.createdAt,
+      updatedAt: file.updatedAt
+    }));
 
     res.json({
       success: true,
@@ -121,22 +187,23 @@ export const getFileById = async (req: AuthRequest, res: Response): Promise<void
       return;
     }
 
-    const file = await prisma.file.findFirst({
+    const userFile = await prisma.userFile.findFirst({
       where: {
         id: fileId,
-        userId: req.user.id
+        userId: req.user.id,
+        isDeleted: false
       },
-      select: {
-        id: true,
-        originalName: true,
-        filename: true,
-        mimetype: true,
-        size: true,
-        createdAt: true
+      include: {
+        storage: {
+          select: {
+            fileSize: true,
+            mimeType: true
+          }
+        }
       }
     });
 
-    if (!file) {
+    if (!userFile) {
       res.status(404).json({
         success: false,
         message: '文件不存在'
@@ -146,7 +213,15 @@ export const getFileById = async (req: AuthRequest, res: Response): Promise<void
 
     res.json({
       success: true,
-      data: file
+      data: {
+        id: userFile.id,
+        fileName: userFile.fileName,
+        fileType: userFile.fileType,
+        fileSize: userFile.storage ? Number(userFile.storage.fileSize) : 0,
+        mimeType: userFile.storage?.mimeType || 'unknown',
+        createdAt: userFile.createdAt,
+        updatedAt: userFile.updatedAt
+      }
     });
   } catch (error) {
     console.error('Get file error:', error);
@@ -180,14 +255,23 @@ export const downloadFile = async (req: AuthRequest, res: Response): Promise<voi
       return;
     }
 
-    const file = await prisma.file.findFirst({
+    const userFile = await prisma.userFile.findFirst({
       where: {
         id: fileId,
-        userId: req.user.id
+        userId: req.user.id,
+        isDeleted: false
+      },
+      include: {
+        storage: {
+          select: {
+            filePath: true,
+            mimeType: true
+          }
+        }
       }
     });
 
-    if (!file) {
+    if (!userFile || !userFile.storage) {
       res.status(404).json({
         success: false,
         message: '文件不存在'
@@ -195,8 +279,8 @@ export const downloadFile = async (req: AuthRequest, res: Response): Promise<voi
       return;
     }
 
-    // 检查文件是否存在
-    if (!fs.existsSync(file.path)) {
+    // 检查物理文件是否存在
+    if (!fs.existsSync(userFile.storage.filePath)) {
       res.status(404).json({
         success: false,
         message: '文件已被删除'
@@ -205,11 +289,11 @@ export const downloadFile = async (req: AuthRequest, res: Response): Promise<voi
     }
 
     // 设置响应头
-    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(file.originalName)}"`);
-    res.setHeader('Content-Type', file.mimetype);
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(userFile.fileName)}"`);
+    res.setHeader('Content-Type', userFile.storage.mimeType);
 
     // 发送文件
-    res.sendFile(path.resolve(file.path));
+    res.sendFile(path.resolve(userFile.storage.filePath));
   } catch (error) {
     console.error('Download file error:', error);
     res.status(500).json({
@@ -242,14 +326,25 @@ export const deleteFile = async (req: AuthRequest, res: Response): Promise<void>
       return;
     }
 
-    const file = await prisma.file.findFirst({
+    const userFile = await prisma.userFile.findFirst({
       where: {
         id: fileId,
-        userId: req.user.id
+        userId: req.user.id,
+        isDeleted: false
+      },
+      include: {
+        storage: {
+          select: {
+            id: true,
+            filePath: true,
+            fileSize: true,
+            referenceCount: true
+          }
+        }
       }
     });
 
-    if (!file) {
+    if (!userFile || !userFile.storage) {
       res.status(404).json({
         success: false,
         message: '文件不存在'
@@ -257,14 +352,41 @@ export const deleteFile = async (req: AuthRequest, res: Response): Promise<void>
       return;
     }
 
-    // 删除物理文件
-    if (fs.existsSync(file.path)) {
-      fs.unlinkSync(file.path);
-    }
+    // 使用事务处理文件删除
+    await prisma.$transaction(async (tx) => {
+      // 软删除用户文件记录
+      await tx.userFile.update({
+        where: { id: fileId },
+        data: {
+          isDeleted: true,
+          deletedAt: new Date()
+        }
+      });
 
-    // 从数据库删除记录
-    await prisma.file.delete({
-      where: { id: fileId }
+      // 减少文件存储的引用计数
+      const updatedStorage = await tx.fileStorage.update({
+        where: { id: userFile.storage!.id },
+        data: { referenceCount: { decrement: 1 } }
+      });
+
+      // 如果引用计数为0，标记为待删除
+      if (updatedStorage.referenceCount <= 0) {
+        await tx.fileStorage.update({
+          where: { id: userFile.storage!.id },
+          data: {
+            status: 'pending_delete',
+            markedDeleteAt: new Date()
+          }
+        });
+      }
+
+      // 更新用户存储使用量
+      await tx.user.update({
+        where: { id: req.user!.id },
+        data: {
+          storageUsed: { decrement: userFile.storage!.fileSize }
+        }
+      });
     });
 
     res.json({

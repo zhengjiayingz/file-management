@@ -1,12 +1,12 @@
-<script setup lang="ts">
-// App.vue 现在作为路由容器，不需要额外的逻辑
-</script>
-
 <template>
   <div id="app">
     <router-view />
   </div>
 </template>
+
+<script setup lang="ts">
+// App.vue 现在作为路由容器，不需要额外的逻辑
+</script>
 
 <style>
 /* 全局样式重置 */

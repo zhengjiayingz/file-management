@@ -301,12 +301,13 @@
 
 ### 3.12 登录日志表 (login_logs)
 
-记录用户登录信息。
+记录用户登录信息，包括成功和失败的登录尝试。
 
 | 字段名 | 类型 | 约束 | 说明 |
 |--------|------|------|------|
 | id | INT | PRIMARY KEY, AUTO_INCREMENT | 日志ID |
-| user_id | INT | NOT NULL | 用户ID |
+| user_id | INT | NULL | 用户ID（登录失败时可能为NULL） |
+| username | VARCHAR(50) | NULL | 尝试登录的用户名 |
 | ip_address | VARCHAR(45) | NOT NULL | IP地址 |
 | location | VARCHAR(100) | NULL | 登录地点 |
 | device | VARCHAR(100) | NULL | 设备信息 |
@@ -319,7 +320,13 @@
 - PRIMARY KEY (id)
 - INDEX (user_id, created_at)
 - INDEX (ip_address, created_at)
-- FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+- INDEX (username)
+- FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+
+**说明：**
+- user_id 允许为 NULL，以便记录登录失败的尝试（用户不存在的情况）
+- username 字段记录尝试登录的用户名，用于安全审计
+- 外键使用 ON DELETE SET NULL，删除用户时保留登录日志
 
 ---
 

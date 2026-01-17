@@ -34,11 +34,35 @@
           <template #header>
             <div class="card-header">
               <span>欢迎回来，{{ authStore.user?.username }}！</span>
+              <el-tag v-if="authStore.user?.role === 'admin'" type="danger" size="small">管理员</el-tag>
+              <el-tag v-else-if="authStore.user?.role === 'vip'" type="warning" size="small">VIP用户</el-tag>
+              <el-tag v-else type="info" size="small">普通用户</el-tag>
             </div>
           </template>
           <div class="welcome-content">
             <p>这是文件管理系统的主页面</p>
             <p>您已成功登录系统</p>
+            
+            <!-- 存储空间使用情况 -->
+            <div class="storage-info" v-if="authStore.user">
+              <div class="storage-header">
+                <span>存储空间使用情况</span>
+                <span class="storage-text">
+                  {{ formatStorage(authStore.user.storage_used) }} / 
+                  {{ authStore.user.storage_quota === -1 ? '无限制' : formatStorage(authStore.user.storage_quota) }}
+                </span>
+              </div>
+              <el-progress 
+                v-if="authStore.user.storage_quota !== -1"
+                :percentage="storagePercentage" 
+                :color="storagePercentage > 80 ? '#f56c6c' : storagePercentage > 60 ? '#e6a23c' : '#67c23a'"
+                :stroke-width="8"
+              />
+              <div v-else class="unlimited-storage">
+                <el-icon color="#67c23a"><Check /></el-icon>
+                <span>无限制存储空间</span>
+              </div>
+            </div>
           </div>
         </el-card>
       </div>
@@ -94,22 +118,30 @@
         <el-row :gutter="20">
           <el-col :span="6">
             <el-card class="stat-card">
-              <el-statistic title="总文件数" :value="1234" />
+              <el-statistic title="我的文件数" :value="0" />
             </el-card>
           </el-col>
           <el-col :span="6">
             <el-card class="stat-card">
-              <el-statistic title="存储空间" :value="2.5" suffix="GB" />
+              <el-statistic 
+                title="已使用空间" 
+                :value="authStore.user ? formatStorage(authStore.user.storage_used) : '0 B'" 
+                :formatter="(value) => value"
+              />
             </el-card>
           </el-col>
           <el-col :span="6">
             <el-card class="stat-card">
-              <el-statistic title="今日上传" :value="56" />
+              <el-statistic 
+                title="存储配额" 
+                :value="authStore.user?.storage_quota === -1 ? '无限制' : (authStore.user ? formatStorage(authStore.user.storage_quota) : '0 B')"
+                :formatter="(value) => value"
+              />
             </el-card>
           </el-col>
           <el-col :span="6">
             <el-card class="stat-card">
-              <el-statistic title="在线用户" :value="8" />
+              <el-statistic title="用户角色" :value="authStore.user?.role || 'user'" :formatter="(value) => value === 'admin' ? '管理员' : value === 'vip' ? 'VIP用户' : '普通用户'" />
             </el-card>
           </el-col>
         </el-row>
@@ -121,11 +153,28 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { User, ArrowDown, Folder, Upload, Setting } from '@element-plus/icons-vue'
+import { User, ArrowDown, Folder, Upload, Setting, Check } from '@element-plus/icons-vue'
 import { useAuthStore } from '../../stores/auth'
+import { authApi } from '../../api/auth'
+import { computed } from 'vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
+
+// 计算存储使用百分比
+const storagePercentage = computed(() => {
+  if (!authStore.user) return 0
+  return Math.round((authStore.user.storage_used / authStore.user.storage_quota) * 100)
+})
+
+// 格式化存储大小
+const formatStorage = (bytes: number) => {
+  if (bytes === 0) return '0 B'
+  const k = 1024
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+}
 
 // 下拉菜单可见性变化
 const onDropdownVisibleChange = (visible: boolean) => {
@@ -133,19 +182,28 @@ const onDropdownVisibleChange = (visible: boolean) => {
 }
 
 // 直接退出登录（用于下拉菜单项的点击事件）
-const directLogout = () => {
+const directLogout = async () => {
   console.log('直接退出登录被点击')
+  
+  try {
+    // 调用后端登出API
+    if (authStore.refreshToken) {
+      await authApi.logout(authStore.refreshToken)
+    }
+  } catch (error) {
+    console.error('登出API调用失败:', error)
+    // 即使API调用失败，也要清除本地状态
+  }
+  
   console.log('开始执行退出登录')
-
   authStore.logout()
   ElMessage.success('已退出登录')
   router.push('/login')
-
   console.log('退出登录完成')
 }
 
 // 处理下拉菜单命令
-const handleCommand = (command: string) => {
+const handleCommand = async (command: string) => {
   console.log('下拉菜单命令:', command)
 
   switch (command) {
@@ -157,6 +215,17 @@ const handleCommand = (command: string) => {
       break
     case 'logout':
       console.log('通过command处理退出登录')
+      
+      try {
+        // 调用后端登出API
+        if (authStore.refreshToken) {
+          await authApi.logout(authStore.refreshToken)
+        }
+      } catch (error) {
+        console.error('登出API调用失败:', error)
+        // 即使API调用失败，也要清除本地状态
+      }
+      
       authStore.logout()
       ElMessage.success('已退出登录')
       router.push('/login')
@@ -223,6 +292,40 @@ const handleCommand = (command: string) => {
 .welcome-content {
   color: #606266;
   line-height: 1.6;
+}
+
+.storage-info {
+  margin-top: 20px;
+  padding: 15px;
+  background-color: #f8f9fa;
+  border-radius: 8px;
+}
+
+.storage-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  font-size: 14px;
+  color: #606266;
+}
+
+.storage-text {
+  font-weight: 600;
+  color: #303133;
+}
+
+.unlimited-storage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+  color: #67c23a;
+  font-weight: 600;
+}
+
+.unlimited-storage .el-icon {
+  margin-right: 8px;
 }
 
 .features-section {

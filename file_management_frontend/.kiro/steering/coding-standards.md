@@ -31,6 +31,10 @@ components/
 
 #### 单文件组件顺序
 ```vue
+<template>
+  <!-- 模板内容 -->
+</template>
+
 <script setup lang="ts">
 // 1. 导入
 // 2. Props 定义
@@ -41,10 +45,6 @@ components/
 // 7. 生命周期钩子
 </script>
 
-<template>
-  <!-- 模板内容 -->
-</template>
-
 <style scoped>
 /* 样式 */
 </style>
@@ -52,6 +52,13 @@ components/
 
 #### 完整示例
 ```vue
+<template>
+  <div class="container">
+    <h1>{{ title }}</h1>
+    <!-- 内容 -->
+  </div>
+</template>
+
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
@@ -92,13 +99,6 @@ onMounted(() => {
   fetchData()
 })
 </script>
-
-<template>
-  <div class="container">
-    <h1>{{ title }}</h1>
-    <!-- 内容 -->
-  </div>
-</template>
 
 <style scoped>
 .container {

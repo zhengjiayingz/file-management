@@ -63,3 +63,5 @@ temp/
 .env
 prisma/migrations/*
 !prisma/migrations/.gitkeep
+
+/src/generated/prisma

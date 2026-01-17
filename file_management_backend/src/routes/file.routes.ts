@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { Router } from 'express';
 import {
   uploadFile,
   getFiles,
@@ -9,7 +9,7 @@ import {
 import { authenticate } from '../middleware/auth.middleware.js';
 import { upload } from '../middleware/upload.middleware.js';
 
-const router = express.Router();
+const router: Router = express.Router();
 
 // 所有文件路由都需要认证
 router.use(authenticate);

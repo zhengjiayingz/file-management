@@ -181,7 +181,99 @@ UPDATE refresh_tokens SET is_revoked = TRUE WHERE token = ?
 
 ---
 
-### 1.5 修改密码流程
+### 1.5 多设备会话管理流程
+
+**流程步骤：**
+
+#### 1.5.1 查看所有活跃会话
+
+1. **查询用户的所有未撤销Token**
+   - 查询 refresh_tokens 表
+   - 筛选 is_revoked = FALSE 且未过期的记录
+
+2. **返回设备列表**
+   - 设备名称、设备类型
+   - 登录时间、最后使用时间
+   - IP地址、地理位置
+
+**涉及的表操作：**
+
+| 表名 | 操作类型 | 说明 |
+|------|---------|------|
+| refresh_tokens | SELECT | 查询所有活跃会话 |
+
+**SQL 示例：**
+```sql
+-- 查询所有活跃会话
+SELECT id, device_name, device_type, ip_address, 
+       created_at as login_time, last_used_at, expires_at
+FROM refresh_tokens
+WHERE user_id = ? AND is_revoked = FALSE AND expires_at > NOW()
+ORDER BY last_used_at DESC
+```
+
+#### 1.5.2 远程登出指定设备
+
+1. **验证会话所有权**
+   - 检查 token 是否属于当前用户
+
+2. **撤销指定设备的 Token**
+   - 设置 is_revoked = TRUE
+
+3. **记录操作日志**
+   - 记录远程登出操作
+
+**涉及的表操作：**
+
+| 表名 | 操作类型 | 说明 |
+|------|---------|------|
+| refresh_tokens | SELECT | 验证会话所有权 |
+| refresh_tokens | UPDATE | 撤销指定Token |
+| operation_logs | INSERT | 记录操作日志 |
+
+**SQL 示例：**
+```sql
+-- 验证会话所有权
+SELECT id FROM refresh_tokens WHERE id = ? AND user_id = ?
+
+-- 撤销指定设备的Token
+UPDATE refresh_tokens SET is_revoked = TRUE WHERE id = ? AND user_id = ?
+
+-- 记录操作日志
+INSERT INTO operation_logs (user_id, operation_type, resource_type, resource_id, description, ip_address)
+VALUES (?, 'remote_logout', 'session', ?, '远程登出设备', ?)
+```
+
+#### 1.5.3 登出所有其他设备
+
+1. **撤销除当前设备外的所有 Token**
+   - 保留当前使用的 token
+   - 撤销其他所有 token
+
+2. **记录操作日志**
+
+**涉及的表操作：**
+
+| 表名 | 操作类型 | 说明 |
+|------|---------|------|
+| refresh_tokens | UPDATE | 撤销其他设备的Token |
+| operation_logs | INSERT | 记录操作日志 |
+
+**SQL 示例：**
+```sql
+-- 撤销除当前设备外的所有Token
+UPDATE refresh_tokens 
+SET is_revoked = TRUE 
+WHERE user_id = ? AND token != ? AND is_revoked = FALSE
+
+-- 记录操作日志
+INSERT INTO operation_logs (user_id, operation_type, resource_type, description, ip_address)
+VALUES (?, 'logout_all_devices', 'session', '登出所有其他设备', ?)
+```
+
+---
+
+### 1.6 修改密码流程
 
 **流程步骤：**
 

@@ -8,7 +8,6 @@ import { fileURLToPath } from 'url';
 import authRoutes from './routes/auth.routes.js';
 import fileRoutes from './routes/file.routes.js';
 import userRoutes from './routes/user.routes.js';
-import testRoutes from './routes/test.routes.js';
 
 // 导入中间件
 import { errorHandler } from './middleware/error.middleware.js';
@@ -50,7 +49,7 @@ app.get('/health', (req, res) => {
     status: 'ok',
     message: 'File Management API is running',
     timestamp: new Date().toISOString(),
-    database: 'Prisma + MySQL'
+    database: 'MySQL'
   });
 });
 
@@ -58,7 +57,6 @@ app.get('/health', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/files', fileRoutes);
 app.use('/api/users', userRoutes);
-app.use('/api/test', testRoutes);
 
 // 404 处理
 app.use(notFound);
