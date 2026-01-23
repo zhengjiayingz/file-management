@@ -276,12 +276,25 @@ const isRenaming = ref(false)
 
 // 计算属性
 const filteredFiles = computed(() => {
-  if (!searchText.value) return files.value
+  let result = files.value
+
+  // 搜索过滤
+  if (searchText.value) {
+    const keyword = searchText.value.toLowerCase()
+    result = result.filter(file => 
+      file.fileName.toLowerCase().includes(keyword)
+    )
+  }
   
-  const keyword = searchText.value.toLowerCase()
-  return files.value.filter(file => 
-    file.fileName.toLowerCase().includes(keyword)
-  )
+  // 排序：文件夹优先，然后按时间倒序
+  return result.sort((a, b) => {
+    // 1. 文件夹优先
+    if (a.fileType === 'folder' && b.fileType !== 'folder') return -1
+    if (a.fileType !== 'folder' && b.fileType === 'folder') return 1
+    
+    // 2. 按创建时间倒序
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  })
 })
 
 // 生命周期

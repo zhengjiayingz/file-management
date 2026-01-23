@@ -317,6 +317,11 @@ const startUpload = async (item: UploadQueueItem) => {
       item.progress = 100
       ElMessage.success(`${item.file.name} 秒传成功`)
       emit('uploadSuccess', fileInfo)
+      
+      // 3秒后移除完成的项目
+      setTimeout(() => {
+        removeFromQueue(item.id)
+      }, 3000)
     } else {
       // 对于空文件或很小的文件，直接使用传统上传
       if (item.file.size === 0) {
@@ -334,6 +339,11 @@ const startUpload = async (item: UploadQueueItem) => {
         item.progress = 100
         ElMessage.success(`${item.file.name} 上传成功`)
         emit('uploadSuccess', fileInfo)
+
+        // 3秒后移除完成的项目
+        setTimeout(() => {
+          removeFromQueue(item.id)
+        }, 3000)
       } else {
         // 分片上传
         await uploadWithChunks(item)
@@ -428,6 +438,11 @@ const uploadWithChunks = async (item: UploadQueueItem) => {
   item.progress = 100
   ElMessage.success(`${item.file.name} 上传成功`)
   emit('uploadSuccess', fileInfo)
+
+  // 3秒后移除完成的项目
+  setTimeout(() => {
+    removeFromQueue(item.id)
+  }, 3000)
 }
 
 // 暂停上传
@@ -497,6 +512,9 @@ const getStatusText = (item: UploadQueueItem): string => {
 
 <style lang="scss" scoped>
 .file-upload {
+  position: relative;
+  display: inline-block;
+
   .drop-zone {
     margin-top: 20px;
     padding: 40px;
@@ -532,17 +550,32 @@ const getStatusText = (item: UploadQueueItem): string => {
   }
 
   .upload-queue {
-    margin-top: 20px;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    z-index: 2000;
+    width: 400px;
+    max-height: 500px;
+    overflow-y: auto;
+    background-color: white;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+    border: 1px solid #e4e7ed;
+    border-radius: 8px;
+    margin-top: 12px;
+    padding: 16px;
 
     .queue-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
       margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid #ebeef5;
 
       h4 {
         margin: 0;
         color: #303133;
+        font-size: 16px;
       }
     }
 
@@ -550,12 +583,16 @@ const getStatusText = (item: UploadQueueItem): string => {
       .queue-item {
         display: flex;
         align-items: center;
-        padding: 16px;
+        padding: 12px;
         border: 1px solid #ebeef5;
-        border-radius: 8px;
+        border-radius: 6px;
         margin-bottom: 12px;
         background-color: white;
         transition: all 0.3s;
+
+        &:last-child {
+          margin-bottom: 0;
+        }
 
         &.uploading {
           border-color: #409eff;
@@ -577,6 +614,7 @@ const getStatusText = (item: UploadQueueItem): string => {
 
           .file-details {
             min-width: 0;
+            flex: 1;
 
             .file-name {
               font-size: 14px;
@@ -595,14 +633,14 @@ const getStatusText = (item: UploadQueueItem): string => {
         }
 
         .upload-progress {
-          flex: 2;
-          margin: 0 20px;
+          flex: 1.5;
+          margin: 0 16px;
 
           .progress-info {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 8px;
+            margin-bottom: 4px;
 
             .status-text {
               font-size: 12px;

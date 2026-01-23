@@ -356,7 +356,7 @@ export const instantUpload = async (req: AuthRequest, res: Response): Promise<vo
 
     const { fileHash, fileName, fileSize, mimeType, parentId } = req.body;
 
-    if (!fileHash || !fileName || !fileSize || !mimeType) {
+    if (!fileHash || !fileName || fileSize === undefined || fileSize === null || !mimeType) {
       res.status(400).json({
         success: false,
         message: '秒传参数不完整'
@@ -790,7 +790,7 @@ export const getFiles = async (req: AuthRequest, res: Response): Promise<void> =
         }
       },
       orderBy: [
-        { fileType: 'desc' }, // 文件夹优先
+        { fileType: 'desc' }, // 'folder' > 'file', so desc puts folder first
         { createdAt: 'desc' }
       ]
     });
