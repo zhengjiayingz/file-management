@@ -1,165 +1,155 @@
 <template>
   <div class="index-container">
-    <!-- 顶部导航栏 -->
-    <el-header class="header">
-      <div class="header-content">
-        <h1 class="logo">文件管理系统</h1>
-        <div class="user-info">
-          <el-dropdown @command="handleCommand" @visible-change="onDropdownVisibleChange">
-            <span class="user-dropdown">
-              <el-icon>
-                <User />
-              </el-icon>
-              {{ authStore.user?.username }}
-              <el-icon class="el-icon--right">
-                <ArrowDown />
-              </el-icon>
-            </span>
-            <template #dropdown>
-              <el-dropdown-menu>
-                <el-dropdown-item command="profile">个人信息</el-dropdown-item>
-                <el-dropdown-item command="settings">设置</el-dropdown-item>
-                <el-dropdown-item divided command="logout" @click="directLogout">退出登录</el-dropdown-item>
-              </el-dropdown-menu>
-            </template>
-          </el-dropdown>
-        </div>
+    <!-- 左侧导航栏 -->
+    <el-aside class="sidebar" width="200px">
+      <div class="sidebar-header">
+        <h2 class="logo">软件文件</h2>
       </div>
-    </el-header>
+      <el-menu
+        default-active="1"
+        class="sidebar-menu"
+        background-color="#f8f9fa"
+        text-color="#333"
+        active-text-color="#409eff"
+      >
+        <el-menu-item index="1">
+          <el-icon><Folder /></el-icon>
+          <span>首页</span>
+        </el-menu-item>
+        <el-menu-item index="2">
+          <el-icon><Clock /></el-icon>
+          <span>同步</span>
+        </el-menu-item>
+        <el-menu-item index="3">
+          <el-icon><Star /></el-icon>
+          <span>收藏</span>
+        </el-menu-item>
+        <el-menu-item index="4">
+          <el-icon><Delete /></el-icon>
+          <span>回收站</span>
+        </el-menu-item>
+      </el-menu>
+    </el-aside>
 
     <!-- 主要内容区域 -->
-    <el-main class="main-content">
-      <div class="welcome-section">
-        <el-card class="welcome-card">
-          <template #header>
-            <div class="card-header">
-              <span>欢迎回来，{{ authStore.user?.username }}！</span>
-              <el-tag v-if="authStore.user?.role === 'admin'" type="danger" size="small">管理员</el-tag>
-              <el-tag v-else-if="authStore.user?.role === 'vip'" type="warning" size="small">VIP用户</el-tag>
-              <el-tag v-else type="info" size="small">普通用户</el-tag>
+    <el-container class="main-container">
+      <!-- 顶部工具栏 -->
+      <el-header class="header" height="60px">
+        <div class="header-content">
+          <div class="header-left">
+            <el-button-group>
+              <el-button type="primary" :icon="Upload">上传</el-button>
+              <el-button :icon="FolderAdd">新建文件夹</el-button>
+              <el-button :icon="Download">新建文件</el-button>
+            </el-button-group>
+          </div>
+          <div class="header-right">
+            <el-input
+              v-model="searchText"
+              placeholder="搜索文件、文件夹"
+              :prefix-icon="Search"
+              style="width: 300px; margin-right: 20px;"
+            />
+            <el-dropdown @command="handleCommand">
+              <span class="user-dropdown">
+                <el-icon><User /></el-icon>
+                {{ authStore.user?.username }}
+                <el-icon class="el-icon--right"><ArrowDown /></el-icon>
+              </span>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="profile">个人信息</el-dropdown-item>
+                  <el-dropdown-item command="settings">设置</el-dropdown-item>
+                  <el-dropdown-item divided command="logout">退出登录</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+          </div>
+        </div>
+      </el-header>
+
+      <!-- 文件操作工具栏 -->
+      <div class="toolbar">
+        <div class="toolbar-left">
+          <el-breadcrumb separator="/">
+            <el-breadcrumb-item>全部</el-breadcrumb-item>
+            <!-- <el-breadcrumb-item>产品设计</el-breadcrumb-item> -->
+          </el-breadcrumb>
+        </div>
+        <div class="toolbar-right">
+          <el-button-group>
+            <el-button :icon="List" @click="viewMode = 'list'" :type="viewMode === 'list' ? 'primary' : ''">列表</el-button>
+            <el-button :icon="Grid" @click="viewMode = 'grid'" :type="viewMode === 'grid' ? 'primary' : ''">网格</el-button>
+          </el-button-group>
+        </div>
+      </div>
+
+      <!-- 文件列表区域 -->
+      <el-main class="file-content">
+        <div class="file-list">
+          <!-- 文件夹列表 -->
+          <div class="folder-item" v-for="folder in folders" :key="folder.id">
+            <el-icon class="folder-icon" size="48" color="#ffd04b">
+              <Folder />
+            </el-icon>
+            <div class="file-info">
+              <div class="file-name">{{ folder.name }}</div>
+              <div class="file-meta">{{ folder.date }}</div>
             </div>
-          </template>
-          <div class="welcome-content">
-            <p>这是文件管理系统的主页面</p>
-            <p>您已成功登录系统</p>
-            
-            <!-- 存储空间使用情况 -->
-            <div class="storage-info" v-if="authStore.user">
-              <div class="storage-header">
-                <span>存储空间使用情况</span>
-                <span class="storage-text">
-                  {{ formatStorage(authStore.user.storage_used) }} / 
-                  {{ authStore.user.storage_quota === -1 ? '无限制' : formatStorage(authStore.user.storage_quota) }}
-                </span>
-              </div>
-              <el-progress 
-                v-if="authStore.user.storage_quota !== -1"
-                :percentage="storagePercentage" 
-                :color="storagePercentage > 80 ? '#f56c6c' : storagePercentage > 60 ? '#e6a23c' : '#67c23a'"
-                :stroke-width="8"
-              />
-              <div v-else class="unlimited-storage">
-                <el-icon color="#67c23a"><Check /></el-icon>
-                <span>无限制存储空间</span>
-              </div>
+            <div class="file-actions">
+              <el-dropdown trigger="click">
+                <el-icon><MoreFilled /></el-icon>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item>重命名</el-dropdown-item>
+                    <el-dropdown-item>移动</el-dropdown-item>
+                    <el-dropdown-item>删除</el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
             </div>
           </div>
-        </el-card>
-      </div>
+        </div>
 
-      <!-- 功能区域 -->
-      <div class="features-section">
-
-
-        <el-row :gutter="20">
-          <el-col :span="8">
-            <el-card class="feature-card" shadow="hover">
-              <div class="feature-icon">
-                <el-icon size="40" color="#409eff">
-                  <Folder />
-                </el-icon>
-              </div>
-              <h3>文件管理</h3>
-              <p>管理您的文件和文件夹</p>
-              <el-button type="primary" plain>进入管理</el-button>
-            </el-card>
-          </el-col>
-
-          <el-col :span="8">
-            <el-card class="feature-card" shadow="hover">
-              <div class="feature-icon">
-                <el-icon size="40" color="#67c23a">
-                  <Upload />
-                </el-icon>
-              </div>
-              <h3>文件上传</h3>
-              <p>上传新的文件到系统</p>
-              <el-button type="success" plain>开始上传</el-button>
-            </el-card>
-          </el-col>
-
-          <el-col :span="8">
-            <el-card class="feature-card" shadow="hover">
-              <div class="feature-icon">
-                <el-icon size="40" color="#e6a23c">
-                  <Setting />
-                </el-icon>
-              </div>
-              <h3>系统设置</h3>
-              <p>配置系统参数和选项</p>
-              <el-button type="warning" plain>进入设置</el-button>
-            </el-card>
-          </el-col>
-        </el-row>
-      </div>
-
-      <!-- 统计信息 -->
-      <div class="stats-section">
-        <el-row :gutter="20">
-          <el-col :span="6">
-            <el-card class="stat-card">
-              <el-statistic title="我的文件数" :value="0" />
-            </el-card>
-          </el-col>
-          <el-col :span="6">
-            <el-card class="stat-card">
-              <el-statistic 
-                title="已使用空间" 
-                :value="authStore.user ? formatStorage(authStore.user.storage_used) : '0 B'" 
-                :formatter="(value) => value"
-              />
-            </el-card>
-          </el-col>
-          <el-col :span="6">
-            <el-card class="stat-card">
-              <el-statistic 
-                title="存储配额" 
-                :value="authStore.user?.storage_quota === -1 ? '无限制' : (authStore.user ? formatStorage(authStore.user.storage_quota) : '0 B')"
-                :formatter="(value) => value"
-              />
-            </el-card>
-          </el-col>
-          <el-col :span="6">
-            <el-card class="stat-card">
-              <el-statistic title="用户角色" :value="authStore.user?.role || 'user'" :formatter="(value) => value === 'admin' ? '管理员' : value === 'vip' ? 'VIP用户' : '普通用户'" />
-            </el-card>
-          </el-col>
-        </el-row>
-      </div>
-    </el-main>
+        <!-- 存储空间信息 -->
+        <div class="storage-info" v-if="authStore.user">
+          <div class="storage-icon">
+            <el-icon size="24" color="#409eff"><CloudUpload /></el-icon>
+          </div>
+          <div class="storage-text">
+            {{ formatStorage(authStore.user.storage_used) }} / 
+            {{ authStore.user.storage_quota === -1 ? '无限制' : formatStorage(authStore.user.storage_quota) }}
+          </div>
+        </div>
+      </el-main>
+    </el-container>
   </div>
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import { User, ArrowDown, Folder, Upload, Setting, Check } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
+import { 
+  User, ArrowDown, Folder, Upload, Setting, Check, 
+  Search, FolderAdd, Download, Clock, Star, Delete,
+  List, Grid, MoreFilled, Upload as CloudUpload
+} from '@element-plus/icons-vue'
 import { useAuthStore } from '../../stores/auth'
 import { authApi } from '../../api/auth'
 import { computed } from 'vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
+
+// 响应式数据
+const searchText = ref('')
+const viewMode = ref('list')
+
+// 模拟文件夹数据
+const folders = ref([
+
+])
 
 // 计算存储使用百分比
 const storagePercentage = computed(() => {
@@ -176,36 +166,8 @@ const formatStorage = (bytes: number) => {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }
 
-// 下拉菜单可见性变化
-const onDropdownVisibleChange = (visible: boolean) => {
-  console.log('下拉菜单可见性变化:', visible)
-}
-
-// 直接退出登录（用于下拉菜单项的点击事件）
-const directLogout = async () => {
-  console.log('直接退出登录被点击')
-  
-  try {
-    // 调用后端登出API
-    if (authStore.refreshToken) {
-      await authApi.logout(authStore.refreshToken)
-    }
-  } catch (error) {
-    console.error('登出API调用失败:', error)
-    // 即使API调用失败，也要清除本地状态
-  }
-  
-  console.log('开始执行退出登录')
-  authStore.logout()
-  ElMessage.success('已退出登录')
-  router.push('/login')
-  console.log('退出登录完成')
-}
-
 // 处理下拉菜单命令
 const handleCommand = async (command: string) => {
-  console.log('下拉菜单命令:', command)
-
   switch (command) {
     case 'profile':
       ElMessage.info('个人信息功能开发中...')
@@ -214,38 +176,68 @@ const handleCommand = async (command: string) => {
       ElMessage.info('设置功能开发中...')
       break
     case 'logout':
-      console.log('通过command处理退出登录')
-      
       try {
-        // 调用后端登出API
         if (authStore.refreshToken) {
           await authApi.logout(authStore.refreshToken)
         }
       } catch (error) {
         console.error('登出API调用失败:', error)
-        // 即使API调用失败，也要清除本地状态
       }
       
       authStore.logout()
       ElMessage.success('已退出登录')
       router.push('/login')
       break
-    default:
-      console.log('未知命令:', command)
   }
 }
 </script>
 
 <style scoped>
 .index-container {
-  min-height: 100vh;
+  display: flex;
+  height: 100vh;
   background-color: #f5f7fa;
 }
 
+/* 左侧导航栏 */
+.sidebar {
+  background-color: #f8f9fa;
+  border-right: 1px solid #e4e7ed;
+}
+
+.sidebar-header {
+  padding: 20px;
+  border-bottom: 1px solid #e4e7ed;
+}
+
+.logo {
+  color: #303133;
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.sidebar-menu {
+  border: none;
+}
+
+.sidebar-menu .el-menu-item {
+  height: 48px;
+  line-height: 48px;
+}
+
+/* 主容器 */
+.main-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 顶部工具栏 */
 .header {
   background: white;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  padding: 0;
+  border-bottom: 1px solid #e4e7ed;
+  padding: 0 20px;
 }
 
 .header-content {
@@ -253,14 +245,15 @@ const handleCommand = async (command: string) => {
   justify-content: space-between;
   align-items: center;
   height: 100%;
-  padding: 0 20px;
 }
 
-.logo {
-  color: #409eff;
-  margin: 0;
-  font-size: 24px;
-  font-weight: 600;
+.header-left .el-button-group {
+  margin-right: 20px;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
 }
 
 .user-dropdown {
@@ -269,107 +262,128 @@ const handleCommand = async (command: string) => {
   cursor: pointer;
   color: #606266;
   font-size: 14px;
+  padding: 8px 12px;
+  border-radius: 4px;
+  transition: background-color 0.3s;
+}
+
+.user-dropdown:hover {
+  background-color: #f5f7fa;
 }
 
 .user-dropdown .el-icon {
   margin: 0 4px;
 }
 
-.main-content {
-  padding: 20px;
-}
-
-.welcome-section {
-  margin-bottom: 20px;
-}
-
-.welcome-card .card-header {
-  font-size: 18px;
-  font-weight: 600;
-  color: #303133;
-}
-
-.welcome-content {
-  color: #606266;
-  line-height: 1.6;
-}
-
-.storage-info {
-  margin-top: 20px;
-  padding: 15px;
-  background-color: #f8f9fa;
-  border-radius: 8px;
-}
-
-.storage-header {
+/* 工具栏 */
+.toolbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 10px;
+  padding: 12px 20px;
+  background: white;
+  border-bottom: 1px solid #e4e7ed;
+}
+
+.toolbar-left .el-breadcrumb {
+  font-size: 14px;
+}
+
+/* 文件内容区域 */
+.file-content {
+  background: white;
+  padding: 20px;
+  overflow-y: auto;
+}
+
+.file-list {
+  margin-bottom: 40px;
+}
+
+.folder-item {
+  display: flex;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid #f0f0f0;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.folder-item:hover {
+  background-color: #f8f9fa;
+}
+
+.folder-icon {
+  margin-right: 16px;
+  flex-shrink: 0;
+}
+
+.file-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.file-name {
+  font-size: 14px;
+  color: #303133;
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-meta {
+  font-size: 12px;
+  color: #909399;
+}
+
+.file-actions {
+  margin-left: 16px;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  transition: background-color 0.3s;
+}
+
+.file-actions:hover {
+  background-color: #e4e7ed;
+}
+
+/* 存储空间信息 */
+.storage-info {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
   font-size: 14px;
   color: #606266;
 }
 
-.storage-text {
-  font-weight: 600;
-  color: #303133;
-}
-
-.unlimited-storage {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 10px;
-  color: #67c23a;
-  font-weight: 600;
-}
-
-.unlimited-storage .el-icon {
+.storage-icon {
   margin-right: 8px;
 }
 
-.features-section {
-  margin-bottom: 30px;
-}
-
-.feature-card {
-  text-align: center;
-  padding: 20px;
-  transition: transform 0.3s;
-}
-
-.feature-card:hover {
-  transform: translateY(-5px);
-}
-
-.feature-icon {
-  margin-bottom: 15px;
-}
-
-.feature-card h3 {
-  margin: 15px 0 10px 0;
-  color: #303133;
-  font-size: 18px;
-}
-
-.feature-card p {
-  color: #909399;
-  margin-bottom: 20px;
-  font-size: 14px;
-}
-
-.stats-section .stat-card {
-  text-align: center;
-}
-
-:deep(.el-statistic__content) {
-  font-size: 28px;
-  font-weight: 600;
-}
-
-:deep(.el-statistic__title) {
-  font-size: 14px;
-  color: #909399;
-  margin-bottom: 10px;
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .sidebar {
+    width: 60px !important;
+  }
+  
+  .sidebar-header .logo {
+    display: none;
+  }
+  
+  .header-left .el-button-group .el-button span {
+    display: none;
+  }
+  
+  .header-right .el-input {
+    width: 200px !important;
+  }
 }
 </style>
