@@ -159,7 +159,16 @@ const viewMode = ref('list')
 
 // 模拟文件夹数据
 const folders = ref([
-
+  // { id: 1, name: '360安全卫士', date: '2024/01/11' },
+  // { id: 2, name: 'PC 端设计时间', date: '2024/01/04 22:14' },
+  // { id: 3, name: '游戏', date: '2024/10/21 14:02' },
+  // { id: 4, name: '可行', date: '2024/01/23 19:20' },
+  // { id: 5, name: '数据', date: '2024/04/20 23:36' },
+  // { id: 6, name: '完成', date: '2024/02/24 09:30' },
+  // { id: 7, name: '软件工具', date: '2024/02/24 09:46' },
+  // { id: 8, name: '平台自建手机端项目', date: '2023/12/09 14:28' },
+  // { id: 9, name: '转换Redis', date: '2023/09/20 22:40' },
+  // { id: 10, name: '韩语学Java', date: '2023/09/17 09:49' }
 ])
 
 // 计算存储使用百分比
@@ -203,22 +212,31 @@ const handleCommand = async (command: string) => {
 }
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .index-container {
   display: flex;
   height: 100vh;
   background-color: #f5f7fa;
 }
 
-/* 左侧导航栏 */
+// 左侧导航栏
 .sidebar {
   background-color: #f8f9fa;
   border-right: 1px solid #e4e7ed;
-}
 
-.sidebar-header {
-  padding: 20px;
-  border-bottom: 1px solid #e4e7ed;
+  &-header {
+    padding: 20px;
+    border-bottom: 1px solid #e4e7ed;
+  }
+
+  &-menu {
+    border: none;
+
+    .el-menu-item {
+      height: 48px;
+      line-height: 48px;
+    }
+  }
 }
 
 .logo {
@@ -228,43 +246,36 @@ const handleCommand = async (command: string) => {
   font-weight: 600;
 }
 
-.sidebar-menu {
-  border: none;
-}
-
-.sidebar-menu .el-menu-item {
-  height: 48px;
-  line-height: 48px;
-}
-
-/* 主容器 */
+// 主容器
 .main-container {
   flex: 1;
   display: flex;
   flex-direction: column;
 }
 
-/* 顶部工具栏 */
+// 顶部工具栏
 .header {
   background: white;
   border-bottom: 1px solid #e4e7ed;
   padding: 0 20px;
-}
 
-.header-content {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  height: 100%;
-}
+  &-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    height: 100%;
+  }
 
-.header-left .el-button-group {
-  margin-right: 20px;
-}
+  &-left {
+    .el-button-group {
+      margin-right: 20px;
+    }
+  }
 
-.header-right {
-  display: flex;
-  align-items: center;
+  &-right {
+    display: flex;
+    align-items: center;
+  }
 }
 
 .user-dropdown {
@@ -276,17 +287,17 @@ const handleCommand = async (command: string) => {
   padding: 8px 12px;
   border-radius: 4px;
   transition: background-color 0.3s;
+
+  &:hover {
+    background-color: #f5f7fa;
+  }
+
+  .el-icon {
+    margin: 0 4px;
+  }
 }
 
-.user-dropdown:hover {
-  background-color: #f5f7fa;
-}
-
-.user-dropdown .el-icon {
-  margin: 0 4px;
-}
-
-/* 工具栏 */
+// 工具栏
 .toolbar {
   display: flex;
   justify-content: space-between;
@@ -294,13 +305,15 @@ const handleCommand = async (command: string) => {
   padding: 12px 20px;
   background: white;
   border-bottom: 1px solid #e4e7ed;
+
+  &-left {
+    .el-breadcrumb {
+      font-size: 14px;
+    }
+  }
 }
 
-.toolbar-left .el-breadcrumb {
-  font-size: 14px;
-}
-
-/* 文件内容区域 */
+// 文件内容区域
 .file-content {
   background: white;
   padding: 20px;
@@ -318,10 +331,10 @@ const handleCommand = async (command: string) => {
   border-bottom: 1px solid #f0f0f0;
   cursor: pointer;
   transition: background-color 0.3s;
-}
 
-.folder-item:hover {
-  background-color: #f8f9fa;
+  &:hover {
+    background-color: #f8f9fa;
+  }
 }
 
 .folder-icon {
@@ -354,13 +367,13 @@ const handleCommand = async (command: string) => {
   padding: 4px;
   border-radius: 4px;
   transition: background-color 0.3s;
+
+  &:hover {
+    background-color: #e4e7ed;
+  }
 }
 
-.file-actions:hover {
-  background-color: #e4e7ed;
-}
-
-/* 存储空间信息 */
+// 存储空间信息
 .storage-info {
   position: fixed;
   bottom: 20px;
@@ -379,22 +392,24 @@ const handleCommand = async (command: string) => {
   margin-right: 8px;
 }
 
-/* 响应式设计 */
+// 响应式设计
 @media (max-width: 768px) {
   .sidebar {
     width: 60px !important;
-  }
 
-  .sidebar-header .logo {
-    display: none;
+    &-header .logo {
+      display: none;
+    }
   }
+  
+  .header {
+    &-left .el-button-group .el-button span {
+      display: none;
+    }
 
-  .header-left .el-button-group .el-button span {
-    display: none;
-  }
-
-  .header-right .el-input {
-    width: 200px !important;
+    &-right .el-input {
+      width: 200px !important;
+    }
   }
 }
 </style>
