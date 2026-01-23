@@ -1,6 +1,7 @@
 {
   "recommendations": [
     "Vue.volar",
-    "prettier.prettier-vscode"
+    "prettier.prettier-vscode",
+    "MS-CEINTL.vscode-language-pack-zh-hans"
   ]
 }

@@ -28,8 +28,14 @@ const storage = multer.diskStorage({
 
 // 文件过滤器
 const fileFilter = (req: Express.Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
+  // 如果是分片上传，允许所有类型
+  if (req.body.fileHash && req.body.chunkIndex !== undefined) {
+    cb(null, true);
+    return;
+  }
+
   // 允许的文件类型
-  const allowedTypes = /jpeg|jpg|png|gif|pdf|doc|docx|xls|xlsx|txt|zip|rar/;
+  const allowedTypes = /jpeg|jpg|png|gif|webp|pdf|doc|docx|xls|xlsx|ppt|pptx|txt|zip|rar|7z|mp3|wav|ogg|mp4|avi|mov/;
   const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
   const mimetype = allowedTypes.test(file.mimetype);
 

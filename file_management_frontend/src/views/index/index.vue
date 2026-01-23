@@ -5,30 +5,27 @@
       <div class="sidebar-header">
         <h2 class="logo">软件文件</h2>
       </div>
-      <el-menu default-active="1" class="sidebar-menu" background-color="#f8f9fa" text-color="#333"
-        active-text-color="#409eff">
+      <el-menu
+        default-active="1"
+        class="sidebar-menu"
+        background-color="#f8f9fa"
+        text-color="#333"
+        active-text-color="#409eff"
+      >
         <el-menu-item index="1">
-          <el-icon>
-            <Folder />
-          </el-icon>
+          <el-icon><Folder /></el-icon>
           <span>首页</span>
         </el-menu-item>
         <el-menu-item index="2">
-          <el-icon>
-            <Clock />
-          </el-icon>
+          <el-icon><Clock /></el-icon>
           <span>同步</span>
         </el-menu-item>
         <el-menu-item index="3">
-          <el-icon>
-            <Star />
-          </el-icon>
+          <el-icon><Star /></el-icon>
           <span>收藏</span>
         </el-menu-item>
         <el-menu-item index="4">
-          <el-icon>
-            <Delete />
-          </el-icon>
+          <el-icon><Delete /></el-icon>
           <span>回收站</span>
         </el-menu-item>
       </el-menu>
@@ -40,26 +37,27 @@
       <el-header class="header" height="60px">
         <div class="header-content">
           <div class="header-left">
-            <el-button-group style="display: flex;">
-              <el-upload ref="upload" type="primary" :icon="Upload" :limit="1">
-                 <el-button :icon="Upload" type="primary">上传</el-button>
-              </el-upload>
-              <el-button :icon="FolderAdd">新建文件夹</el-button>
-              <el-button :icon="Download">新建文件</el-button>
-            </el-button-group>
+            <FileUpload 
+              :parent-id="currentFolderId"
+              :show-drop-zone="false"
+              @upload-success="handleUploadSuccess"
+              @upload-error="handleUploadError"
+            />
+            <el-button :icon="FolderAdd" @click="showCreateFolderDialog">新建文件夹</el-button>
           </div>
           <div class="header-right">
-            <el-input v-model="searchText" placeholder="搜索文件、文件夹" :prefix-icon="Search"
-              style="width: 300px; margin-right: 20px;" />
+            <el-input
+              v-model="searchText"
+              placeholder="搜索文件、文件夹"
+              :prefix-icon="Search"
+              style="width: 300px; margin-right: 20px;"
+              @input="handleSearch"
+            />
             <el-dropdown @command="handleCommand">
               <span class="user-dropdown">
-                <el-icon>
-                  <User />
-                </el-icon>
+                <el-icon><User /></el-icon>
                 {{ authStore.user?.username }}
-                <el-icon class="el-icon--right">
-                  <ArrowDown />
-                </el-icon>
+                <el-icon class="el-icon--right"><ArrowDown /></el-icon>
               </span>
               <template #dropdown>
                 <el-dropdown-menu>
@@ -77,42 +75,88 @@
       <div class="toolbar">
         <div class="toolbar-left">
           <el-breadcrumb separator="/">
-            <el-breadcrumb-item>全部</el-breadcrumb-item>
-            <!-- <el-breadcrumb-item>产品设计</el-breadcrumb-item> -->
+            <el-breadcrumb-item @click="navigateToFolder()">全部</el-breadcrumb-item>
+            <el-breadcrumb-item 
+              v-for="folder in breadcrumbs" 
+              :key="folder.id"
+              @click="navigateToFolder(folder.id)"
+            >
+              {{ folder.name }}
+            </el-breadcrumb-item>
           </el-breadcrumb>
         </div>
         <div class="toolbar-right">
           <el-button-group>
-            <el-button :icon="List" @click="viewMode = 'list'"
-              :type="viewMode === 'list' ? 'primary' : ''">列表</el-button>
-            <el-button :icon="Grid" @click="viewMode = 'grid'"
-              :type="viewMode === 'grid' ? 'primary' : ''">网格</el-button>
+            <el-button 
+              :icon="List" 
+              @click="viewMode = 'list'" 
+              :type="viewMode === 'list' ? 'primary' : ''"
+            >
+              列表
+            </el-button>
+            <el-button 
+              :icon="Grid" 
+              @click="viewMode = 'grid'" 
+              :type="viewMode === 'grid' ? 'primary' : ''"
+            >
+              网格
+            </el-button>
           </el-button-group>
         </div>
       </div>
 
       <!-- 文件列表区域 -->
       <el-main class="file-content">
-        <div class="file-list">
-          <!-- 文件夹列表 -->
-          <div class="folder-item" v-for="folder in folders" :key="folder.id">
-            <el-icon class="folder-icon" size="48" color="#ffd04b">
-              <Folder />
+        <!-- 拖拽上传区域 -->
+        <div
+          class="drop-zone-overlay"
+          :class="{ 'show': isDragOver }"
+          @drop="handleDrop"
+          @dragover="handleDragOver"
+          @dragenter="handleDragEnter"
+          @dragleave="handleDragLeave"
+        >
+          <div class="drop-zone-content">
+            <el-icon class="drop-icon" size="64">
+              <Upload />
             </el-icon>
+            <p class="drop-text">拖拽文件到此处上传</p>
+          </div>
+        </div>
+
+        <!-- 文件列表 -->
+        <div v-if="files.length > 0" class="file-list" :class="viewMode">
+          <div
+            v-for="file in filteredFiles"
+            :key="file.id"
+            class="file-item"
+            @click="handleFileClick(file)"
+            @dblclick="handleFileDoubleClick(file)"
+          >
+            <div class="file-icon">
+              <el-icon size="48" :color="getFileIconColor(file)">
+                <Folder v-if="file.fileType === 'folder'" />
+                <Document v-else />
+              </el-icon>
+            </div>
             <div class="file-info">
-              <div class="file-name">{{ folder.name }}</div>
-              <div class="file-meta">{{ folder.date }}</div>
+              <div class="file-name" :title="file.fileName">{{ file.fileName }}</div>
+              <div class="file-meta">
+                <span v-if="file.fileType === 'file'">{{ formatFileSize(file.fileSize) }}</span>
+                <span>{{ formatDate(file.createdAt) }}</span>
+              </div>
             </div>
             <div class="file-actions">
-              <el-dropdown trigger="click">
-                <el-icon>
-                  <MoreFilled />
-                </el-icon>
+              <el-dropdown trigger="click" @command="(cmd) => handleFileAction(cmd, file)">
+                <el-icon><MoreFilled /></el-icon>
                 <template #dropdown>
                   <el-dropdown-menu>
-                    <el-dropdown-item>重命名</el-dropdown-item>
-                    <el-dropdown-item>移动</el-dropdown-item>
-                    <el-dropdown-item>删除</el-dropdown-item>
+                    <el-dropdown-item v-if="file.fileType === 'file'" command="download">
+                      下载
+                    </el-dropdown-item>
+                    <el-dropdown-item command="rename">重命名</el-dropdown-item>
+                    <el-dropdown-item command="move">移动</el-dropdown-item>
+                    <el-dropdown-item divided command="delete">删除</el-dropdown-item>
                   </el-dropdown-menu>
                 </template>
               </el-dropdown>
@@ -120,62 +164,377 @@
           </div>
         </div>
 
+        <!-- 空状态 -->
+        <div v-else class="empty-state">
+          <el-icon class="empty-icon" size="64">
+            <Folder />
+          </el-icon>
+          <p class="empty-text">暂无文件</p>
+          <p class="empty-hint">拖拽文件到此处或点击上传按钮添加文件</p>
+        </div>
+
         <!-- 存储空间信息 -->
         <div class="storage-info" v-if="authStore.user">
           <div class="storage-icon">
-            <el-icon size="24" color="#409eff">
-              <CloudUpload />
-            </el-icon>
+            <el-icon size="24" color="#409eff"><Upload /></el-icon>
           </div>
           <div class="storage-text">
-            {{ formatStorage(authStore.user.storage_used) }} /
+            {{ formatStorage(authStore.user.storage_used) }} / 
             {{ authStore.user.storage_quota === -1 ? '无限制' : formatStorage(authStore.user.storage_quota) }}
           </div>
         </div>
       </el-main>
     </el-container>
+
+    <!-- 创建文件夹对话框 -->
+    <el-dialog
+      v-model="createFolderDialogVisible"
+      title="新建文件夹"
+      width="400px"
+    >
+      <el-form @submit.prevent="createFolder">
+        <el-form-item label="文件夹名称">
+          <el-input
+            v-model="newFolderName"
+            placeholder="请输入文件夹名称"
+            maxlength="255"
+            show-word-limit
+            @keyup.enter="createFolder"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="createFolderDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="createFolder" :loading="isCreatingFolder">
+          创建
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 重命名对话框 -->
+    <el-dialog
+      v-model="renameDialogVisible"
+      title="重命名"
+      width="400px"
+    >
+      <el-form @submit.prevent="confirmRename">
+        <el-form-item label="新名称">
+          <el-input
+            v-model="newFileName"
+            placeholder="请输入新名称"
+            maxlength="255"
+            show-word-limit
+            @keyup.enter="confirmRename"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="renameDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="confirmRename" :loading="isRenaming">
+          确定
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import {
-  User, ArrowDown, Folder, Upload, Setting, Check,
-  Search, FolderAdd, Download, Clock, Star, Delete,
-  List, Grid, MoreFilled, Upload as CloudUpload
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { 
+  User, ArrowDown, Folder, Upload, Search, FolderAdd,
+  Clock, Star, Delete, List, Grid, MoreFilled, Document
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '../../stores/auth'
 import { authApi } from '../../api/auth'
-import { computed } from 'vue'
+import fileApiService, { type FileInfo } from '../../api/file'
+import FileUpload from '../../components/FileUpload.vue'
+import { formatFileSize } from '../../utils/fileUpload'
 
 const router = useRouter()
 const authStore = useAuthStore()
 
 // 响应式数据
 const searchText = ref('')
-const viewMode = ref('list')
+const viewMode = ref<'list' | 'grid'>('list')
+const files = ref<FileInfo[]>([])
+const currentFolderId = ref<number | undefined>(undefined)
+const breadcrumbs = ref<{ id: number; name: string }[]>([])
+const isDragOver = ref(false)
+const loading = ref(false)
 
-// 模拟文件夹数据
-const folders = ref([
-  // { id: 1, name: '360安全卫士', date: '2024/01/11' },
-  // { id: 2, name: 'PC 端设计时间', date: '2024/01/04 22:14' },
-  // { id: 3, name: '游戏', date: '2024/10/21 14:02' },
-  // { id: 4, name: '可行', date: '2024/01/23 19:20' },
-  // { id: 5, name: '数据', date: '2024/04/20 23:36' },
-  // { id: 6, name: '完成', date: '2024/02/24 09:30' },
-  // { id: 7, name: '软件工具', date: '2024/02/24 09:46' },
-  // { id: 8, name: '平台自建手机端项目', date: '2023/12/09 14:28' },
-  // { id: 9, name: '转换Redis', date: '2023/09/20 22:40' },
-  // { id: 10, name: '韩语学Java', date: '2023/09/17 09:49' }
-])
+// 对话框相关
+const createFolderDialogVisible = ref(false)
+const newFolderName = ref('')
+const isCreatingFolder = ref(false)
 
-// 计算存储使用百分比
-const storagePercentage = computed(() => {
-  if (!authStore.user) return 0
-  return Math.round((authStore.user.storage_used / authStore.user.storage_quota) * 100)
+const renameDialogVisible = ref(false)
+const newFileName = ref('')
+const currentRenameFile = ref<FileInfo | null>(null)
+const isRenaming = ref(false)
+
+// 计算属性
+const filteredFiles = computed(() => {
+  if (!searchText.value) return files.value
+  
+  const keyword = searchText.value.toLowerCase()
+  return files.value.filter(file => 
+    file.fileName.toLowerCase().includes(keyword)
+  )
 })
+
+// 生命周期
+onMounted(() => {
+  loadFiles()
+})
+
+// 加载文件列表
+const loadFiles = async () => {
+  try {
+    loading.value = true
+    files.value = await fileApiService.getFiles(currentFolderId.value)
+  } catch (error: any) {
+    ElMessage.error('加载文件列表失败: ' + (error.message || '未知错误'))
+  } finally {
+    loading.value = false
+  }
+}
+
+// 文件上传成功处理
+const handleUploadSuccess = (fileInfo: FileInfo) => {
+  files.value.unshift(fileInfo)
+  ElMessage.success('文件上传成功')
+}
+
+// 文件上传错误处理
+const handleUploadError = (error: string) => {
+  ElMessage.error('文件上传失败: ' + error)
+}
+
+// 搜索处理
+const handleSearch = () => {
+  // 搜索逻辑已在计算属性中处理
+}
+
+// 拖拽处理
+const handleDragOver = (event: DragEvent) => {
+  event.preventDefault()
+}
+
+const handleDragEnter = (event: DragEvent) => {
+  event.preventDefault()
+  isDragOver.value = true
+}
+
+const handleDragLeave = (event: DragEvent) => {
+  event.preventDefault()
+  // 只有当离开整个区域时才隐藏
+  if (!event.relatedTarget || !(event.target as Element).contains(event.relatedTarget as Node)) {
+    isDragOver.value = false
+  }
+}
+
+const handleDrop = (event: DragEvent) => {
+  event.preventDefault()
+  isDragOver.value = false
+  
+  if (event.dataTransfer?.files) {
+    // 这里可以触发文件上传组件的拖拽上传
+    console.log('拖拽文件:', Array.from(event.dataTransfer.files))
+  }
+}
+
+// 文件点击处理
+const handleFileClick = (file: FileInfo) => {
+  // 单击选中文件
+  console.log('选中文件:', file)
+}
+
+// 文件双击处理
+const handleFileDoubleClick = (file: FileInfo) => {
+  if (file.fileType === 'folder') {
+    navigateToFolder(file.id)
+  } else {
+    // 预览或下载文件
+    downloadFile(file)
+  }
+}
+
+// 导航到文件夹
+const navigateToFolder = (folderId?: number) => {
+  currentFolderId.value = folderId
+  // 更新面包屑导航
+  if (folderId) {
+    // 这里应该根据实际的文件夹层级来构建面包屑
+    // 暂时简化处理
+  } else {
+    breadcrumbs.value = []
+  }
+  loadFiles()
+}
+
+// 获取文件图标颜色
+const getFileIconColor = (file: FileInfo): string => {
+  if (file.fileType === 'folder') {
+    return '#ffd04b'
+  }
+  
+  // 根据文件类型返回不同颜色
+  if (file.mimeType.startsWith('image/')) {
+    return '#67c23a'
+  } else if (file.mimeType.startsWith('video/')) {
+    return '#e6a23c'
+  } else if (file.mimeType.includes('pdf')) {
+    return '#f56c6c'
+  } else {
+    return '#909399'
+  }
+}
+
+// 格式化日期
+const formatDate = (dateString: string): string => {
+  const date = new Date(dateString)
+  const now = new Date()
+  const diff = now.getTime() - date.getTime()
+  const days = Math.floor(diff / (1000 * 60 * 60 * 24))
+  
+  if (days === 0) {
+    return '今天'
+  } else if (days === 1) {
+    return '昨天'
+  } else if (days < 7) {
+    return `${days}天前`
+  } else {
+    return date.toLocaleDateString()
+  }
+}
+
+// 文件操作处理
+const handleFileAction = async (command: string, file: FileInfo) => {
+  switch (command) {
+    case 'download':
+      await downloadFile(file)
+      break
+    case 'rename':
+      showRenameDialog(file)
+      break
+    case 'move':
+      ElMessage.info('移动功能开发中...')
+      break
+    case 'delete':
+      await deleteFile(file)
+      break
+  }
+}
+
+// 下载文件
+const downloadFile = async (file: FileInfo) => {
+  try {
+    const blob = await fileApiService.downloadFile(file.id)
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = file.fileName
+    document.body.appendChild(a)
+    a.click()
+    window.URL.revokeObjectURL(url)
+    document.body.removeChild(a)
+    ElMessage.success('文件下载成功')
+  } catch (error: any) {
+    ElMessage.error('文件下载失败: ' + (error.message || '未知错误'))
+  }
+}
+
+// 显示创建文件夹对话框
+const showCreateFolderDialog = () => {
+  newFolderName.value = ''
+  createFolderDialogVisible.value = true
+}
+
+// 创建文件夹
+const createFolder = async () => {
+  if (!newFolderName.value.trim()) {
+    ElMessage.warning('请输入文件夹名称')
+    return
+  }
+
+  try {
+    isCreatingFolder.value = true
+    const folder = await fileApiService.createFolder(newFolderName.value.trim(), currentFolderId.value)
+    files.value.unshift(folder)
+    createFolderDialogVisible.value = false
+    ElMessage.success('文件夹创建成功')
+  } catch (error: any) {
+    ElMessage.error('文件夹创建失败: ' + (error.message || '未知错误'))
+  } finally {
+    isCreatingFolder.value = false
+  }
+}
+
+// 显示重命名对话框
+const showRenameDialog = (file: FileInfo) => {
+  currentRenameFile.value = file
+  newFileName.value = file.fileName
+  renameDialogVisible.value = true
+}
+
+// 确认重命名
+const confirmRename = async () => {
+  if (!currentRenameFile.value || !newFileName.value.trim()) {
+    ElMessage.warning('请输入新名称')
+    return
+  }
+
+  try {
+    isRenaming.value = true
+    if (!currentRenameFile.value) return
+    
+    await fileApiService.renameFile(currentRenameFile.value.id, newFileName.value.trim())
+    
+    // 更新本地数据
+    const index = files.value.findIndex(f => f.id === currentRenameFile.value?.id)
+    if (index > -1 && currentRenameFile.value) {
+      files.value[index].fileName = newFileName.value.trim()
+    }
+    
+    renameDialogVisible.value = false
+    ElMessage.success('重命名成功')
+  } catch (error: any) {
+    ElMessage.error('重命名失败: ' + (error?.message || '未知错误'))
+  } finally {
+    isRenaming.value = false
+  }
+}
+
+// 删除文件
+const deleteFile = async (file: FileInfo) => {
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除 "${file.fileName}" 吗？`,
+      '确认删除',
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning',
+      }
+    )
+
+    await fileApiService.deleteFile(file.id)
+    
+    // 从列表中移除
+    const index = files.value.findIndex(f => f.id === file.id)
+    if (index > -1) {
+      files.value.splice(index, 1)
+    }
+    
+    ElMessage.success('文件删除成功')
+  } catch (error: any) {
+    if (error !== 'cancel') {
+      ElMessage.error('文件删除失败: ' + (error?.message || '未知错误'))
+    }
+  }
+}
 
 // 格式化存储大小
 const formatStorage = (bytes: number) => {
@@ -203,7 +562,7 @@ const handleCommand = async (command: string) => {
       } catch (error) {
         console.error('登出API调用失败:', error)
       }
-
+      
       authStore.logout()
       ElMessage.success('已退出登录')
       router.push('/login')
@@ -267,9 +626,9 @@ const handleCommand = async (command: string) => {
   }
 
   &-left {
-    .el-button-group {
-      margin-right: 20px;
-    }
+    display: flex;
+    align-items: center;
+    gap: 12px;
   }
 
   &-right {
@@ -309,6 +668,14 @@ const handleCommand = async (command: string) => {
   &-left {
     .el-breadcrumb {
       font-size: 14px;
+      
+      :deep(.el-breadcrumb__item) {
+        cursor: pointer;
+        
+        &:hover {
+          color: #409eff;
+        }
+      }
     }
   }
 }
@@ -318,58 +685,178 @@ const handleCommand = async (command: string) => {
   background: white;
   padding: 20px;
   overflow-y: auto;
+  position: relative;
 }
 
-.file-list {
-  margin-bottom: 40px;
-}
-
-.folder-item {
-  display: flex;
+// 拖拽上传覆盖层
+.drop-zone-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(64, 158, 255, 0.1);
+  border: 2px dashed #409eff;
+  border-radius: 8px;
+  display: none;
   align-items: center;
-  padding: 12px 0;
-  border-bottom: 1px solid #f0f0f0;
-  cursor: pointer;
-  transition: background-color 0.3s;
+  justify-content: center;
+  z-index: 1000;
 
-  &:hover {
-    background-color: #f8f9fa;
+  &.show {
+    display: flex;
+  }
+
+  .drop-zone-content {
+    text-align: center;
+
+    .drop-icon {
+      color: #409eff;
+      margin-bottom: 16px;
+    }
+
+    .drop-text {
+      font-size: 18px;
+      color: #409eff;
+      margin: 0;
+      font-weight: 600;
+    }
   }
 }
 
-.folder-icon {
-  margin-right: 16px;
-  flex-shrink: 0;
+// 文件列表
+.file-list {
+  &.list {
+    .file-item {
+      display: flex;
+      align-items: center;
+      padding: 12px 0;
+      border-bottom: 1px solid #f0f0f0;
+      cursor: pointer;
+      transition: background-color 0.3s;
+
+      &:hover {
+        background-color: #f8f9fa;
+      }
+
+      .file-icon {
+        margin-right: 16px;
+        flex-shrink: 0;
+      }
+
+      .file-info {
+        flex: 1;
+        min-width: 0;
+
+        .file-name {
+          font-size: 14px;
+          color: #303133;
+          margin-bottom: 4px;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .file-meta {
+          font-size: 12px;
+          color: #909399;
+          display: flex;
+          gap: 12px;
+        }
+      }
+
+      .file-actions {
+        margin-left: 16px;
+        cursor: pointer;
+        padding: 4px;
+        border-radius: 4px;
+        transition: background-color 0.3s;
+
+        &:hover {
+          background-color: #e4e7ed;
+        }
+      }
+    }
+  }
+
+  &.grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 16px;
+
+    .file-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 16px;
+      border: 1px solid #ebeef5;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.3s;
+
+      &:hover {
+        border-color: #409eff;
+        box-shadow: 0 2px 8px rgba(64, 158, 255, 0.2);
+      }
+
+      .file-icon {
+        margin-bottom: 12px;
+      }
+
+      .file-info {
+        text-align: center;
+        width: 100%;
+
+        .file-name {
+          font-size: 12px;
+          color: #303133;
+          margin-bottom: 4px;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .file-meta {
+          font-size: 10px;
+          color: #909399;
+        }
+      }
+
+      .file-actions {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        opacity: 0;
+        transition: opacity 0.3s;
+      }
+
+      &:hover .file-actions {
+        opacity: 1;
+      }
+    }
+  }
 }
 
-.file-info {
-  flex: 1;
-  min-width: 0;
-}
+// 空状态
+.empty-state {
+  text-align: center;
+  padding: 60px 20px;
 
-.file-name {
-  font-size: 14px;
-  color: #303133;
-  margin-bottom: 4px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
+  .empty-icon {
+    color: #c0c4cc;
+    margin-bottom: 16px;
+  }
 
-.file-meta {
-  font-size: 12px;
-  color: #909399;
-}
+  .empty-text {
+    font-size: 16px;
+    color: #606266;
+    margin: 0 0 8px 0;
+  }
 
-.file-actions {
-  margin-left: 16px;
-  cursor: pointer;
-  padding: 4px;
-  border-radius: 4px;
-  transition: background-color 0.3s;
-
-  &:hover {
-    background-color: #e4e7ed;
+  .empty-hint {
+    font-size: 14px;
+    color: #909399;
+    margin: 0;
   }
 }
 
@@ -403,13 +890,17 @@ const handleCommand = async (command: string) => {
   }
   
   .header {
-    &-left .el-button-group .el-button span {
-      display: none;
+    &-left {
+      gap: 8px;
     }
 
     &-right .el-input {
       width: 200px !important;
     }
+  }
+
+  .file-list.grid {
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
   }
 }
 </style>
