@@ -5,27 +5,30 @@
       <div class="sidebar-header">
         <h2 class="logo">软件文件</h2>
       </div>
-      <el-menu
-        default-active="1"
-        class="sidebar-menu"
-        background-color="#f8f9fa"
-        text-color="#333"
-        active-text-color="#409eff"
-      >
+      <el-menu default-active="1" class="sidebar-menu" background-color="#f8f9fa" text-color="#333"
+        active-text-color="#409eff">
         <el-menu-item index="1">
-          <el-icon><Folder /></el-icon>
+          <el-icon>
+            <Folder />
+          </el-icon>
           <span>首页</span>
         </el-menu-item>
         <el-menu-item index="2">
-          <el-icon><Clock /></el-icon>
+          <el-icon>
+            <Clock />
+          </el-icon>
           <span>同步</span>
         </el-menu-item>
         <el-menu-item index="3">
-          <el-icon><Star /></el-icon>
+          <el-icon>
+            <Star />
+          </el-icon>
           <span>收藏</span>
         </el-menu-item>
         <el-menu-item index="4">
-          <el-icon><Delete /></el-icon>
+          <el-icon>
+            <Delete />
+          </el-icon>
           <span>回收站</span>
         </el-menu-item>
       </el-menu>
@@ -37,24 +40,26 @@
       <el-header class="header" height="60px">
         <div class="header-content">
           <div class="header-left">
-            <el-button-group>
-              <el-button type="primary" :icon="Upload">上传</el-button>
+            <el-button-group style="display: flex;">
+              <el-upload ref="upload" type="primary" :icon="Upload" :limit="1">
+                 <el-button :icon="Upload" type="primary">上传</el-button>
+              </el-upload>
               <el-button :icon="FolderAdd">新建文件夹</el-button>
               <el-button :icon="Download">新建文件</el-button>
             </el-button-group>
           </div>
           <div class="header-right">
-            <el-input
-              v-model="searchText"
-              placeholder="搜索文件、文件夹"
-              :prefix-icon="Search"
-              style="width: 300px; margin-right: 20px;"
-            />
+            <el-input v-model="searchText" placeholder="搜索文件、文件夹" :prefix-icon="Search"
+              style="width: 300px; margin-right: 20px;" />
             <el-dropdown @command="handleCommand">
               <span class="user-dropdown">
-                <el-icon><User /></el-icon>
+                <el-icon>
+                  <User />
+                </el-icon>
                 {{ authStore.user?.username }}
-                <el-icon class="el-icon--right"><ArrowDown /></el-icon>
+                <el-icon class="el-icon--right">
+                  <ArrowDown />
+                </el-icon>
               </span>
               <template #dropdown>
                 <el-dropdown-menu>
@@ -78,8 +83,10 @@
         </div>
         <div class="toolbar-right">
           <el-button-group>
-            <el-button :icon="List" @click="viewMode = 'list'" :type="viewMode === 'list' ? 'primary' : ''">列表</el-button>
-            <el-button :icon="Grid" @click="viewMode = 'grid'" :type="viewMode === 'grid' ? 'primary' : ''">网格</el-button>
+            <el-button :icon="List" @click="viewMode = 'list'"
+              :type="viewMode === 'list' ? 'primary' : ''">列表</el-button>
+            <el-button :icon="Grid" @click="viewMode = 'grid'"
+              :type="viewMode === 'grid' ? 'primary' : ''">网格</el-button>
           </el-button-group>
         </div>
       </div>
@@ -98,7 +105,9 @@
             </div>
             <div class="file-actions">
               <el-dropdown trigger="click">
-                <el-icon><MoreFilled /></el-icon>
+                <el-icon>
+                  <MoreFilled />
+                </el-icon>
                 <template #dropdown>
                   <el-dropdown-menu>
                     <el-dropdown-item>重命名</el-dropdown-item>
@@ -114,10 +123,12 @@
         <!-- 存储空间信息 -->
         <div class="storage-info" v-if="authStore.user">
           <div class="storage-icon">
-            <el-icon size="24" color="#409eff"><CloudUpload /></el-icon>
+            <el-icon size="24" color="#409eff">
+              <CloudUpload />
+            </el-icon>
           </div>
           <div class="storage-text">
-            {{ formatStorage(authStore.user.storage_used) }} / 
+            {{ formatStorage(authStore.user.storage_used) }} /
             {{ authStore.user.storage_quota === -1 ? '无限制' : formatStorage(authStore.user.storage_quota) }}
           </div>
         </div>
@@ -130,8 +141,8 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { 
-  User, ArrowDown, Folder, Upload, Setting, Check, 
+import {
+  User, ArrowDown, Folder, Upload, Setting, Check,
   Search, FolderAdd, Download, Clock, Star, Delete,
   List, Grid, MoreFilled, Upload as CloudUpload
 } from '@element-plus/icons-vue'
@@ -183,7 +194,7 @@ const handleCommand = async (command: string) => {
       } catch (error) {
         console.error('登出API调用失败:', error)
       }
-      
+
       authStore.logout()
       ElMessage.success('已退出登录')
       router.push('/login')
@@ -373,15 +384,15 @@ const handleCommand = async (command: string) => {
   .sidebar {
     width: 60px !important;
   }
-  
+
   .sidebar-header .logo {
     display: none;
   }
-  
+
   .header-left .el-button-group .el-button span {
     display: none;
   }
-  
+
   .header-right .el-input {
     width: 200px !important;
   }
