@@ -37,20 +37,6 @@ Thumbs.db
 .vscode/*
 !.vscode/extensions.json
 .idea/
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
-
-# Uploads directory (uploaded files)
-uploads/*
-!uploads/.gitkeep
-
-# Database files (if using SQLite)
-*.db
-*.sqlite
-*.sqlite3
 
 # Coverage directory
 coverage/
@@ -65,3 +51,9 @@ prisma/migrations/*
 !prisma/migrations/.gitkeep
 
 /src/generated/prisma
+
+# Runtime data/storage
+uploads/
+chunks/
+thumbnails/
+ffmpeg/

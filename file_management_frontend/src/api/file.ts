@@ -1,36 +1,4 @@
-import axios from 'axios'
-import { useAuthStore } from '../stores/auth'
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
-
-// 创建axios实例
-const fileApi = axios.create({
-  baseURL: `${API_BASE_URL}/api/files`,
-  timeout: 30000, // 30秒超时，适合大文件上传
-})
-
-// 请求拦截器 - 添加认证token
-fileApi.interceptors.request.use((config) => {
-  const authStore = useAuthStore()
-  if (authStore.token) {
-    config.headers.Authorization = `Bearer ${authStore.token}`
-  }
-  return config
-})
-
-// 响应拦截器 - 处理token过期
-fileApi.interceptors.response.use(
-  (response) => response,
-  async (error) => {
-    if (error.response?.status === 401) {
-      const authStore = useAuthStore()
-      // Token过期，跳转登录
-      authStore.logout()
-      window.location.href = '/login'
-    }
-    return Promise.reject(error)
-  }
-)
+import request from '../utils/request'
 
 // 文件信息接口
 export interface FileInfo {
@@ -62,13 +30,13 @@ export interface ChunkInfo {
 export const fileApiService = {
   // 检查文件是否已存在（秒传检测）
   async checkFileExists(fileHash: string): Promise<{ exists: boolean; fileInfo?: FileInfo }> {
-    const response = await fileApi.post('/check-exists', { fileHash })
+    const response = await request.post('/files/check-exists', { fileHash })
     return response.data.data // 注意这里要取 data.data
   },
 
   // 获取已上传的分片列表（断点续传）
   async getUploadedChunks(fileHash: string): Promise<number[]> {
-    const response = await fileApi.get(`/chunks/${fileHash}`)
+    const response = await request.get(`/files/chunks/${fileHash}`)
     return response.data.data || []
   },
 
@@ -86,7 +54,7 @@ export const fileApiService = {
     formData.append('chunkHash', chunkHash)
     formData.append('chunk', chunkData)
 
-    await fileApi.post('/upload-chunk', formData, {
+    await request.post('/files/upload-chunk', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
@@ -111,7 +79,7 @@ export const fileApiService = {
     totalChunks: number,
     parentId?: number
   ): Promise<FileInfo> {
-    const response = await fileApi.post('/merge-chunks', {
+    const response = await request.post('/files/merge-chunks', {
       fileHash,
       fileName,
       fileSize,
@@ -130,7 +98,7 @@ export const fileApiService = {
     mimeType: string,
     parentId?: number
   ): Promise<FileInfo> {
-    const response = await fileApi.post('/instant-upload', {
+    const response = await request.post('/files/instant-upload', {
       fileHash,
       fileName,
       fileSize,
@@ -142,7 +110,7 @@ export const fileApiService = {
 
   // 获取文件列表
   async getFiles(parentId?: number): Promise<FileInfo[]> {
-    const response = await fileApi.get('/', {
+    const response = await request.get('/files', {
       params: { parentId }
     })
     return response.data.data
@@ -150,13 +118,13 @@ export const fileApiService = {
 
   // 获取单个文件信息
   async getFileById(id: number): Promise<FileInfo> {
-    const response = await fileApi.get(`/${id}`)
+    const response = await request.get(`/files/${id}`)
     return response.data.data
   },
 
   // 下载文件
   async downloadFile(id: number): Promise<Blob> {
-    const response = await fileApi.get(`/${id}/download`, {
+    const response = await request.get(`/files/${id}/download`, {
       responseType: 'blob'
     })
     return response.data
@@ -164,12 +132,12 @@ export const fileApiService = {
 
   // 删除文件
   async deleteFile(id: number): Promise<void> {
-    await fileApi.delete(`/${id}`)
+    await request.delete(`/files/${id}`)
   },
 
   // 创建文件夹
   async createFolder(name: string, parentId?: number): Promise<FileInfo> {
-    const response = await fileApi.post('/folder', {
+    const response = await request.post('/files/folder', {
       name,
       parentId
     })
@@ -178,14 +146,14 @@ export const fileApiService = {
 
   // 重命名文件/文件夹
   async renameFile(id: number, newName: string): Promise<void> {
-    await fileApi.put(`/${id}/rename`, {
+    await request.put(`/files/${id}/rename`, {
       name: newName
     })
   },
 
   // 移动文件/文件夹
   async moveFile(id: number, targetParentId?: number): Promise<void> {
-    await fileApi.put(`/${id}/move`, {
+    await request.put(`/files/${id}/move`, {
       parentId: targetParentId
     })
   }

@@ -8,10 +8,18 @@ import { AuthRequest } from '../../types/index.js';
 import { ensureDirectoryExists } from '../../utils/file.utils.js';
 
 // 尝试配置本地 FFmpeg 路径（如果存在）
-const localFfmpegPath = path.join(process.cwd(), 'ffmpeg', 'bin', 'ffmpeg.exe');
-if (fs.existsSync(localFfmpegPath)) {
-  ffmpeg.setFfmpegPath(localFfmpegPath);
-}
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+
+// 尝试配置 FFmpeg 路径
+const ffmpegInstaller = require('@ffmpeg-installer/ffmpeg');
+ffmpeg.setFfmpegPath(ffmpegInstaller.path);
+
+// 备用：如果有本地特定路径，可以覆盖
+// const localFfmpegPath = path.join(process.cwd(), 'ffmpeg', 'bin', 'ffmpeg.exe');
+// if (fs.existsSync(localFfmpegPath)) {
+//   ffmpeg.setFfmpegPath(localFfmpegPath);
+// }
 
 /**
  * 获取文件列表
