@@ -1,44 +1,7 @@
 <template>
   <div class="index-container">
     <!-- 左侧导航栏 -->
-    <el-aside class="sidebar" width="200px">
-      <div class="sidebar-header">
-        <h2 class="logo">软件文件</h2>
-      </div>
-      <el-menu default-active="1" class="sidebar-menu" background-color="#f8f9fa" text-color="#333"
-        active-text-color="#409eff">
-        <el-menu-item index="1" @click="router.push('/')">
-          <el-icon>
-            <Folder />
-          </el-icon>
-          <span>首页</span>
-        </el-menu-item>
-        <el-menu-item index="2">
-          <el-icon>
-            <Clock />
-          </el-icon>
-          <span>同步</span>
-        </el-menu-item>
-        <el-menu-item index="3">
-          <el-icon>
-            <Star />
-          </el-icon>
-          <span>收藏</span>
-        </el-menu-item>
-        <el-menu-item index="4" @click="router.push('/recycle-bin')">
-          <el-icon>
-            <Delete />
-          </el-icon>
-          <span>回收站</span>
-        </el-menu-item>
-        <el-menu-item index="5" @click="router.push('/logs')">
-          <el-icon>
-            <List />
-          </el-icon>
-          <span>操作记录</span>
-        </el-menu-item>
-      </el-menu>
-    </el-aside>
+    <Sidebar />
 
     <!-- 主要内容区域 -->
     <el-container class="main-container">
@@ -112,103 +75,9 @@
         </div>
 
         <!-- 文件列表 -->
-        <div v-if="files.length > 0" class="file-list" :class="viewMode">
-          <div v-for="file in filteredFiles" :key="file.id" class="file-item" @click="handleFileClick(file)"
-            @dblclick="handleFileDoubleClick(file)">
-            <div class="file-icon">
-              <!-- 图片或视频缩略图 -->
-              <div
-                v-if="file.mimeType.startsWith('image/') || file.mimeType.startsWith('video/') || file.fileName.toLowerCase().endsWith('.rmvb')"
-                class="image-thumbnail">
-                <!-- 这里假设有一个获取图片预览的接口，或者通过 blob 获取，目前先用 icon 占位，或者如果后端支持静态资源访问 -->
-                <!-- 由于暂时没有直接的 URL 字段，且下载需要鉴权，这里我们暂时还是用 Icon，
-                      但是用户明确要求显示缩略图。
-                      通常做法是:
-                        1. 后端提供缩略图 API
-                        2. 或者前端加载原图（小图）
-                      鉴于我在 `file.controller.ts` 没看到静态文件服务，
-                      我无法直接 `<img src="/api/files/...?token=...">`。
-                      
-                      **不过**，用户刚刚说是"上传图片之后"，如果是刚上传的在 UploadQueue 里我们有本地 Blob URL。
-                      但这里是 **已上传完成的文件列表 (index.vue)**。
-                      
-                      如果是已上传的文件，我们需要后端支持预览。
-                      
-                      既然用户强烈要求，我先添加结构支持。
-                      并尝试添加一个 helper: `getFilePreviewUrl`，
-                      暂时指向一个假设的 endpoint: `/api/files/preview/:id` 
-                      或者直接用 `download` 接口但带上 `inline=true` 参数?
-                      
-                      让我们先检查 `file.controller.ts` 看看有没有预览支持。
-                  -->
-                <!-- 既然只能改前端，我也许该添加一个请求图片 blob 的逻辑？对于大量文件列表不现实。
-                       **折中方案**：如果用户是在说“上传列表”里的图（UploadQueue），我已经做好了。
-                       
-                       如果用户是说这里（Index.vue）， 
-                       看用户的光标位置 `Active Document: index.vue`， cursor on line 136，正是 file-icon 的位置。
-                       所以用户确定是指这里。
-                       
-                       为了实现这个，我需要一个能够获取图片内容的 URL。
-                       假设 `/api/files/:id/download` 可以被用于 img src (如果带上 token)。
-                       或者我们需要由前端构造。
-                       
-                       由于没有缩略图字段，我将添加一个 `proxy` method 或者 component 来懒加载图片。
-                       简单起见，我将使用 Icon，但如果用户强制要求...
-                       
-                       让我先假设我们可以通过 IDs 获取图片。
-                       
-                       wait, I can add an `img` tag pointing to the download URL if I can append the token.
-                       Or just placeholders for now? 
-                       
-                       Let's look at `downloadFile` in `fileApiService`.
-                       It uses `service.get(..., { responseType: 'blob' })`.
-                       
-                       I'll use a `v-if` to show `img` with a specially constructed URL if I can access the auth token.
-                       `authStore.accessToken`.
-                   -->
-                <img :src="getFilePreviewUrl(file)" class="file-thumbnail-img" loading="lazy"
-                  @error="handleImageError" />
-              </div>
-              <el-icon v-else size="48" :color="getFileIconColor(file)">
-                <Folder v-if="file.fileType === 'folder'" />
-                <Document v-else />
-              </el-icon>
-            </div>
-            <div class="file-info">
-              <div class="file-name" :title="file.fileName">{{ file.fileName }}</div>
-              <div class="file-meta">
-                <span v-if="file.fileType === 'file'">{{ formatFileSize(file.fileSize) }}</span>
-                <span>{{ formatDate(file.createdAt) }}</span>
-              </div>
-            </div>
-            <div class="file-actions">
-              <el-dropdown trigger="click" @command="(cmd) => handleFileAction(cmd, file)">
-                <el-icon>
-                  <MoreFilled />
-                </el-icon>
-                <template #dropdown>
-                  <el-dropdown-menu>
-                    <el-dropdown-item v-if="file.fileType === 'file'" command="download">
-                      下载
-                    </el-dropdown-item>
-                    <el-dropdown-item command="rename">重命名</el-dropdown-item>
-                    <el-dropdown-item command="move">移动</el-dropdown-item>
-                    <el-dropdown-item divided command="delete">删除</el-dropdown-item>
-                  </el-dropdown-menu>
-                </template>
-              </el-dropdown>
-            </div>
-          </div>
-        </div>
-
-        <!-- 空状态 -->
-        <div v-else class="empty-state">
-          <el-icon class="empty-icon" size="64">
-            <Folder />
-          </el-icon>
-          <p class="empty-text">暂无文件</p>
-          <p class="empty-hint">拖拽文件到此处或点击上传按钮添加文件</p>
-        </div>
+        <FileList :files="filteredFiles" :view-mode="viewMode" :loading="loading" @click-file="handleFileClick"
+          @dblclick-file="handleFileDoubleClick" @context-menu="handleRightClick" @rename="showRenameDialog"
+          @delete="deleteFile" @move="handleMoveFile" @file-drop="handleFileItemDrop" />
 
         <!-- 存储空间信息 -->
         <div class="storage-info" v-if="authStore.user">
@@ -278,6 +147,8 @@ import { authApi } from '../../api/auth'
 import fileApiService, { type FileInfo } from '../../api/file'
 import FileUpload from '../../components/FileUpload.vue'
 import ImageCropperDialog from '../../components/ImageCropperDialog.vue'
+import Sidebar from './cpns/Sidebar.vue'
+import FileList from './cpns/FileList.vue'
 import { formatFileSize } from '../../utils/fileUpload'
 
 const router = useRouter()
@@ -426,6 +297,10 @@ const handleFileDoubleClick = (file: FileInfo) => {
       downloadFile(file)
     }
   }
+}
+
+const handleRightClick = (event: MouseEvent, file: FileInfo) => {
+  // 暂时不处理右键菜单，或者将来显示自定义菜单
 }
 
 // 导航到文件夹
@@ -668,6 +543,14 @@ const deleteFile = async (file: FileInfo) => {
   }
 }
 
+const handleMoveFile = (file: FileInfo) => {
+  ElMessage.info('移动功能开发中...')
+}
+
+const handleFileItemDrop = async (source: FileInfo, target: FileInfo) => {
+  ElMessage.info(`Request to move ${source.fileName} to ${target.fileName} (Dev)`)
+}
+
 // 格式化存储大小
 const formatStorage = (bytes: number) => {
   if (bytes === 0) return '0 B'
@@ -710,25 +593,7 @@ const handleCommand = async (command: string) => {
   background-color: #f5f7fa;
 }
 
-// 左侧导航栏
-.sidebar {
-  background-color: #f8f9fa;
-  border-right: 1px solid #e4e7ed;
 
-  &-header {
-    padding: 20px;
-    border-bottom: 1px solid #e4e7ed;
-  }
-
-  &-menu {
-    border: none;
-
-    .el-menu-item {
-      height: 48px;
-      line-height: 48px;
-    }
-  }
-}
 
 .logo {
   color: #303133;
@@ -856,181 +721,7 @@ const handleCommand = async (command: string) => {
   }
 }
 
-// 文件列表
-.file-list {
-  &.list {
-    .file-item {
-      display: flex;
-      align-items: center;
-      padding: 12px 0;
-      border-bottom: 1px solid #f0f0f0;
-      cursor: pointer;
-      transition: background-color 0.3s;
 
-      &:hover {
-        background-color: #f8f9fa;
-      }
-
-      .file-icon {
-        margin-right: 16px;
-        flex-shrink: 0;
-        width: 48px;
-        height: 48px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-
-        .image-thumbnail {
-          width: 100%;
-          height: 100%;
-
-          .file-thumbnail-img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            border-radius: 4px;
-          }
-        }
-      }
-
-      .file-info {
-        flex: 1;
-        min-width: 0;
-
-        .file-name {
-          font-size: 14px;
-          color: #303133;
-          margin-bottom: 4px;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-
-        .file-meta {
-          font-size: 12px;
-          color: #909399;
-          display: flex;
-          gap: 12px;
-        }
-      }
-
-      .file-actions {
-        margin-left: 16px;
-        cursor: pointer;
-        padding: 4px;
-        border-radius: 4px;
-        transition: background-color 0.3s;
-
-        &:hover {
-          background-color: #e4e7ed;
-        }
-      }
-    }
-  }
-
-  &.grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-    gap: 16px;
-
-    .file-item {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 16px;
-      border: 1px solid #ebeef5;
-      border-radius: 8px;
-      cursor: pointer;
-      transition: all 0.3s;
-
-      &:hover {
-        border-color: #409eff;
-        box-shadow: 0 2px 8px rgba(64, 158, 255, 0.2);
-      }
-
-      .file-icon {
-        margin-bottom: 12px;
-        width: 64px;
-        height: 64px;
-        display: flex;
-        /* 确保 grid 模式下也是 flex 居中 */
-        align-items: center;
-        justify-content: center;
-
-        .image-thumbnail {
-          width: 100%;
-          height: 100%;
-
-          .file-thumbnail-img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            border-radius: 6px;
-          }
-        }
-
-        .el-icon {
-          /* 确保 icon 大小适配 */
-          font-size: 64px;
-        }
-      }
-
-      .file-info {
-        text-align: center;
-        width: 100%;
-
-        .file-name {
-          font-size: 12px;
-          color: #303133;
-          margin-bottom: 4px;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-
-        .file-meta {
-          font-size: 10px;
-          color: #909399;
-        }
-      }
-
-      .file-actions {
-        position: absolute;
-        top: 8px;
-        right: 8px;
-        opacity: 0;
-        transition: opacity 0.3s;
-      }
-
-      &:hover .file-actions {
-        opacity: 1;
-      }
-    }
-  }
-}
-
-// 空状态
-.empty-state {
-  text-align: center;
-  padding: 60px 20px;
-
-  .empty-icon {
-    color: #c0c4cc;
-    margin-bottom: 16px;
-  }
-
-  .empty-text {
-    font-size: 16px;
-    color: #606266;
-    margin: 0 0 8px 0;
-  }
-
-  .empty-hint {
-    font-size: 14px;
-    color: #909399;
-    margin: 0;
-  }
-}
 
 // 存储空间信息
 .storage-info {
