@@ -5,10 +5,10 @@
 
             <!-- 列表模式表头 -->
             <div v-if="viewMode === 'list'" class="file-list-header">
-                <div class="header-item name">名称</div>
-                <div class="header-item size">大小</div>
-                <div class="header-item date">修改日期</div>
-                <div class="header-item actions">操作</div>
+                <div class="header-item name">{{ t('fileList.header.name') }}</div>
+                <div class="header-item size">{{ t('fileList.header.size') }}</div>
+                <div class="header-item date">{{ t('fileList.header.date') }}</div>
+                <div class="header-item actions">{{ t('fileList.header.action') }}</div>
             </div>
 
             <!-- 文件项 -->
@@ -49,9 +49,12 @@
                         </div>
                         <div class="file-date">{{ formatDate(file.updatedAt) }}</div>
                         <div class="file-actions-col">
-                            <el-button link type="primary" @click.stop="emit('rename', file)">重命名</el-button>
-                            <el-button link type="primary" @click.stop="emit('move', file)">移动</el-button>
-                            <el-button link type="danger" @click.stop="emit('delete', file)">删除</el-button>
+                            <el-button link type="primary" @click.stop="emit('rename', file)">{{
+                                t('fileList.action.rename') }}</el-button>
+                            <el-button link type="primary" @click.stop="emit('move', file)">{{ t('fileList.action.move')
+                                }}</el-button>
+                            <el-button link type="danger" @click.stop="emit('delete', file)">{{
+                                t('fileList.action.delete') }}</el-button>
                         </div>
                     </div>
 
@@ -69,9 +72,10 @@
                         </el-icon>
                         <template #dropdown>
                             <el-dropdown-menu>
-                                <el-dropdown-item command="rename">重命名</el-dropdown-item>
-                                <el-dropdown-item command="move">移动</el-dropdown-item>
-                                <el-dropdown-item command="delete" style="color: red">删除</el-dropdown-item>
+                                <el-dropdown-item command="rename">{{ t('fileList.action.rename') }}</el-dropdown-item>
+                                <el-dropdown-item command="move">{{ t('fileList.action.move') }}</el-dropdown-item>
+                                <el-dropdown-item command="delete" style="color: red">{{ t('fileList.action.delete')
+                                    }}</el-dropdown-item>
                             </el-dropdown-menu>
                         </template>
                     </el-dropdown>
@@ -85,8 +89,8 @@
             <el-icon class="empty-icon" size="64">
                 <Folder />
             </el-icon>
-            <p class="empty-text">文件夹为空</p>
-            <p class="empty-hint">拖拽文件到此处或点击上传按钮</p>
+            <p class="empty-text">{{ t('index.empty') }}</p>
+            <p class="empty-hint">{{ t('index.emptyHint') }}</p>
         </div>
     </div>
 </template>
@@ -96,10 +100,13 @@ import { ref } from 'vue'
 import {
     Folder, Document, MoreFilled, VideoPlay, Picture, Headset
 } from '@element-plus/icons-vue'
+import { useI18n } from 'vue-i18n'
 import { formatFileSize } from '../../../utils/fileUpload'
 import type { FileInfo } from '../../../api/file'
 import { useAuthStore } from '../../../stores/auth'
 import dayjs from 'dayjs'
+
+const { t } = useI18n()
 
 const props = defineProps<{
     files: FileInfo[]

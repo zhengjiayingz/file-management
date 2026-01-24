@@ -6,38 +6,18 @@
     <!-- 主要内容区域 -->
     <el-container class="main-container">
       <!-- 顶部工具栏 -->
-      <el-header class="header" height="60px">
-        <div class="header-content">
-          <div class="header-left">
-            <FileUpload ref="fileUploadRef" :parent-id="currentFolderId" :show-drop-zone="false"
-              @upload-success="handleUploadSuccess" @upload-error="handleUploadError" :intercept-image="true"
-              @select-image="handleSelectImage" />
-            <el-button :icon="FolderAdd" @click="showCreateFolderDialog">新建文件夹</el-button>
-          </div>
-          <div class="header-right">
-            <el-input v-model="searchText" placeholder="搜索文件、文件夹" :prefix-icon="Search"
-              style="width: 300px; margin-right: 20px;" @input="handleSearch" />
-            <el-dropdown @command="handleCommand">
-              <span class="user-dropdown">
-                <el-icon>
-                  <User />
-                </el-icon>
-                {{ authStore.user?.username }}
-                <el-icon class="el-icon--right">
-                  <ArrowDown />
-                </el-icon>
-              </span>
-              <template #dropdown>
-                <el-dropdown-menu>
-                  <el-dropdown-item command="profile">个人信息</el-dropdown-item>
-                  <el-dropdown-item command="settings">设置</el-dropdown-item>
-                  <el-dropdown-item divided command="logout">退出登录</el-dropdown-item>
-                </el-dropdown-menu>
-              </template>
-            </el-dropdown>
-          </div>
-        </div>
-      </el-header>
+      <GlobalHeader>
+        <template #left>
+          <FileUpload ref="fileUploadRef" :parent-id="currentFolderId" :show-drop-zone="false"
+            @upload-success="handleUploadSuccess" @upload-error="handleUploadError" :intercept-image="true"
+            @select-image="handleSelectImage" />
+          <el-button :icon="FolderAdd" @click="showCreateFolderDialog">{{ t('index.createFolder') }}</el-button>
+        </template>
+        <template #right>
+          <el-input v-model="searchText" :placeholder="t('index.searchPlaceholder')" :prefix-icon="Search"
+            style="width: 300px; margin-right: 20px;" @input="handleSearch" />
+        </template>
+      </GlobalHeader>
 
       <!-- 文件操作工具栏 -->
       <div class="toolbar">
@@ -52,10 +32,10 @@
         <div class="toolbar-right">
           <el-button-group>
             <el-button :icon="List" @click="viewMode = 'list'" :type="viewMode === 'list' ? 'primary' : ''">
-              列表
+              {{ t('index.toolbar.list') }}
             </el-button>
             <el-button :icon="Grid" @click="viewMode = 'grid'" :type="viewMode === 'grid' ? 'primary' : ''">
-              网格
+              {{ t('index.toolbar.grid') }}
             </el-button>
           </el-button-group>
         </div>
@@ -142,6 +122,7 @@ import {
   User, ArrowDown, Folder, Search, FolderAdd,
   Clock, Star, Delete, List, Grid, MoreFilled, Document
 } from '@element-plus/icons-vue'
+import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '../../stores/auth'
 import { authApi } from '../../api/auth'
 import fileApiService, { type FileInfo } from '../../api/file'
@@ -149,10 +130,12 @@ import FileUpload from '../../components/FileUpload.vue'
 import ImageCropperDialog from '../../components/ImageCropperDialog.vue'
 import Sidebar from './cpns/Sidebar.vue'
 import FileList from './cpns/FileList.vue'
+import GlobalHeader from '../../components/GlobalHeader.vue'
 import { formatFileSize } from '../../utils/fileUpload'
 
 const router = useRouter()
 const authStore = useAuthStore()
+const { t, locale } = useI18n()
 
 // 响应式数据
 const searchText = ref('')
@@ -561,29 +544,7 @@ const formatStorage = (bytes: number) => {
 }
 
 // 处理下拉菜单命令
-const handleCommand = async (command: string) => {
-  switch (command) {
-    case 'profile':
-      ElMessage.info('个人信息功能开发中...')
-      break
-    case 'settings':
-      ElMessage.info('设置功能开发中...')
-      break
-    case 'logout':
-      try {
-        if (authStore.refreshToken) {
-          await authApi.logout(authStore.refreshToken)
-        }
-      } catch (error) {
-        console.error('登出API调用失败:', error)
-      }
 
-      authStore.logout()
-      ElMessage.success('已退出登录')
-      router.push('/login')
-      break
-  }
-}
 </script>
 
 <style lang="scss" scoped>

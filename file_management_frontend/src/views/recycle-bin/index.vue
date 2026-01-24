@@ -1,89 +1,36 @@
 <template>
   <div class="index-container">
-    <!-- 左侧导航栏 -->
-    <el-aside class="sidebar" width="200px">
-      <div class="sidebar-header">
-        <h2 class="logo">软件文件</h2>
-      </div>
-      <el-menu default-active="4" class="sidebar-menu" background-color="#f8f9fa" text-color="#333"
-        active-text-color="#409eff">
-        <el-menu-item index="1" @click="router.push('/')">
-          <el-icon>
-            <Folder />
-          </el-icon>
-          <span>首页</span>
-        </el-menu-item>
-        <el-menu-item index="2">
-          <el-icon>
-            <Clock />
-          </el-icon>
-          <span>同步</span>
-        </el-menu-item>
-        <el-menu-item index="3">
-          <el-icon>
-            <Star />
-          </el-icon>
-          <span>收藏</span>
-        </el-menu-item>
-        <el-menu-item index="4" @click="router.push('/recycle-bin')">
-          <el-icon>
-            <Delete />
-          </el-icon>
-          <span>回收站</span>
-        </el-menu-item>
-      </el-menu>
-    </el-aside>
+    <Sidebar />
 
     <!-- 主要内容区域 -->
     <el-container class="main-container">
-      <!-- 顶部工具栏 -->
-      <el-header class="header" height="60px">
-        <div class="header-content">
-          <div class="header-left">
-            <h3>回收站</h3>
-            <el-button type="danger" plain size="small" @click="handleEmptyRecycleBin" style="margin-left: 20px;">
-              清空回收站
-            </el-button>
-          </div>
-          <div class="header-right">
-            <el-input v-model="searchText" placeholder="搜索回收站文件" :prefix-icon="Search"
-              style="width: 300px; margin-right: 20px;" @input="handleSearch" />
-            <el-dropdown @command="handleCommand">
-              <span class="user-dropdown">
-                <el-icon>
-                  <User />
-                </el-icon>
-                {{ authStore.user?.username }}
-                <el-icon class="el-icon--right">
-                  <ArrowDown />
-                </el-icon>
-              </span>
-              <template #dropdown>
-                <el-dropdown-menu>
-                  <el-dropdown-item command="profile">个人信息</el-dropdown-item>
-                  <el-dropdown-item command="settings">设置</el-dropdown-item>
-                  <el-dropdown-item divided command="logout">退出登录</el-dropdown-item>
-                </el-dropdown-menu>
-              </template>
-            </el-dropdown>
-          </div>
-        </div>
-      </el-header>
+      <GlobalHeader>
+        <template #left>
+          <h3>{{ t('recycleBin.title') }}</h3>
+          <el-button type="danger" plain size="small" @click="handleEmptyRecycleBin" style="margin-left: 20px;">
+            {{ t('recycleBin.empty') }}
+          </el-button>
+        </template>
+        <template #right>
+          <el-input v-model="searchText" :placeholder="t('recycleBin.searchPlaceholder')" :prefix-icon="Search"
+            style="width: 300px; margin-right: 20px;" @input="handleSearch" />
+        </template>
+      </GlobalHeader>
 
       <!-- 文件操作工具栏 -->
       <div class="toolbar">
         <div class="toolbar-left">
           <el-breadcrumb separator="/">
-            <el-breadcrumb-item>回收站</el-breadcrumb-item>
+            <el-breadcrumb-item>{{ t('recycleBin.title') }}</el-breadcrumb-item>
           </el-breadcrumb>
         </div>
         <div class="toolbar-right">
           <el-button-group>
             <el-button :icon="List" @click="viewMode = 'list'" :type="viewMode === 'list' ? 'primary' : ''">
-              列表
+              {{ t('index.toolbar.list') }}
             </el-button>
             <el-button :icon="Grid" @click="viewMode = 'grid'" :type="viewMode === 'grid' ? 'primary' : ''">
-              网格
+              {{ t('index.toolbar.grid') }}
             </el-button>
           </el-button-group>
         </div>
@@ -115,8 +62,9 @@
                 </el-icon>
                 <template #dropdown>
                   <el-dropdown-menu>
-                    <el-dropdown-item command="restore">还原</el-dropdown-item>
-                    <el-dropdown-item divided command="permanentDelete" style="color: #f56c6c;">彻底删除</el-dropdown-item>
+                    <el-dropdown-item command="restore">{{ t('recycleBin.restore') }}</el-dropdown-item>
+                    <el-dropdown-item divided command="permanentDelete" style="color: #f56c6c;">{{
+                      t('recycleBin.permanentDelete') }}</el-dropdown-item>
                   </el-dropdown-menu>
                 </template>
               </el-dropdown>
@@ -129,7 +77,7 @@
           <el-icon class="empty-icon" size="64">
             <Delete />
           </el-icon>
-          <p class="empty-text">回收站为空</p>
+          <p class="empty-text">{{ t('recycleBin.emptyState') }}</p>
         </div>
 
       </el-main>
@@ -149,9 +97,13 @@ import { useAuthStore } from '../../stores/auth'
 import { authApi } from '../../api/auth'
 import fileApiService, { type FileInfo } from '../../api/file'
 import { formatFileSize } from '../../utils/fileUpload'
+import Sidebar from '../index/cpns/Sidebar.vue'
+import GlobalHeader from '../../components/GlobalHeader.vue'
+import { useI18n } from 'vue-i18n'
 
 const router = useRouter()
 const authStore = useAuthStore()
+const { t } = useI18n()
 
 // 响应式数据
 const searchText = ref('')
@@ -242,7 +194,7 @@ const restoreFile = async (file: FileInfo) => {
   try {
     await fileApiService.restoreFile(file.id)
     ElMessage.success('还原成功')
-    
+
     // 从列表中移除
     const index = files.value.findIndex(f => f.id === file.id)
     if (index > -1) {
@@ -268,7 +220,7 @@ const permanentDeleteFile = async (file: FileInfo) => {
     )
 
     await fileApiService.permanentDeleteFile(file.id)
-    
+
     // 从列表中移除
     const index = files.value.findIndex(f => f.id === file.id)
     if (index > -1) {
@@ -277,16 +229,16 @@ const permanentDeleteFile = async (file: FileInfo) => {
     ElMessage.success('已彻底删除')
   } catch (error: any) {
     if (error !== 'cancel') {
-     ElMessage.error('删除失败: ' + (error.message || '未知错误'))
+      ElMessage.error('删除失败: ' + (error.message || '未知错误'))
     }
   }
 }
 
 // 清空回收站
 const handleEmptyRecycleBin = async () => {
-   if (files.value.length === 0) return
-   
-   try {
+  if (files.value.length === 0) return
+
+  try {
     await ElMessageBox.confirm(
       '确定要清空回收站吗？所有文件将无法找回！',
       '清空回收站',
@@ -304,41 +256,20 @@ const handleEmptyRecycleBin = async () => {
     loading.value = true
     const deletePromises = files.value.map(file => fileApiService.permanentDeleteFile(file.id))
     await Promise.allSettled(deletePromises)
-    
+
     // 重新加载
     await loadFiles()
     ElMessage.success('回收站已清空')
-   } catch (error: any) {
-     if (error !== 'cancel') {
-        console.error(error)
-     }
-   } finally {
-     loading.value = false
-   }
-}
-
-const handleCommand = async (command: string) => {
-  switch (command) {
-    case 'profile':
-      ElMessage.info('个人信息功能开发中...')
-      break
-    case 'settings':
-      ElMessage.info('设置功能开发中...')
-      break
-    case 'logout':
-      try {
-        if (authStore.refreshToken) {
-          await authApi.logout(authStore.refreshToken)
-        }
-      } catch (error) {
-        console.error('Logout error:', error)
-      }
-      authStore.logout()
-      ElMessage.success('已退出登录')
-      router.push('/login')
-      break
+  } catch (error: any) {
+    if (error !== 'cancel') {
+      console.error(error)
+    }
+  } finally {
+    loading.value = false
   }
 }
+
+
 </script>
 
 <style lang="scss" scoped>
@@ -360,6 +291,7 @@ const handleCommand = async (command: string) => {
 
   &-menu {
     border: none;
+
     .el-menu-item {
       height: 48px;
       line-height: 48px;
@@ -397,6 +329,7 @@ const handleCommand = async (command: string) => {
   &-left {
     display: flex;
     align-items: center;
+
     h3 {
       margin: 0;
       font-weight: 500;
@@ -419,9 +352,11 @@ const handleCommand = async (command: string) => {
   padding: 8px 12px;
   border-radius: 4px;
   transition: background-color 0.3s;
+
   &:hover {
     background-color: #f5f7fa;
   }
+
   .el-icon {
     margin: 0 4px;
   }
@@ -479,6 +414,7 @@ const handleCommand = async (command: string) => {
       .file-info {
         flex: 1;
         min-width: 0;
+
         .file-name {
           font-size: 14px;
           color: #333;
@@ -487,6 +423,7 @@ const handleCommand = async (command: string) => {
           overflow: hidden;
           text-overflow: ellipsis;
         }
+
         .file-meta {
           font-size: 12px;
           color: #909399;
@@ -497,15 +434,17 @@ const handleCommand = async (command: string) => {
 
       .file-actions {
         margin-left: 16px;
-        opacity: 0; 
+        opacity: 0;
         transition: opacity 0.2s;
+
         .el-icon {
-            font-size: 20px;
-            color: #909399;
-            cursor: pointer;
-            &:hover {
-                color: #409eff;
-            }
+          font-size: 20px;
+          color: #909399;
+          cursor: pointer;
+
+          &:hover {
+            color: #409eff;
+          }
         }
       }
 
@@ -514,67 +453,68 @@ const handleCommand = async (command: string) => {
       }
     }
   }
-  
+
   &.grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-      gap: 20px;
-      
-      .file-item {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          padding: 16px;
-          border-radius: 8px;
-          cursor: pointer;
-          transition: all 0.3s;
-          position: relative;
-          
-          &:hover {
-              background-color: #f5f7fa;
-              .file-actions {
-                  opacity: 1;
-              }
-          }
-          
-          .file-icon {
-              width: 64px;
-              height: 64px;
-              margin-bottom: 12px;
-               display: flex;
-                align-items: center;
-                justify-content: center;
-          }
-          
-          .file-info {
-              text-align: center;
-              width: 100%;
-              
-              .file-name {
-                  font-size: 14px;
-                  color: #333;
-                  margin-bottom: 4px;
-                  overflow: hidden;
-                  text-overflow: ellipsis;
-                  white-space: nowrap;
-                  width: 100%;
-              }
-              
-              .file-meta {
-                  display: none; // 网格模式下隐藏详细信息
-              }
-          }
-          
-           .file-actions {
-              position: absolute;
-              top: 8px;
-              right: 8px;
-              opacity: 0;
-              transition: opacity 0.2s;
-              background-color: rgba(255,255,255,0.8);
-              border-radius: 4px;
-          }
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 20px;
+
+    .file-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.3s;
+      position: relative;
+
+      &:hover {
+        background-color: #f5f7fa;
+
+        .file-actions {
+          opacity: 1;
+        }
       }
+
+      .file-icon {
+        width: 64px;
+        height: 64px;
+        margin-bottom: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .file-info {
+        text-align: center;
+        width: 100%;
+
+        .file-name {
+          font-size: 14px;
+          color: #333;
+          margin-bottom: 4px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          width: 100%;
+        }
+
+        .file-meta {
+          display: none; // 网格模式下隐藏详细信息
+        }
+      }
+
+      .file-actions {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        opacity: 0;
+        transition: opacity 0.2s;
+        background-color: rgba(255, 255, 255, 0.8);
+        border-radius: 4px;
+      }
+    }
   }
 }
 

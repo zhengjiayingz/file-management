@@ -1,30 +1,30 @@
 <template>
   <div class="login-container">
     <div class="login-form">
-      <h1>{{ isRegister ? '注册账号' : '文件管理系统' }}</h1>
+      <h1>{{ isRegister ? t('login.register') : t('login.title') }}</h1>
       <el-form @submit.prevent="handleAuth">
         <el-form-item>
-          <el-input v-model="loginForm.username" placeholder="用户名" size="large" :prefix-icon="User" />
+          <el-input v-model="loginForm.username" :placeholder="t('login.username')" size="large" :prefix-icon="User" />
         </el-form-item>
         <el-form-item>
-          <el-input v-model="loginForm.password" type="password" placeholder="密码" size="large" :prefix-icon="Lock"
-            @keyup.enter="handleAuth" />
+          <el-input v-model="loginForm.password" type="password" :placeholder="t('login.password')" size="large"
+            :prefix-icon="Lock" @keyup.enter="handleAuth" />
         </el-form-item>
 
         <el-form-item v-if="isRegister">
-          <el-input v-model="loginForm.email" placeholder="电子邮箱 (可选)" size="large" :prefix-icon="Message" />
+          <el-input v-model="loginForm.email" placeholder="Email (Optional)" size="large" :prefix-icon="Message" />
         </el-form-item>
 
         <el-form-item>
           <el-button type="primary" size="large" style="width: 100%" :loading="loading" @click="handleAuth">
-            {{ isRegister ? '立即注册' : '登录' }}
+            {{ isRegister ? t('login.register') : t('login.login') }}
           </el-button>
         </el-form-item>
       </el-form>
 
       <div class="form-footer">
         <el-link type="primary" @click="toggleMode">
-          {{ isRegister ? '已有账号？去登录' : '没有账号？去注册' }}
+          {{ isRegister ? t('login.hasAccount') : t('login.noAccount') }}
         </el-link>
       </div>
     </div>
@@ -38,9 +38,11 @@ import { ElMessage } from 'element-plus'
 import { User, Lock, Message } from '@element-plus/icons-vue'
 import { useAuthStore } from '../../stores/auth'
 import { authApi } from '../../api/auth'
+import { useI18n } from 'vue-i18n'
 
 const router = useRouter()
 const authStore = useAuthStore()
+const { t } = useI18n()
 
 const isRegister = ref(false)
 const loginForm = ref({
@@ -53,14 +55,12 @@ const loading = ref(false)
 
 const handleAuth = async () => {
   if (!loginForm.value.username || !loginForm.value.password) {
-    ElMessage.warning('请输入用户名和密码')
+    ElMessage.warning(t('login.username') + ' / ' + t('login.password'))
     return
   }
 
   if (isRegister.value && !loginForm.value.email) {
-    // 虽然API可选，但作为注册入口建议提示
-    // ElMessage.warning('请输入邮箱')
-    // 暂不强制
+    // Optional
   }
 
   try {
@@ -73,15 +73,15 @@ const handleAuth = async () => {
         password: loginForm.value.password,
         email: loginForm.value.email || undefined
       })
-      data = res // authApi 已经解包了 .data
-      ElMessage.success('注册成功，已自动登录')
+      data = res
+      ElMessage.success(t('login.register') + ' Success')
     } else {
       const res = await authApi.login({
         username: loginForm.value.username,
         password: loginForm.value.password
       })
       data = res
-      ElMessage.success('登录成功')
+      ElMessage.success(t('login.login') + ' Success')
     }
 
     // 登录或注册成功后更新状态
@@ -93,13 +93,11 @@ const handleAuth = async () => {
       })
       router.push('/')
     } else {
-      // 兼容某些API返回格式差异，虽然 axios 拦截器通常处理了 error
-      throw new Error(data.message || '操作失败')
+      throw new Error(data.message || 'Operation failed')
     }
 
   } catch (error: any) {
-    // axios 错误对象 message
-    ElMessage.error((isRegister.value ? '注册' : '登录') + '失败: ' + (error.response?.data?.message || error.message || '未知错误'))
+    ElMessage.error((isRegister.value ? t('login.register') : t('login.login')) + ' Failed: ' + (error.response?.data?.message || error.message || 'Error'))
   } finally {
     loading.value = false
   }
