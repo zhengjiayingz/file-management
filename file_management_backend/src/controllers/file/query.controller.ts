@@ -34,14 +34,14 @@ export const getFiles = async (req: AuthRequest, res: Response): Promise<void> =
       return;
     }
 
-    const { parentId } = req.query;
+    const { parentId, isDeleted } = req.query;
 
     // 获取当前用户的文件列表
     const userFiles = await prisma.userFile.findMany({
       where: { 
         userId: req.user.id,
         parentId: parentId ? parseInt(parentId as string) : null,
-        isDeleted: false
+        isDeleted: isDeleted === 'true'
       },
       include: {
         storage: {

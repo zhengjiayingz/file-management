@@ -111,7 +111,15 @@ export const fileApiService = {
   // 获取文件列表
   async getFiles(parentId?: number): Promise<FileInfo[]> {
     const response = await request.get('/files', {
-      params: { parentId }
+      params: { parentId, isDeleted: false }
+    })
+    return response.data.data
+  },
+
+  // 获取回收站文件列表
+  async getRecycleBinFiles(): Promise<FileInfo[]> {
+    const response = await request.get('/files', {
+      params: { isDeleted: true }
     })
     return response.data.data
   },
@@ -130,9 +138,19 @@ export const fileApiService = {
     return response.data
   },
 
-  // 删除文件
+  // 删除文件（移入回收站）
   async deleteFile(id: number): Promise<void> {
     await request.delete(`/files/${id}`)
+  },
+
+  // 还原文件
+  async restoreFile(id: number): Promise<void> {
+    await request.post(`/files/${id}/restore`)
+  },
+
+  // 彻底删除文件
+  async permanentDeleteFile(id: number): Promise<void> {
+    await request.delete(`/files/${id}/permanent`)
   },
 
   // 创建文件夹

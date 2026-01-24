@@ -239,23 +239,20 @@ export const moveFile = async (req: AuthRequest, res: Response): Promise<void> =
 /**
  * 删除文件
  */
+
+/**
+ * 删除文件（移入回收站）
+ */
 export const deleteFile = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     if (!req.user) {
-      res.status(401).json({
-        success: false,
-        message: '未认证'
-      });
+      res.status(401).json({ success: false, message: '未认证' });
       return;
     }
 
     const fileId = parseInt(req.params.id);
-    
     if (isNaN(fileId)) {
-      res.status(400).json({
-        success: false,
-        message: '无效的文件ID'
-      });
+      res.status(400).json({ success: false, message: '无效的文件ID' });
       return;
     }
 
@@ -264,73 +261,166 @@ export const deleteFile = async (req: AuthRequest, res: Response): Promise<void>
         id: fileId,
         userId: req.user.id,
         isDeleted: false
+      }
+    });
+
+    if (!userFile) {
+      res.status(404).json({ success: false, message: '文件不存在' });
+      return;
+    }
+
+    // 软删除用户文件记录
+    await prisma.userFile.update({
+      where: { id: fileId },
+      data: {
+        isDeleted: true,
+        deletedAt: new Date()
+      }
+    });
+
+    res.json({
+      success: true,
+      message: '文件已移入回收站'
+    });
+  } catch (error) {
+    console.error('Delete file error:', error);
+    res.status(500).json({ success: false, message: '文件删除失败' });
+  }
+};
+
+/**
+ * 还原文件
+ */
+export const restoreFile = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ success: false, message: '未认证' });
+      return;
+    }
+
+    const fileId = parseInt(req.params.id);
+    if (isNaN(fileId)) {
+      res.status(400).json({ success: false, message: '无效的文件ID' });
+      return;
+    }
+
+    const userFile = await prisma.userFile.findFirst({
+      where: {
+        id: fileId,
+        userId: req.user.id,
+        isDeleted: true
+      }
+    });
+
+    if (!userFile) {
+      res.status(404).json({ success: false, message: '回收站中找不到该文件' });
+      return;
+    }
+
+    // 还原文件
+    await prisma.userFile.update({
+      where: { id: fileId },
+      data: {
+        isDeleted: false,
+        deletedAt: null
+      }
+    });
+
+    res.json({
+      success: true,
+      message: '文件已还原'
+    });
+  } catch (error) {
+    console.error('Restore file error:', error);
+    res.status(500).json({ success: false, message: '文件还原失败' });
+  }
+};
+
+/**
+ * 彻底删除文件
+ */
+export const permanentDeleteFile = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ success: false, message: '未认证' });
+      return;
+    }
+
+    const fileId = parseInt(req.params.id);
+    if (isNaN(fileId)) {
+      res.status(400).json({ success: false, message: '无效的文件ID' });
+      return;
+    }
+
+    const userFile = await prisma.userFile.findFirst({
+      where: {
+        id: fileId,
+        userId: req.user.id,
+        isDeleted: true
       },
       include: {
         storage: {
           select: {
             id: true,
-            filePath: true,
             fileSize: true,
-            referenceCount: true
+            filePath: true // 需要路径来判断是否物理删除（虽然这里只减引用）
           }
         }
       }
     });
 
-    if (!userFile || !userFile.storage) {
-      res.status(404).json({
-        success: false,
-        message: '文件不存在'
-      });
+    if (!userFile) {
+      res.status(404).json({ success: false, message: '回收站中找不到该文件' });
       return;
     }
 
-    // 使用事务处理文件删除
+    // 仅当文件有对应的存储记录时（文件夹可能没有）才处理存储
+    const fileSize = userFile.storage ? userFile.storage.fileSize : BigInt(0);
+    const storageId = userFile.storageId;
+
     await prisma.$transaction(async (tx) => {
-      // 软删除用户文件记录
-      await tx.userFile.update({
-        where: { id: fileId },
-        data: {
-          isDeleted: true,
-          deletedAt: new Date()
-        }
+      // 1. 彻底删除用户文件记录
+      await tx.userFile.delete({
+        where: { id: fileId }
       });
 
-      // 减少文件存储的引用计数
-      const updatedStorage = await tx.fileStorage.update({
-        where: { id: userFile.storage!.id },
-        data: { referenceCount: { decrement: 1 } }
-      });
-
-      // 如果引用计数为0，标记为待删除
-      if (updatedStorage.referenceCount <= 0) {
-        await tx.fileStorage.update({
-          where: { id: userFile.storage!.id },
+      // 2. 如果关联了存储文件，处理引用计数和用户已用空间
+      if (storageId && userFile.storage) {
+        // 更新用户存储使用量 (彻底删除才释放空间)
+        await tx.user.update({
+          where: { id: req.user!.id },
           data: {
-            status: 'pending_delete',
-            markedDeleteAt: new Date()
+            storageUsed: { decrement: fileSize }
           }
         });
-      }
 
-      // 更新用户存储使用量
-      await tx.user.update({
-        where: { id: req.user!.id },
-        data: {
-          storageUsed: { decrement: userFile.storage!.fileSize }
+        // 减少文件存储的引用计数
+        const updatedStorage = await tx.fileStorage.update({
+          where: { id: storageId },
+          data: { referenceCount: { decrement: 1 } }
+        });
+
+        // 3. 如果引用计数<=0，标记物理删除
+        if (updatedStorage.referenceCount <= 0) {
+           await tx.fileStorage.update({
+            where: { id: storageId },
+            data: {
+              status: 'pending_delete',
+              markedDeleteAt: new Date()
+            }
+          });
+          // 注意：物理删除通常由定时任务清理，或者在这里同步删除。为了性能通常是异步清理。
+          // 这里仅仅更新了状态。后续需要有 Cron Job 来清理 pending_delete 的文件。
         }
-      });
+      }
     });
 
     res.json({
       success: true,
-      message: '文件删除成功'
+      message: '文件已彻底删除'
     });
   } catch (error) {
-    console.error('Delete file error:', error);
-    res.status(500).json({
-      success: false,
-      message: '文件删除失败'
-    });
+    console.error('Permanent delete file error:', error);
+    res.status(500).json({ success: false, message: '彻底删除失败' });
   }
 };

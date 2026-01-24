@@ -7,7 +7,7 @@
       </div>
       <el-menu default-active="1" class="sidebar-menu" background-color="#f8f9fa" text-color="#333"
         active-text-color="#409eff">
-        <el-menu-item index="1">
+        <el-menu-item index="1" @click="router.push('/')">
           <el-icon>
             <Folder />
           </el-icon>
@@ -25,7 +25,7 @@
           </el-icon>
           <span>收藏</span>
         </el-menu-item>
-        <el-menu-item index="4">
+        <el-menu-item index="4" @click="router.push('/recycle-bin')">
           <el-icon>
             <Delete />
           </el-icon>
@@ -548,7 +548,7 @@ const confirmRename = async () => {
 
     // 更新本地数据
     const index = files.value.findIndex(f => f.id === currentRenameFile.value?.id)
-    if (index > -1 && currentRenameFile.value) {
+    if (index > -1 && currentRenameFile.value && files.value[index]) {
       files.value[index].fileName = newFileName.value.trim()
     }
 
@@ -565,12 +565,12 @@ const confirmRename = async () => {
 const deleteFile = async (file: FileInfo) => {
   try {
     await ElMessageBox.confirm(
-      `确定要删除 "${file.fileName}" 吗？`,
-      '确认删除',
+      `确定要将 "${file.fileName}" 移入回收站吗？`,
+      '删除文件',
       {
-        confirmButtonText: '确定',
+        confirmButtonText: '删除',
         cancelButtonText: '取消',
-        type: 'warning',
+        type: 'warning'
       }
     )
 

@@ -17,7 +17,9 @@ import {
   createFolder,
   renameFile,
   moveFile,
-  deleteFile
+  deleteFile,
+  restoreFile,
+  permanentDeleteFile
 } from '../controllers/file/manage.controller.js';
 import { authenticate } from '../middleware/auth.middleware.js';
 import { upload } from '../middleware/upload.middleware.js';
@@ -66,7 +68,13 @@ router.put('/:id/rename', renameFile);
 // 移动文件/文件夹
 router.put('/:id/move', moveFile);
 
-// 删除文件
+// 删除文件（移入回收站）
 router.delete('/:id', deleteFile);
+
+// 还原文件
+router.post('/:id/restore', restoreFile);
+
+// 彻底删除文件
+router.delete('/:id/permanent', permanentDeleteFile);
 
 export default router;
