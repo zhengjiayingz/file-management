@@ -11,7 +11,6 @@ interface User {
 }
 
 interface LoginData {
-  username: string
   token: string
   refreshToken: string
   user: User

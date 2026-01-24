@@ -15,12 +15,7 @@ const router = createRouter({
       name: 'login',
       component: () => import('../views/login/index.vue')
     },
-    {
-      path: '/test-upload',
-      name: 'test-upload',
-      component: () => import('../views/test-upload.vue'),
-      meta: { requiresAuth: true }
-    },
+
     {
       path: '/recycle-bin',
       name: 'recycle-bin',
