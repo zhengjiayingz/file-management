@@ -4,11 +4,20 @@ import fs from 'fs';
 import prisma from '../../lib/prisma.js';
 import { AuthRequest } from '../../types/index.js';
 import { calculateFileHash, ensureDirectoryExists } from '../../utils/file.utils.js';
+import { logOperation, LogOperationType, LogResourceType } from '../../services/logger.service.js';
 
 /**
  * 检查文件是否存在（秒传检测）
  */
+// ... (checkFileExists and uploadChunk remain same, skipping for brevity in this replace block if possible, but tool requires contiguous block or use multi_replace. Let's use multi_replace logic by providing the whole file content or targeted chunks)
+// Since I need to add import at top and modify 3 functions, I will use multi_replace strategy logic but via single replace if I can target the whole file or use multi_replace tool.
+// I will use replace_file_content for imports first, then individual function updates.
+// Wait, I can't use multiple tool calls in parallel if I need sequential updates.
+// I'll update the import first.
+
 export const checkFileExists = async (req: AuthRequest, res: Response): Promise<void> => {
+// ...
+
   try {
     const { fileHash } = req.body;
 
@@ -293,6 +302,18 @@ export const mergeChunks = async (req: AuthRequest, res: Response): Promise<void
       });
     }
 
+
+
+    // 记录操作日志
+    await logOperation({
+      req,
+      userId: req.user!.id,
+      operationType: LogOperationType.UPLOAD,
+      resourceType: LogResourceType.FILE,
+      resourceId: result.userFile.id,
+      description: `Uploaded file (merged): ${result.userFile.fileName}`
+    });
+
     res.status(201).json({
       success: true,
       message: '文件上传成功',
@@ -378,6 +399,18 @@ export const instantUpload = async (req: AuthRequest, res: Response): Promise<vo
       });
 
       return userFile;
+    });
+
+
+
+    // 记录操作日志
+    await logOperation({
+      req,
+      userId: req.user!.id,
+      operationType: LogOperationType.UPLOAD,
+      resourceType: LogResourceType.FILE,
+      resourceId: result.id,
+      description: `Uploaded file (instant): ${result.fileName}`
     });
 
     res.status(201).json({
@@ -476,6 +509,18 @@ export const uploadFile = async (req: AuthRequest, res: Response): Promise<void>
       });
 
       return { userFile, fileStorage };
+    });
+
+
+
+    // 记录操作日志
+    await logOperation({
+      req,
+      userId: req.user!.id,
+      operationType: LogOperationType.UPLOAD,
+      resourceType: LogResourceType.FILE,
+      resourceId: result.userFile.id,
+      description: `Uploaded file: ${result.userFile.fileName}`
     });
 
     res.status(201).json({

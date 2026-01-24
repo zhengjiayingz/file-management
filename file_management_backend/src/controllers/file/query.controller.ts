@@ -6,6 +6,7 @@ import ffmpeg from 'fluent-ffmpeg';
 import prisma from '../../lib/prisma.js';
 import { AuthRequest } from '../../types/index.js';
 import { ensureDirectoryExists } from '../../utils/file.utils.js';
+import { logOperation, LogOperationType, LogResourceType } from '../../services/logger.service.js';
 
 // 尝试配置本地 FFmpeg 路径（如果存在）
 import { createRequire } from 'module';
@@ -208,6 +209,18 @@ export const downloadFile = async (req: AuthRequest, res: Response): Promise<voi
     // 设置响应头
     res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(userFile.fileName)}"`);
     res.setHeader('Content-Type', userFile.storage.mimeType);
+
+    // 记录下载日志
+    // 注意：日志失败不应影响下载，且应放在 sendFile 之前或者用 callback。
+    // 由于 sendFile 是异步但 Express 处理 respond，我们这里 await log 应该没问题。
+    await logOperation({
+      req,
+      userId: req.user!.id,
+      operationType: LogOperationType.DOWNLOAD,
+      resourceType: LogResourceType.FILE,
+      resourceId: userFile.id,
+      description: `Downloaded file: ${userFile.fileName}`
+    });
 
     // 发送文件
     res.sendFile(path.resolve(userFile.storage.filePath));

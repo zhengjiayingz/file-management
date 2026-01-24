@@ -8,6 +8,7 @@ import { fileURLToPath } from 'url';
 import authRoutes from './routes/auth.routes.js';
 import fileRoutes from './routes/file.routes.js';
 import userRoutes from './routes/user.routes.js';
+import logRoutes from './routes/log.routes.js';
 
 // 导入中间件
 import { errorHandler } from './middleware/error.middleware.js';
@@ -57,6 +58,7 @@ app.get('/health', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/files', fileRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/logs', logRoutes);
 
 // 404 处理
 app.use(notFound);

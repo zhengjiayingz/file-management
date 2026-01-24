@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import prisma from '../../lib/prisma.js';
 import { AuthRequest } from '../../types/index.js';
+import { logOperation, LogOperationType, LogResourceType } from '../../services/logger.service.js';
 
 /**
  * 创建文件夹
@@ -50,6 +51,17 @@ export const createFolder = async (req: AuthRequest, res: Response): Promise<voi
         fileName: name.trim(),
         fileType: 'folder'
       }
+    });
+
+
+    // 记录日志
+    await logOperation({
+      req,
+      userId: req.user.id,
+      operationType: LogOperationType.UPLOAD, // 创建文件夹归类为 Upload 或者单独定义，这里暂时用 Upload 或者新增 CREATE
+      resourceType: LogResourceType.FOLDER,
+      resourceId: folder.id,
+      description: `Created folder: ${folder.fileName}`
     });
 
     res.status(201).json({
@@ -138,6 +150,17 @@ export const renameFile = async (req: AuthRequest, res: Response): Promise<void>
       data: { fileName: name.trim() }
     });
 
+
+
+    await logOperation({
+      req,
+      userId: req.user!.id,
+      operationType: LogOperationType.RENAME,
+      resourceType: userFile.fileType === 'folder' ? LogResourceType.FOLDER : LogResourceType.FILE,
+      resourceId: fileId,
+      description: `Renamed ${userFile.fileName} to ${name.trim()}`
+    });
+
     res.json({
       success: true,
       message: '重命名成功'
@@ -223,6 +246,17 @@ export const moveFile = async (req: AuthRequest, res: Response): Promise<void> =
       data: { parentId: parentId ? parseInt(parentId) : null }
     });
 
+
+
+    await logOperation({
+      req,
+      userId: req.user!.id,
+      operationType: LogOperationType.MOVE,
+      resourceType: userFile.fileType === 'folder' ? LogResourceType.FOLDER : LogResourceType.FILE,
+      resourceId: fileId,
+      description: `Moved ${userFile.fileName} to parentId: ${parentId || 'root'}`
+    });
+
     res.json({
       success: true,
       message: '移动成功'
@@ -278,6 +312,17 @@ export const deleteFile = async (req: AuthRequest, res: Response): Promise<void>
       }
     });
 
+
+
+    await logOperation({
+      req,
+      userId: req.user!.id,
+      operationType: LogOperationType.DELETE,
+      resourceType: userFile.fileType === 'folder' ? LogResourceType.FOLDER : LogResourceType.FILE,
+      resourceId: fileId,
+      description: `Moved to recycle bin: ${userFile.fileName}`
+    });
+
     res.json({
       success: true,
       message: '文件已移入回收站'
@@ -324,6 +369,17 @@ export const restoreFile = async (req: AuthRequest, res: Response): Promise<void
         isDeleted: false,
         deletedAt: null
       }
+    });
+
+
+
+    await logOperation({
+      req,
+      userId: req.user!.id,
+      operationType: LogOperationType.RESTORE,
+      resourceType: userFile.fileType === 'folder' ? LogResourceType.FOLDER : LogResourceType.FILE,
+      resourceId: fileId,
+      description: `Restored file: ${userFile.fileName}`
     });
 
     res.json({
@@ -413,6 +469,18 @@ export const permanentDeleteFile = async (req: AuthRequest, res: Response): Prom
           // 这里仅仅更新了状态。后续需要有 Cron Job 来清理 pending_delete 的文件。
         }
       }
+    });
+
+
+
+    // 彻底删除后记录日志（注意：此时 userFile 记录可以作为快照信息使用，尽管数据已删）
+    await logOperation({
+      req,
+      userId: req.user!.id,
+      operationType: LogOperationType.PERMANENT_DELETE,
+      resourceType: userFile.fileType === 'folder' ? LogResourceType.FOLDER : LogResourceType.FILE,
+      resourceId: fileId,
+      description: `Permanently deleted: ${userFile.fileName}`
     });
 
     res.json({

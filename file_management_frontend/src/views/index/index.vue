@@ -31,6 +31,12 @@
           </el-icon>
           <span>回收站</span>
         </el-menu-item>
+        <el-menu-item index="5" @click="router.push('/logs')">
+          <el-icon>
+            <List />
+          </el-icon>
+          <span>操作记录</span>
+        </el-menu-item>
       </el-menu>
     </el-aside>
 
@@ -257,7 +263,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
-  User, ArrowDown, Folder, Upload, Search, FolderAdd,
+  User, ArrowDown, Folder, Search, FolderAdd,
   Clock, Star, Delete, List, Grid, MoreFilled, Document
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '../../stores/auth'
