@@ -65,9 +65,16 @@ app.use(notFound);
 app.use(errorHandler);
 
 // 启动服务器
+// 启动服务器
+import { initCleanupJob } from './jobs/cleanup.job.js';
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`🚀 Server is running on port ${PORT}`);
+  
+  // 初始化定时任务
+  initCleanupJob();
+
   console.log(`📝 Environment: ${process.env.NODE_ENV}`);
   console.log(`🌐 CORS Origin: ${process.env.CORS_ORIGIN}`);
   console.log(`💾 Database: Prisma + MySQL`);
