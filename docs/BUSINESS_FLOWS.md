@@ -15,6 +15,8 @@
 5. [消息系统流程](#5-消息系统流程)
 6. [存储管理流程](#6-存储管理流程)
 7. [管理员功能流程](#7-管理员功能流程)
+8. [定时任务流程](#8-定时任务流程)
+9. [用户设置流程](#9-用户设置流程)
 
 ---
 
@@ -1592,9 +1594,76 @@ WHERE id = ?
 
 ---
 
-## 9. 流程总结
+## 9. 用户设置流程
 
-### 9.1 核心表使用频率
+### 9.1 获取用户配置流程
+
+**流程步骤：**
+
+1. **用户登录成功**
+   - 登录接口返回用户信息
+
+2. **获取用户配置**
+   - 请求 `/api/user-preferences` 接口
+   - 查询 `user_preferences` 表
+
+3. **初始化配置**
+   - 如果不存在配置，返回默认值（跟随浏览器/系统）
+   - 如果存在配置，返回 `locale` 和 `theme`
+
+4. **前端应用配置**
+   - 设置应用语言
+   - 设置应用主题（深色/浅色）
+
+**涉及的表操作：**
+
+| 表名 | 操作类型 | 说明 |
+|------|---------|------|
+| user_preferences | SELECT | 查询用户配置 |
+
+**SQL 示例：**
+```sql
+-- 查询用户配置
+SELECT locale, theme FROM user_preferences WHERE user_id = ?
+```
+
+### 9.2 更新用户配置流程
+
+**流程步骤：**
+
+1. **用户切换设置**
+   - 切换语言或主题
+
+2. **立即应用**
+   - 前端立即更新 UI
+   - 保存到 LocalStorage（本地缓存）
+
+3. **异步保存**
+   - 调用 `/api/user-preferences` 接口（PUT）
+   - 更新数据库
+
+4. **数据库操作**
+   - 使用 `UPSERT` 逻辑（存在则更新，不存在则插入）
+
+**涉及的表操作：**
+
+| 表名 | 操作类型 | 说明 |
+|------|---------|------|
+| user_preferences | INSERT/UPDATE | 保存用户配置 |
+
+**SQL 示例：**
+```sql
+-- 保存用户配置（MySQL ON DUPLICATE KEY UPDATE）
+INSERT INTO user_preferences (user_id, locale, theme)
+VALUES (?, ?, ?)
+ON DUPLICATE KEY UPDATE locale = VALUES(locale), theme = VALUES(theme), updated_at = NOW()
+```
+
+---
+
+## 10. 流程总结
+
+### 10.1 核心表使用频率
 
 | 表名 | 使用频率 | 主要操作 | 说明 |
 |------|---------|---------|------|
@@ -1612,10 +1681,11 @@ WHERE id = ?
 | user_file_tags | 低 | SELECT, INSERT, DELETE | 标签关联 |
 | share_access_logs | 低 | INSERT | 分享访问记录 |
 | file_versions | 低 | SELECT, INSERT | 版本管理（可选） |
+| user_preferences | 低 | SELECT, INSERT, UPDATE | 用户界面设置 |
 
 ---
 
-### 9.2 性能优化建议
+### 10.2 性能优化建议
 
 **高频查询优化：**
 1. users 表：username, email 建立唯一索引

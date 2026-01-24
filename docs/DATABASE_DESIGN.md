@@ -384,6 +384,30 @@
 
 ---
 
+### 3.15 用户配置表 (user_preferences)
+
+存储用户的界面偏好设置，如语言和主题。
+
+| 字段名 | 类型 | 约束 | 说明 |
+|--------|------|------|------|
+| id | INT | PRIMARY KEY, AUTO_INCREMENT | 配置ID |
+| user_id | INT | UNIQUE, NOT NULL | 用户ID |
+| locale | VARCHAR(10) | NOT NULL, DEFAULT 'auto' | 语言设置 ('zh-CN', 'zh-TW', 'en-US', 'auto') |
+| theme | VARCHAR(10) | NOT NULL, DEFAULT 'auto' | 主题设置 ('light', 'dark', 'auto') |
+| created_at | DATETIME | NOT NULL, DEFAULT CURRENT_TIMESTAMP | 创建时间 |
+| updated_at | DATETIME | NOT NULL, DEFAULT CURRENT_TIMESTAMP ON UPDATE | 更新时间 |
+
+**索引：**
+- PRIMARY KEY (id)
+- UNIQUE INDEX (user_id)
+- FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+
+**说明：**
+- 每个用户只有一条配置记录
+- 默认为 'auto'，表示跟随浏览器或系统设置
+
+---
+
 ## 4. ER 关系图
 
 ### 4.1 完整 ER 图（Mermaid）
@@ -401,6 +425,7 @@ erDiagram
     users ||--o{ login_logs : "登录记录"
     users ||--o{ refresh_tokens : "持有令牌"
     users ||--o{ upload_chunks : "上传分片"
+    users ||--|| user_preferences : "配置偏好"
     
     file_storage ||--o{ user_files : "被引用"
     file_storage ||--o{ upload_chunks : "分片记录"
@@ -564,6 +589,15 @@ erDiagram
         datetime last_used_at
         datetime created_at
     }
+
+    user_preferences {
+        int id PK
+        int user_id FK
+        string locale
+        string theme
+        datetime created_at
+        datetime updated_at
+    }
     
     file_versions {
         int id PK
@@ -583,6 +617,7 @@ erDiagram
 - 用户之间可以建立好友关系（friendships）
 - 用户之间可以发送消息（messages）
 - 一个用户可以有多个登录会话（refresh_tokens）
+- 一个用户对应一条界面偏好设置（user_preferences）
 
 **文件去重机制：**
 - 多个用户文件（user_files）可以引用同一个物理文件（file_storage）
@@ -612,7 +647,8 @@ users (用户)
   ├─→ file_tags (标签)
   ├─→ operation_logs (操作日志)
   ├─→ login_logs (登录日志)
-  └─→ refresh_tokens (刷新令牌)
+  ├─→ refresh_tokens (刷新令牌)
+  └─→ user_preferences (用户偏好)
 
 file_storage (物理文件)
   └─→ upload_chunks (上传分片)
