@@ -46,8 +46,9 @@
       <el-header class="header" height="60px">
         <div class="header-content">
           <div class="header-left">
-            <FileUpload :parent-id="currentFolderId" :show-drop-zone="false" @upload-success="handleUploadSuccess"
-              @upload-error="handleUploadError" />
+            <FileUpload ref="fileUploadRef" :parent-id="currentFolderId" :show-drop-zone="false"
+              @upload-success="handleUploadSuccess" @upload-error="handleUploadError" :intercept-image="true"
+              @select-image="handleSelectImage" />
             <el-button :icon="FolderAdd" @click="showCreateFolderDialog">新建文件夹</el-button>
           </div>
           <div class="header-right">
@@ -240,6 +241,9 @@
       </template>
     </el-dialog>
 
+    <!-- 图片裁剪弹窗 -->
+    <image-cropper-dialog v-model="showCropper" :img-file="croppingFile as any" @upload="handleCroppedUpload" />
+
     <!-- 重命名对话框 -->
     <el-dialog v-model="renameDialogVisible" title="重命名" width="400px">
       <el-form @submit.prevent="confirmRename">
@@ -255,13 +259,16 @@
         </el-button>
       </template>
     </el-dialog>
+    <!-- 图片大图预览 -->
+    <el-image-viewer v-if="previewVisible" @close="previewVisible = false" :url-list="previewUrlList"
+      :initial-index="0" />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage, ElMessageBox, ElImageViewer } from 'element-plus'
 import {
   User, ArrowDown, Folder, Search, FolderAdd,
   Clock, Star, Delete, List, Grid, MoreFilled, Document
@@ -270,6 +277,7 @@ import { useAuthStore } from '../../stores/auth'
 import { authApi } from '../../api/auth'
 import fileApiService, { type FileInfo } from '../../api/file'
 import FileUpload from '../../components/FileUpload.vue'
+import ImageCropperDialog from '../../components/ImageCropperDialog.vue'
 import { formatFileSize } from '../../utils/fileUpload'
 
 const router = useRouter()
@@ -293,6 +301,15 @@ const renameDialogVisible = ref(false)
 const newFileName = ref('')
 const currentRenameFile = ref<FileInfo | null>(null)
 const isRenaming = ref(false)
+
+const showCropper = ref(false)
+const croppingFile = ref<File | null>(null)
+const fileUploadRef = ref()
+
+const handleSelectImage = (file: File) => {
+  croppingFile.value = file
+  showCropper.value = true
+}
 
 // 计算属性
 const filteredFiles = computed(() => {
@@ -384,13 +401,30 @@ const handleFileClick = (file: FileInfo) => {
   console.log('选中文件:', file)
 }
 
+// 图片预览相关
+const previewVisible = ref(false)
+const previewUrlList = ref<string[]>([])
+
+// 获取文件下载链接（用于预览原图）
+const getFileDownloadUrl = (file: FileInfo) => {
+  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
+  const token = authStore.token || ''
+  return `${API_BASE_URL}/api/files/${file.id}/download?token=${token}`
+}
+
 // 文件双击处理
 const handleFileDoubleClick = (file: FileInfo) => {
   if (file.fileType === 'folder') {
     navigateToFolder(file.id)
   } else {
-    // 预览或下载文件
-    downloadFile(file)
+    // 如果是图片，则打开大图预览
+    if (file.mimeType.startsWith('image/')) {
+      previewUrlList.value = [getFileDownloadUrl(file)]
+      previewVisible.value = true
+    } else {
+      // 其他文件下载
+      downloadFile(file)
+    }
   }
 }
 
@@ -471,6 +505,44 @@ const getFilePreviewUrl = (file: FileInfo) => {
 }
 
 // 图片加载失败处理
+// 处理裁剪后的上传
+const handleCroppedUpload = async (file: File) => {
+  // 构造 FileUpload 组件需要的格式或者直接调用 API
+  // 这里我们复用 FileUpload 的逻辑比较困难，因为 FileUpload 是封装好的。
+  // 最好的方式是：如果我们能通过 ref 调用 FileUpload 内部的 upload 方法？
+  // 或者更简单：我们直接在这里调用 uploadChunk 逻辑？ 
+  // 为了保持一致性，我们在 FileUpload 组件加一个方法 `uploadRawFile(file)`，
+  // 或者在这里手动调用 fileApiService.uploadFile(file) (如果是小文件，直接用 uploadFile 简单接口)
+  // 考虑到截图后的图片一般不会特别大，直接用简单上传接口即可。
+  // 还是说要保持分片？ fileApiService.uploadFile 是简单上传。
+
+  try {
+    // 假设裁剪后的图，我们直接走简单上传
+    // 需要通知 FileUpload 组件更新状态？或者直接刷新列表即可。
+    // 为了用户体验，我们还是希望看到进度条。
+    // 但是 FileUpload 显示的是它选中的文件。
+    // 让我们直接调用 fileApiService.uploadFile
+
+    // 或者，我们可以将 file 塞给 FileUpload 组件？
+    // 通过 ref 访问 FileUpload，然后调用其中的 upload 方法？
+    // 假设 FileUpload 有一个 expose 的方法 addFile(file)
+    // 但现在我们直接上传吧，显示全局 loading
+
+    // 其实更好的做法是：拦截 Upload 组件的 onChange，如果是图片，则 return false，保存 file 到 croppingFile，打开弹窗。
+    // 弹窗 confirm 后，得到 newFile。
+    // 然后我们手动调用 upload 方法。
+
+    // 将裁剪后的文件添加回文件上传组件，利用其完整流程进行上传
+    if (fileUploadRef.value) {
+      fileUploadRef.value.addFile(file)
+    } else {
+      ElMessage.error('上传组件未就绪')
+    }
+  } catch (err: any) {
+    console.error(err)
+    ElMessage.error('上传处理失败')
+  }
+}
 const handleImageError = (e: Event) => {
   const target = e.target as HTMLImageElement
   // 加载失败时隐藏图片，显示 fallback icon (可以通过样式控制，这里简单地设为 display none，让 v-else 生效需要逻辑配合，

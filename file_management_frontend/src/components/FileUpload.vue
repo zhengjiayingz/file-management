@@ -105,11 +105,13 @@ interface Props {
   parentId?: number
   showDropZone?: boolean
   maxFiles?: number
+  interceptImage?: boolean // 新增：是否拦截图片上传
 }
 
 const props = withDefaults(defineProps<Props>(), {
   showDropZone: true,
-  maxFiles: 10
+  maxFiles: 10,
+  interceptImage: false
 })
 
 // Emits
@@ -117,6 +119,7 @@ const emit = defineEmits<{
   uploadSuccess: [file: any]
   uploadError: [error: string]
   queueChange: [count: number]
+  selectImage: [file: File] // 新增：选择图片时触发
 }>()
 
 // 上传队列项
@@ -217,7 +220,14 @@ const addFilesToQueue = (files: File[]) => {
   }
 
   // 添加到队列
+  const initialQueueLength = uploadQueue.value.length
   for (const file of validFiles) {
+    // 拦截图片上传
+    if (props.interceptImage && file.type.startsWith('image/')) {
+      emit('selectImage', file)
+      continue
+    }
+
     const queueItem: UploadQueueItem = {
       id: Date.now() + '-' + Math.random().toString(36).substr(2, 9),
       file,
@@ -236,14 +246,59 @@ const addFilesToQueue = (files: File[]) => {
   emit('queueChange', uploadQueue.value.length)
 
   if (validFiles.length > 0) {
-    ElMessage.success(`已添加 ${validFiles.length} 个文件到上传队列`)
+    // 过滤掉被拦截的图片，只显示添加到队列的文件的消息
+    const addedCount = uploadQueue.value.length - initialQueueLength
+    if (addedCount > 0) {
+      ElMessage.success(`已添加 ${addedCount} 个文件到上传队列`)
 
-    // 自动开始上传第一个文件
-    if (!isUploading.value) {
-      startNextUpload()
+      // 自动开始上传第一个文件
+      if (!isUploading.value) {
+        startNextUpload()
+      }
     }
   }
 }
+
+// 供父组件手动添加文件（例如裁剪后的图片）
+const addFile = (file: File) => {
+  // 跳过拦截检查，直接添加
+  if (uploadQueue.value.length + 1 > props.maxFiles) {
+    ElMessage.warning(`最多只能同时上传 ${props.maxFiles} 个文件`)
+    return
+  }
+
+  // 验证文件（这里就不再重复 calculateHash 等逻辑，直接走 addFilesToQueue 但需要绕过拦截）
+  // 为了简单，我们直接构造 queueItem 并 push，类似 addFilesToQueue
+
+  // 复用逻辑：把这一步封装？或者简单点，我们这里临时把 interceptImage 改一下？不推荐。
+  // 我们可以给 addFilesToQueue 加一个参数 bypassIntercept?
+
+  // 或者直接在这里写：
+  const queueItem: UploadQueueItem = {
+    id: Date.now() + '-' + Math.random().toString(36).substr(2, 9),
+    file,
+    status: 'waiting',
+    progress: 0
+  }
+
+  if (file.type.startsWith('image/')) {
+    queueItem.previewUrl = URL.createObjectURL(file)
+  }
+
+  uploadQueue.value.push(queueItem)
+  emit('queueChange', uploadQueue.value.length)
+  ElMessage.success('已添加裁剪后图片')
+
+  if (!isUploading.value) {
+    startNextUpload()
+  }
+}
+
+defineExpose({
+  addFile
+})
+
+/* Old startNextUpload below... */
 
 // 开始下一个上传
 const startNextUpload = async () => {

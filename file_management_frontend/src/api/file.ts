@@ -108,6 +108,24 @@ export const fileApiService = {
     return response.data.data
   },
 
+  // 简单文件上传（适用于小文件或头像等）
+  async uploadFile(file: File, onProgress?: (percentage: number) => void): Promise<FileInfo> {
+    const formData = new FormData()
+    formData.append('file', file)
+
+    const response = await request.post('/files/upload', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      },
+      onUploadProgress: (progressEvent) => {
+        if (onProgress && progressEvent.total) {
+          onProgress(Math.round((progressEvent.loaded / progressEvent.total) * 100))
+        }
+      }
+    })
+    return response.data.data
+  },
+
   // 获取文件列表
   async getFiles(parentId?: number): Promise<FileInfo[]> {
     const response = await request.get('/files', {
