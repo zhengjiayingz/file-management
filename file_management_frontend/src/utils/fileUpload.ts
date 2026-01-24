@@ -35,7 +35,9 @@ export const SUPPORTED_FILE_TYPES = {
   'video/mp4': ['.mp4'],
   'video/avi': ['.avi'],
   'video/quicktime': ['.mov'],
-  'video/x-msvideo': ['.avi']
+  'video/x-msvideo': ['.avi'],
+  'application/vnd.rn-realmedia': ['.rmvb'],
+  'application/vnd.rn-realmedia-vbr': ['.rmvb']
 }
 
 // 文件验证
@@ -161,7 +163,7 @@ export function getFileIcon(mimeType: string, fileName: string): string {
   }
   
   // 视频文件
-  if (mimeType.startsWith('video/')) {
+  if (mimeType.startsWith('video/') || mimeType.includes('realmedia') || extension === '.rmvb') {
     return 'el-icon-video-camera'
   }
   

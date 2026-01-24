@@ -191,17 +191,7 @@ export const mergeChunks = async (req: AuthRequest, res: Response): Promise<void
 
     const { fileHash, fileName, fileSize, mimeType, totalChunks, parentId } = req.body;
 
-    console.log('Merge chunks request body:', req.body);
-    console.log('Parameters:', { fileHash, fileName, fileSize, mimeType, totalChunks, parentId });
-
     if (!fileHash || !fileName || fileSize === undefined || fileSize === null || !mimeType || totalChunks === undefined || totalChunks === null) {
-      console.log('Missing parameters:', {
-        fileHash: !!fileHash,
-        fileName: !!fileName,
-        fileSize: fileSize !== undefined && fileSize !== null,
-        mimeType: !!mimeType,
-        totalChunks: totalChunks !== undefined && totalChunks !== null
-      });
       res.status(400).json({
         success: false,
         message: '合并参数不完整'

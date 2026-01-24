@@ -275,7 +275,7 @@ const startUpload = async (item: UploadQueueItem) => {
         item.fileHash,
         item.file.name,
         item.file.size,
-        item.file.type,
+        item.file.type || (item.file.name.toLowerCase().endsWith('.rmvb') ? 'application/vnd.rn-realmedia' : 'application/octet-stream'),
         props.parentId
       )
 
@@ -296,7 +296,7 @@ const startUpload = async (item: UploadQueueItem) => {
           item.fileHash,
           item.file.name,
           item.file.size,
-          item.file.type,
+          item.file.type || (item.file.name.toLowerCase().endsWith('.rmvb') ? 'application/vnd.rn-realmedia' : 'application/octet-stream'),
           0, // 空文件的分片数为0
           props.parentId
         )
@@ -428,7 +428,7 @@ const uploadWithChunks = async (item: UploadQueueItem) => {
     item.fileHash,
     item.file.name,
     item.file.size,
-    item.file.type,
+    item.file.type || (item.file.name.toLowerCase().endsWith('.rmvb') ? 'application/vnd.rn-realmedia' : 'application/octet-stream'),
     totalChunks,
     props.parentId
   )
