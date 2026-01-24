@@ -80,6 +80,32 @@ export default {
       fail: '檔案刪除失敗'
     }
   },
+  fileUpload: {
+    uploadFile: '上傳檔案',
+    uploading: '上傳中...',
+    dropZoneText: '拖曳檔案到此處上傳',
+    dropZoneHint: '或點擊上方按鈕選擇檔案',
+    queueTitle: '上傳佇列',
+    clearQueue: '清空佇列',
+    start: '開始',
+    pause: '暫停',
+    resume: '繼續',
+    remove: '移除',
+    statusWaiting: '等待上傳',
+    statusUploading: '上傳中',
+    statusPaused: '已暫停',
+    statusCompleted: '上傳完成',
+    statusError: '上傳失敗',
+    calculating: '計算中...',
+    remaining: '剩餘',
+    maxFilesWarning: '最多只能同時上傳 {max} 個檔案',
+    fileInQueue: '{name} 已在上傳佇列中',
+    filesAdded: '已添加 {count} 個檔案到上傳佇列',
+    croppedImageAdded: '已添加裁剪後圖片',
+    instantUploadSuccess: '{name} 秒傳成功',
+    uploadSuccess: '{name} 上傳成功',
+    uploadError: '{name} 上傳失敗: {error}'
+  },
   recycleBin: {
     title: '回收筒',
     empty: '清空回收筒',
@@ -88,10 +114,45 @@ export default {
     restore: '還原',
     permanentDelete: '徹底刪除',
     confirmEmpty: '確定要清空回收筒嗎？所有檔案將無法找回！',
-    confirmDelete: '確定要徹底刪除 "{name}" 嗎？此操作無法撤銷！'
+    confirmDelete: '確定要徹底刪除 "{name}" 嗎？此操作無法撤銷！',
+    all: '全部'
   },
   logs: {
     title: '操作紀錄',
-    searchPlaceholder: '搜尋日誌'
+    searchPlaceholder: '搜尋日誌',
+    operationType: '操作類型',
+    dateRange: '日期範圍',
+    keyword: '關鍵詞',
+    userId: '用戶ID',
+    all: '全部',
+    startDate: '開始日期',
+    endDate: '結束日期',
+    searchKeywordPlaceholder: '搜尋檔案名/描述',
+    userIdPlaceholder: '輸入用戶ID',
+    search: '查詢',
+    reset: '重置',
+    loadError: '載入日誌失敗',
+    operations: {
+      UPLOAD: '上傳',
+      DOWNLOAD: '下載',
+      DELETE: '刪除',
+      RESTORE: '還原',
+      PERMANENT_DELETE: '徹底刪除',
+      RENAME: '重新命名',
+      MOVE: '移動',
+      SHARE: '分享',
+      LOGIN: '登入',
+      REGISTER: '註冊'
+    },
+    table: {
+      id: 'ID',
+      operator: '操作人',
+      operationType: '操作類型',
+      resourceType: '對象類型',
+      description: '詳細描述',
+      ipAddress: 'IP地址',
+      operationTime: '操作時間',
+      unknown: '未知'
+    }
   }
 }

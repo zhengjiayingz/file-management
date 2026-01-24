@@ -23,8 +23,10 @@
       <div class="toolbar">
         <div class="toolbar-left">
           <el-breadcrumb separator="/">
-            <el-breadcrumb-item @click="navigateToFolder()">全部</el-breadcrumb-item>
-            <el-breadcrumb-item v-for="folder in breadcrumbs" :key="folder.id" @click="navigateToFolder(folder.id)">
+            <el-breadcrumb-item @click="navigateToFolder()" style="cursor: pointer;">{{ t('index.toolbar.all')
+            }}</el-breadcrumb-item>
+            <el-breadcrumb-item v-for="folder in breadcrumbs" :key="folder.id" @click="navigateToFolder(folder.id)"
+              style="cursor: pointer;">
               {{ folder.name }}
             </el-breadcrumb-item>
           </el-breadcrumb>
@@ -269,7 +271,7 @@ const getFileDownloadUrl = (file: FileInfo) => {
 // 文件双击处理
 const handleFileDoubleClick = (file: FileInfo) => {
   if (file.fileType === 'folder') {
-    navigateToFolder(file.id)
+    navigateToFolder(file.id, file.fileName)
   } else {
     // 如果是图片，则打开大图预览
     if (file.mimeType.startsWith('image/')) {
@@ -287,15 +289,25 @@ const handleRightClick = (event: MouseEvent, file: FileInfo) => {
 }
 
 // 导航到文件夹
-const navigateToFolder = (folderId?: number) => {
+const navigateToFolder = (folderId?: number, folderName?: string) => {
   currentFolderId.value = folderId
+
   // 更新面包屑导航
-  if (folderId) {
-    // 这里应该根据实际的文件夹层级来构建面包屑
-    // 暂时简化处理
-  } else {
+  if (folderId === undefined) {
+    // 返回根目录
     breadcrumbs.value = []
+  } else {
+    // 检查是否点击了已存在的面包屑
+    const existingIndex = breadcrumbs.value.findIndex(b => b.id === folderId)
+    if (existingIndex !== -1) {
+      // 点击了已存在的面包屑，截断到该位置
+      breadcrumbs.value = breadcrumbs.value.slice(0, existingIndex + 1)
+    } else if (folderName) {
+      // 进入新文件夹，添加到面包屑
+      breadcrumbs.value.push({ id: folderId, name: folderName })
+    }
   }
+
   loadFiles()
 }
 

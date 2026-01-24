@@ -1,11 +1,25 @@
 <template>
-  <div id="app">
-    <router-view />
-  </div>
+  <el-config-provider :locale="elementPlusLocale">
+    <div id="app">
+      <router-view />
+    </div>
+  </el-config-provider>
 </template>
 
 <script setup lang="ts">
-// App.vue 现在作为路由容器，不需要额外的逻辑
+import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { ElConfigProvider } from 'element-plus'
+import { elementPlusLocaleMap } from './locales'
+
+const { locale } = useI18n()
+
+// 根据当前语言动态获取 Element Plus 语言包
+const elementPlusLocale = computed(() => {
+  const localeKey = locale.value
+  const elLocale = elementPlusLocaleMap[localeKey]
+  return elLocale
+})
 </script>
 
 <style>
@@ -16,7 +30,8 @@
   box-sizing: border-box;
 }
 
-html, body {
+html,
+body {
   height: 100%;
   font-family: 'Helvetica Neue', Helvetica, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', '微软雅黑', Arial, sans-serif;
 }

@@ -80,18 +80,79 @@ export default {
       fail: 'Delete failed'
     }
   },
+  fileUpload: {
+    uploadFile: 'Upload File',
+    uploading: 'Uploading...',
+    dropZoneText: 'Drop files here to upload',
+    dropZoneHint: 'Or click the button above to select files',
+    queueTitle: 'Upload Queue',
+    clearQueue: 'Clear Queue',
+    start: 'Start',
+    pause: 'Pause',
+    resume: 'Resume',
+    remove: 'Remove',
+    statusWaiting: 'Waiting',
+    statusUploading: 'Uploading',
+    statusPaused: 'Paused',
+    statusCompleted: 'Completed',
+    statusError: 'Failed',
+    calculating: 'Calculating...',
+    remaining: 'Remaining',
+    maxFilesWarning: 'Maximum {max} files can be uploaded at once',
+    fileInQueue: '{name} is already in the upload queue',
+    filesAdded: 'Added {count} file(s) to upload queue',
+    croppedImageAdded: 'Cropped image added',
+    instantUploadSuccess: '{name} instant upload successful',
+    uploadSuccess: '{name} uploaded successfully',
+    uploadError: '{name} upload failed: {error}'
+  },
   recycleBin: {
     title: 'Recycle Bin',
     empty: 'Empty Recycle Bin',
-    searchPlaceholder: 'Search recycle bin files',
+    searchPlaceholder: 'Search files',
     emptyState: 'Recycle bin is empty',
     restore: 'Restore',
-    permanentDelete: 'Permanent Delete',
-    confirmEmpty: 'Are you sure to empty recycle bin? All files will be lost!',
-    confirmDelete: 'Are you sure to permanently delete "{name}"? This cannot be undone!'
+    permanentDelete: 'Delete Permanently',
+    confirmEmpty: 'Are you sure you want to empty the recycle bin? This action cannot be undone!',
+    confirmDelete: 'Are you sure you want to permanently delete this file? This action cannot be undone!',
+    all: 'All'
   },
   logs: {
     title: 'Operation Logs',
-    searchPlaceholder: 'Search logs'
+    searchPlaceholder: 'Search logs',
+    operationType: 'Operation Type',
+    dateRange: 'Date Range',
+    keyword: 'Keyword',
+    userId: 'User ID',
+    all: 'All',
+    startDate: 'Start Date',
+    endDate: 'End Date',
+    searchKeywordPlaceholder: 'Search filename/description',
+    userIdPlaceholder: 'Enter user ID',
+    search: 'Search',
+    reset: 'Reset',
+    loadError: 'Failed to load logs',
+    operations: {
+      UPLOAD: 'Upload',
+      DOWNLOAD: 'Download',
+      DELETE: 'Delete',
+      RESTORE: 'Restore',
+      PERMANENT_DELETE: 'Permanent Delete',
+      RENAME: 'Rename',
+      MOVE: 'Move',
+      SHARE: 'Share',
+      LOGIN: 'Login',
+      REGISTER: 'Register'
+    },
+    table: {
+      id: 'ID',
+      operator: 'Operator',
+      operationType: 'Operation Type',
+      resourceType: 'Resource Type',
+      description: 'Description',
+      ipAddress: 'IP Address',
+      operationTime: 'Operation Time',
+      unknown: 'Unknown'
+    }
   }
 }

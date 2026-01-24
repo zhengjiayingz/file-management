@@ -59,9 +59,6 @@ export const useAuthStore = defineStore('auth', () => {
 
   // 退出登录
   const logout = () => {
-    console.log('Auth Store: 开始退出登录')
-    console.log('Auth Store: 退出前用户:', user.value)
-    console.log('Auth Store: 退出前token:', token.value)
     
     user.value = null
     token.value = ''
@@ -71,10 +68,6 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.removeItem('user')
     localStorage.removeItem('token')
     localStorage.removeItem('refreshToken')
-    
-    console.log('Auth Store: 退出后用户:', user.value)
-    console.log('Auth Store: 退出后token:', token.value)
-    console.log('Auth Store: localStorage已清除')
   }
 
   // 更新用户信息

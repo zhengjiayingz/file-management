@@ -1,9 +1,16 @@
 <template>
   <div class="file-upload">
     <!-- 上传按钮 -->
-    <el-button type="primary" :icon="Upload" @click="triggerFileSelect" :loading="isUploading">
-      {{ isUploading ? '上传中...' : '上传文件' }}
-    </el-button>
+    <button class="upload-button" :class="{ 'is-loading': isUploading }" @click="triggerFileSelect"
+      :disabled="isUploading">
+      <el-icon v-if="isUploading" class="is-loading">
+        <Loading />
+      </el-icon>
+      <el-icon v-else>
+        <Upload />
+      </el-icon>
+      <span>{{ isUploading ? t('fileUpload.uploading') : t('fileUpload.uploadFile') }}</span>
+    </button>
 
     <!-- 隐藏的文件输入框 -->
     <input ref="fileInputRef" type="file" multiple style="display: none" @change="handleFileSelect"
@@ -15,16 +22,16 @@
       <el-icon class="drop-icon" size="48">
         <Upload />
       </el-icon>
-      <p class="drop-text">拖拽文件到此处上传</p>
-      <p class="drop-hint">或点击上方按钮选择文件</p>
+      <p class="drop-text">{{ t('fileUpload.dropZoneText') }}</p>
+      <p class="drop-hint">{{ t('fileUpload.dropZoneHint') }}</p>
     </div>
 
     <!-- 上传队列 -->
     <div v-if="uploadQueue.length > 0" class="upload-queue">
       <div class="queue-header">
-        <h4>上传队列 ({{ uploadQueue.length }})</h4>
+        <h4>{{ t('fileUpload.queueTitle') }} ({{ uploadQueue.length }})</h4>
         <el-button size="small" type="danger" @click="clearQueue" :disabled="isUploading">
-          清空队列
+          {{ t('fileUpload.clearQueue') }}
         </el-button>
       </div>
 
@@ -56,27 +63,27 @@
               :percentage="item.progress" :status="item.status === 'completed' ? 'success' :
                 item.status === 'error' ? 'exception' : undefined" :stroke-width="4" />
             <div v-if="item.status === 'uploading' && item.remainingTimeStr" class="remaining-time">
-              剩余 {{ item.remainingTimeStr }}
+              {{ t('fileUpload.remaining') }} {{ item.remainingTimeStr }}
             </div>
           </div>
 
           <div class="upload-actions">
             <el-button v-if="item.status === 'waiting' || item.status === 'paused'" size="small" type="primary"
               @click="startUpload(item)">
-              开始
+              {{ t('fileUpload.start') }}
             </el-button>
 
             <el-button v-if="item.status === 'uploading'" size="small" @click="pauseUpload(item)">
-              暂停
+              {{ t('fileUpload.pause') }}
             </el-button>
 
             <el-button v-if="item.status === 'paused'" size="small" type="primary" @click="resumeUpload(item)">
-              继续
+              {{ t('fileUpload.resume') }}
             </el-button>
 
             <el-button size="small" type="danger" @click="removeFromQueue(item.id)"
               :disabled="item.status === 'uploading'">
-              移除
+              {{ t('fileUpload.remove') }}
             </el-button>
           </div>
         </div>
@@ -88,7 +95,8 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Upload, Document } from '@element-plus/icons-vue'
+import { Upload, Document, Loading } from '@element-plus/icons-vue'
+import { useI18n } from 'vue-i18n'
 import fileApiService from '../api/file'
 import {
   validateFile,
@@ -99,6 +107,8 @@ import {
   CHUNK_SIZE,
   SUPPORTED_FILE_TYPES
 } from '../utils/fileUpload'
+
+const { t } = useI18n()
 
 // Props
 interface Props {
@@ -555,19 +565,19 @@ const clearQueue = () => {
 const getStatusText = (item: UploadQueueItem): string => {
   switch (item.status) {
     case 'waiting':
-      return '等待上传'
+      return t('fileUpload.statusWaiting')
     case 'uploading':
       return item.currentChunk !== undefined
-        ? `上传中 (${item.currentChunk + 1}/${item.chunks?.length || 0})`
-        : '准备中...'
+        ? `${t('fileUpload.statusUploading')} (${item.currentChunk + 1}/${item.chunks?.length || 0})`
+        : t('fileUpload.calculating')
     case 'paused':
-      return '已暂停'
+      return t('fileUpload.statusPaused')
     case 'completed':
-      return '上传完成'
+      return t('fileUpload.statusCompleted')
     case 'error':
-      return item.error || '上传失败'
+      return item.error || t('fileUpload.statusError')
     default:
-      return '未知状态'
+      return t('fileUpload.statusError')
   }
 }
 
@@ -595,6 +605,62 @@ const formatRemainingTime = (seconds: number): string => {
 .file-upload {
   position: relative;
   display: inline-block;
+
+  .upload-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px 15px;
+    font-size: 14px;
+    border-radius: 4px;
+    border: 1px solid transparent;
+    background-color: #409eff;
+    color: #ffffff;
+    cursor: pointer;
+    transition: all 0.3s;
+    font-weight: 500;
+    white-space: nowrap;
+    user-select: none;
+    outline: none;
+
+    &:hover:not(:disabled) {
+      background-color: #66b1ff;
+      border-color: #66b1ff;
+    }
+
+    &:active:not(:disabled) {
+      background-color: #3a8ee6;
+      border-color: #3a8ee6;
+    }
+
+    &:disabled {
+      cursor: not-allowed;
+      opacity: 0.6;
+    }
+
+    &.is-loading {
+      pointer-events: none;
+    }
+
+    .el-icon {
+      font-size: 16px;
+
+      &.is-loading {
+        animation: rotating 2s linear infinite;
+      }
+    }
+  }
+
+  @keyframes rotating {
+    0% {
+      transform: rotate(0deg);
+    }
+
+    100% {
+      transform: rotate(360deg);
+    }
+  }
 
   .drop-zone {
     margin-top: 20px;

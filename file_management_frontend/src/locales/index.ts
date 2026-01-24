@@ -3,6 +3,11 @@ import zhCN from './zh-CN'
 import zhTW from './zh-TW'
 import enUS from './en-US'
 
+// 导入 Element Plus 语言包
+import zhCnElementPlus from 'element-plus/es/locale/lang/zh-cn'
+import zhTwElementPlus from 'element-plus/es/locale/lang/zh-tw'
+import enElementPlus from 'element-plus/es/locale/lang/en'
+
 // 获取浏览器语言
 const getBrowserLanguage = () => {
   const language = navigator.language
@@ -25,5 +30,12 @@ const i18n = createI18n({
     'en-US': enUS
   }
 })
+
+// Element Plus 语言包映射 - 确保返回正确的对象
+export const elementPlusLocaleMap: Record<string, any> = {
+  'zh-CN': zhCnElementPlus,
+  'zh-TW': zhTwElementPlus,
+  'en-US': enElementPlus
+}
 
 export default i18n
