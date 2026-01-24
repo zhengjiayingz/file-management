@@ -1,20 +1,24 @@
 import express, { Router } from 'express';
 import {
   uploadFile,
-  getFiles,
-  getFileById,
-  deleteFile,
-  downloadFile,
   checkFileExists,
   uploadChunk,
   getUploadedChunks,
   mergeChunks,
-  instantUpload,
+  instantUpload
+} from '../controllers/file/upload.controller.js';
+import {
+  getFiles,
+  getFileById,
+  downloadFile,
+  getFileThumbnail
+} from '../controllers/file/query.controller.js';
+import {
   createFolder,
   renameFile,
   moveFile,
-  getFileThumbnail
-} from '../controllers/file.controller.js';
+  deleteFile
+} from '../controllers/file/manage.controller.js';
 import { authenticate } from '../middleware/auth.middleware.js';
 import { upload } from '../middleware/upload.middleware.js';
 
