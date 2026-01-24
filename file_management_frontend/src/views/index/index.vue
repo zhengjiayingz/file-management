@@ -109,8 +109,10 @@
           <div v-for="file in filteredFiles" :key="file.id" class="file-item" @click="handleFileClick(file)"
             @dblclick="handleFileDoubleClick(file)">
             <div class="file-icon">
-              <!-- 图片缩略图 -->
-              <div v-if="file.mimeType.startsWith('image/')" class="image-thumbnail">
+              <!-- 图片或视频缩略图 -->
+              <div
+                v-if="file.mimeType.startsWith('image/') || file.mimeType.startsWith('video/') || file.fileName.toLowerCase().endsWith('.rmvb')"
+                class="image-thumbnail">
                 <!-- 这里假设有一个获取图片预览的接口，或者通过 blob 获取，目前先用 icon 占位，或者如果后端支持静态资源访问 -->
                 <!-- 由于暂时没有直接的 URL 字段，且下载需要鉴权，这里我们暂时还是用 Icon，
                       但是用户明确要求显示缩略图。

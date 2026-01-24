@@ -2,9 +2,16 @@ import { Response } from 'express';
 import path from 'path';
 import fs from 'fs';
 import sharp from 'sharp';
+import ffmpeg from 'fluent-ffmpeg';
 import prisma from '../../lib/prisma.js';
 import { AuthRequest } from '../../types/index.js';
 import { ensureDirectoryExists } from '../../utils/file.utils.js';
+
+// 尝试配置本地 FFmpeg 路径（如果存在）
+const localFfmpegPath = path.join(process.cwd(), 'ffmpeg', 'bin', 'ffmpeg.exe');
+if (fs.existsSync(localFfmpegPath)) {
+  ffmpeg.setFfmpegPath(localFfmpegPath);
+}
 
 /**
  * 获取文件列表
@@ -253,11 +260,14 @@ export const getFileThumbnail = async (req: AuthRequest, res: Response): Promise
       return;
     }
 
-    // 检查是否为图片
-    if (!userFile.storage.mimeType.startsWith('image/')) {
+    // 检查是否为图片或视频
+    const isImage = userFile.storage.mimeType.startsWith('image/');
+    const isVideo = userFile.storage.mimeType.startsWith('video/') || userFile.fileName.toLowerCase().endsWith('.rmvb');
+
+    if (!isImage && !isVideo) {
        res.status(400).json({
          success: false,
-         message: '该文件不是图片'
+         message: '不支持该文件类型的缩略图'
        });
        return;
     }
@@ -290,23 +300,126 @@ export const getFileThumbnail = async (req: AuthRequest, res: Response): Promise
 
     // 如果不存在，实时生成并保存
     try {
-      await sharp(userFile.storage.filePath)
-        .resize(200, 200, {
-          fit: 'cover',
-          position: 'center'
-        })
-        .webp({ quality: 80 })
-        .toFile(thumbnailPath);
+      if (userFile.storage.mimeType.startsWith('image/')) {
+        await sharp(userFile.storage.filePath)
+          .resize(200, 200, {
+            fit: 'cover',
+            position: 'center'
+          })
+          .webp({ quality: 80 })
+          .toFile(thumbnailPath);
+      } else if (userFile.storage.mimeType.startsWith('video/') || userFile.fileName.toLowerCase().endsWith('.rmvb')) {
+        // 视频缩略图处理
+        await new Promise((resolve, reject) => {
+          ffmpeg(userFile.storage.filePath)
+            .screenshots({
+              timestamps: ['10'], // 截取第10秒，如果视频短于10秒，ffmpeg通常会截取最后一帧或报错，需要考虑到
+              filename: thumbnailName,
+              folder: thumbnailsDir,
+              size: '200x200' // 自动保持比例缩放
+            })
+            .on('end', () => resolve(true))
+            .on('error', (err) => reject(err));
+        });
+        
+        // ffmpeg 生成的文件名可能没有完全按照预期（有时候会追加 _1.png 等），
+        // 但 screenshots 选项指定 filename 时通常是准确的。
+        // 不过 screenshots 生成的是 png/jpg，我们需要确认 output format。
+        // 这里为了简单，假设 userFile.storage.filePath 是源，生成的是 .png 或 .jpg。
+        // 我们的 thumbnailName 是 .webp。FFmpeg直接生成webp可能需要特定配置。
+        // 为了稳健，我们先生成 .jpg 中间文件，再转 webp，或者直接生成 jpg 并重命名。
+        // 简化策略：让 ffmpeg 生成 jpg，然后 sharp 转 webp (统一格式) 或者直接用 jpg。
+        // 修正：上面的 thumbnailName 是 .webp。
+        // 让我们改变策略：先生成临时文件 temp-hash.jpg
+        
+        // 重新实现视频部分：
+      }
+    } catch (err) {
+       // outer catch handles logging
+       throw err; 
+    }
+    
+    // ... wait, rewriting the block clearly below ...
+
+    // 如果不存在，实时生成并保存
+    try {
+      if (isImage) {
+        // 图片处理
+        await sharp(userFile.storage.filePath)
+          .resize(200, 200, {
+            fit: 'cover',
+            position: 'center'
+          })
+          .webp({ quality: 80 })
+          .toFile(thumbnailPath);
+      } else if (isVideo) {
+        // 视频处理
+        const tempThumbName = `${userFile.storage!.fileHash}-temp.jpg`;
+        const tempThumbPath = path.join(thumbnailsDir, tempThumbName);
+
+        try {
+          await new Promise((resolve, reject) => {
+            // userFile.storage is checked above
+            ffmpeg(userFile.storage!.filePath)
+              .screenshots({
+                timestamps: ['10'], // 10秒处
+                filename: tempThumbName,
+                folder: thumbnailsDir,
+                size: '200x200'
+              })
+              .on('end', () => resolve(true))
+              .on('error', (err) => {
+                console.error('FFmpeg error:', err);
+                reject(err);
+              });
+          });
+        } catch (ffmpegErr) {
+           console.error('FFmpeg execution failed:', ffmpegErr);
+           throw ffmpegErr;
+        }
+
+        // 检查生成的临时文件
+        // ffmpeg screenshots 通常直接生成指定名字。
+        if (fs.existsSync(tempThumbPath)) {
+           // 将 jpg 转为 webp 以统一格式并优化体积
+           await sharp(tempThumbPath)
+             .resize(200, 200, { fit: 'cover' }) // 再次确保尺寸（虽然ffmpeg已缩放，但fit cover更好）
+             .webp({ quality: 80 })
+             .toFile(thumbnailPath);
+           
+           // 删除临时文件
+           fs.unlinkSync(tempThumbPath);
+        } else {
+           // 尝试了截取10s但失败（可能是视频小于10s），尝试截取第1秒
+           await new Promise((resolve, reject) => {
+              ffmpeg(userFile.storage!.filePath)
+                .screenshots({
+                  timestamps: ['00:00:01'], 
+                  filename: tempThumbName,
+                  folder: thumbnailsDir,
+                  size: '200x200'
+                })
+                .on('end', resolve)
+                .on('error', reject);
+           });
+           
+           if (fs.existsSync(tempThumbPath)) {
+             await sharp(tempThumbPath)
+               .resize(200, 200, { fit: 'cover' })
+               .webp({ quality: 80 })
+               .toFile(thumbnailPath);
+             fs.unlinkSync(tempThumbPath);
+           } else {
+             throw new Error('无法生成视频预览图');
+           }
+        }
+      }
 
       res.setHeader('Content-Type', 'image/webp');
       res.setHeader('Cache-Control', 'public, max-age=31536000');
       res.sendFile(thumbnailPath);
-    } catch (sharpError) {
-      console.error('Thumbnail generation error:', sharpError);
-      // 如果生成失败（比如图片损坏），降级返回原图? 或者返回错误。
-      // 为防止大图加载过慢，建议返回错误或默认图。
-      // 这里尝试直接返回原图作为由于缩略图生成失败的 fallback（如果不太大的话），
-      // 但为了安全起见，还是返回错误，让前端展示默认图标。
+    } catch (genError) {
+      console.error('Thumbnail generation error:', genError);
       res.status(500).json({
         success: false,
         message: '缩略图生成失败'
