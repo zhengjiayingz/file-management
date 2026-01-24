@@ -11,6 +11,11 @@ export default {
     settings: '设置',
     logout: '退出登录'
   },
+  theme: {
+    light: '浅色模式',
+    dark: '深色模式',
+    auto: '跟随浏览器'
+  },
   sidebar: {
     home: '首页',
     sync: '同步',

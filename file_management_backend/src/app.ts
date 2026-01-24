@@ -9,6 +9,7 @@ import authRoutes from './routes/auth.routes.js';
 import fileRoutes from './routes/file.routes.js';
 import userRoutes from './routes/user.routes.js';
 import logRoutes from './routes/log.routes.js';
+import userPreferenceRoutes from './routes/user-preference.routes.js';
 
 // 导入中间件
 import { errorHandler } from './middleware/error.middleware.js';
@@ -59,6 +60,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/files', fileRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/logs', logRoutes);
+app.use('/api/user-preferences', userPreferenceRoutes);
 
 // 404 处理
 app.use(notFound);

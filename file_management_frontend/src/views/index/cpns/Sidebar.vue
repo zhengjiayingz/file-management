@@ -3,8 +3,8 @@
         <div class="sidebar-header">
             <h2 class="logo">{{ t('login.title') }}</h2>
         </div>
-        <el-menu default-active="1" class="sidebar-menu" background-color="#f8f9fa" text-color="#333"
-            active-text-color="#409eff">
+        <el-menu default-active="1" class="sidebar-menu" :background-color="menuColors.background"
+            :text-color="menuColors.text" :active-text-color="menuColors.activeText">
             <el-menu-item index="1" @click="router.push('/')">
                 <el-icon>
                     <Folder />
@@ -40,12 +40,31 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { Folder, Clock, Star, Delete, List } from '@element-plus/icons-vue'
 import { useI18n } from 'vue-i18n'
+import { useThemeStore } from '../../../stores/theme'
 
 const router = useRouter()
 const { t } = useI18n()
+const themeStore = useThemeStore()
+
+// 根据主题动态设置菜单颜色
+const menuColors = computed(() => {
+    if (themeStore.currentTheme === 'dark') {
+        return {
+            background: '#242424',
+            text: '#e5e5e5',
+            activeText: '#409eff'
+        }
+    }
+    return {
+        background: '#f8f9fa',
+        text: '#333',
+        activeText: '#409eff'
+    }
+})
 </script>
 
 <style lang="scss" scoped>
@@ -79,6 +98,34 @@ const { t } = useI18n()
             &.is-active {
                 background-color: #e6f6ff;
                 border-right: 3px solid #409eff;
+            }
+        }
+    }
+}
+
+/* 深色模式样式 */
+html.dark .sidebar {
+    background-color: #242424;
+    border-right-color: #3a3a3a;
+
+    &-header {
+        background-color: #242424;
+        border-bottom-color: #3a3a3a;
+
+        .logo {
+            color: #e5e5e5;
+        }
+    }
+
+    .sidebar-menu {
+        :deep(.el-menu-item) {
+            &.is-active {
+                background-color: #1a3a52;
+                border-right-color: #409eff;
+            }
+
+            &:hover {
+                background-color: #2a2a2a;
             }
         }
     }

@@ -24,6 +24,42 @@
                     </template>
                 </el-dropdown>
 
+                <!-- 主题切换 -->
+                <el-dropdown @command="handleThemeChange" trigger="click" style="margin-right: 15px">
+                    <span class="el-dropdown-link">
+                        <el-icon>
+                            <Sunny v-if="themeStore.themeMode === 'light'" />
+                            <Moon v-else-if="themeStore.themeMode === 'dark'" />
+                            <Monitor v-else />
+                        </el-icon>
+                        <el-icon class="el-icon--right">
+                            <ArrowDown />
+                        </el-icon>
+                    </span>
+                    <template #dropdown>
+                        <el-dropdown-menu>
+                            <el-dropdown-item command="light">
+                                <el-icon>
+                                    <Sunny />
+                                </el-icon>
+                                {{ t('theme.light') }}
+                            </el-dropdown-item>
+                            <el-dropdown-item command="dark">
+                                <el-icon>
+                                    <Moon />
+                                </el-icon>
+                                {{ t('theme.dark') }}
+                            </el-dropdown-item>
+                            <el-dropdown-item command="auto">
+                                <el-icon>
+                                    <Monitor />
+                                </el-icon>
+                                {{ t('theme.auto') }}
+                            </el-dropdown-item>
+                        </el-dropdown-menu>
+                    </template>
+                </el-dropdown>
+
                 <!-- 用户下拉菜单 -->
                 <el-dropdown @command="handleCommand">
                     <span class="user-dropdown">
@@ -52,18 +88,42 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { User, ArrowDown } from '@element-plus/icons-vue'
+import { User, ArrowDown, Sunny, Moon, Monitor } from '@element-plus/icons-vue'
 import { useAuthStore } from '../stores/auth'
+import { useThemeStore } from '../stores/theme'
 import { authApi } from '../api/auth'
 import { useI18n } from 'vue-i18n'
+import type { ThemeMode } from '../stores/theme'
+import userPreferenceApi from '../api/user-preference'
 
 const router = useRouter()
 const authStore = useAuthStore()
+const themeStore = useThemeStore()
 const { t, locale } = useI18n()
 
-const handleLanguageChange = (lang: string) => {
+const handleLanguageChange = async (lang: string) => {
     locale.value = lang
     localStorage.setItem('locale', lang)
+
+    // 保存到数据库
+    try {
+        await userPreferenceApi.updatePreference({ locale: lang })
+    } catch (error) {
+        console.error('保存语言设置失败:', error)
+        // 即使保存失败也不影响用户体验，已经保存到 localStorage
+    }
+}
+
+const handleThemeChange = async (mode: string) => {
+    themeStore.setThemeMode(mode as ThemeMode)
+
+    // 保存到数据库
+    try {
+        await userPreferenceApi.updatePreference({ theme: mode })
+    } catch (error) {
+        console.error('保存主题设置失败:', error)
+        // 即使保存失败也不影响用户体验，已经保存到 localStorage
+    }
 }
 
 const handleCommand = async (command: string) => {
@@ -82,9 +142,14 @@ const handleCommand = async (command: string) => {
             } catch (error) {
                 console.error('登出API调用失败:', error)
             }
+
+            // 清除用户数据和设置
             authStore.logout()
             ElMessage.success(t('common.logout') || '已退出登录')
-            router.push('/login')
+
+            // 跳转到登录页并刷新以应用浏览器默认语言
+            await router.push('/login')
+            window.location.reload()
             break
     }
 }

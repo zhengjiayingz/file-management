@@ -20,9 +20,23 @@ const getBrowserLanguage = () => {
   return 'zh-CN'
 }
 
+// 获取初始语言：未登录时使用浏览器语言，已登录时使用保存的语言
+const getInitialLocale = () => {
+  // 检查是否已登录（通过 token 判断）
+  const token = localStorage.getItem('token')
+  
+  if (token) {
+    // 已登录，使用保存的语言设置
+    return localStorage.getItem('locale') || getBrowserLanguage()
+  } else {
+    // 未登录，始终使用浏览器语言
+    return getBrowserLanguage()
+  }
+}
+
 const i18n = createI18n({
   legacy: false, // Vue 3 Composition API 模式
-  locale: localStorage.getItem('locale') || getBrowserLanguage(),
+  locale: getInitialLocale(),
   fallbackLocale: 'en-US',
   messages: {
     'zh-CN': zhCN,

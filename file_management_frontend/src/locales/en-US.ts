@@ -11,6 +11,11 @@ export default {
     settings: 'Settings',
     logout: 'Logout'
   },
+  theme: {
+    light: 'Light Mode',
+    dark: 'Dark Mode',
+    auto: 'Follow System'
+  },
   sidebar: {
     home: 'Home',
     sync: 'Sync',

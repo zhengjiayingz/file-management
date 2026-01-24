@@ -36,8 +36,23 @@ model User {
   refreshTokens  RefreshToken[]
   uploadChunks   UploadChunk[]
   shareAccessLogs ShareAccessLog[]
+  userPreference UserPreference?
 
   @@map("users")
+}
+
+model UserPreference {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @unique @map("user_id")
+  locale    String   @default("auto") @db.VarChar(10)  // 'zh-CN', 'zh-TW', 'en-US', 'auto'
+  theme     String   @default("auto") @db.VarChar(10)  // 'light', 'dark', 'auto'
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_preferences")
 }
 
 model FileStorage {

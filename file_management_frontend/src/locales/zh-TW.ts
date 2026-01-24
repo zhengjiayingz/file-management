@@ -7,9 +7,14 @@ export default {
     edit: '編輯',
     search: '搜尋',
     loading: '載入中...',
-    profile: '個人資訊',
-    settings: '設定',
-    logout: '登出'
+    profile: '個人信息',
+    settings: '設置',
+    logout: '退出登錄'
+  },
+  theme: {
+    light: '淺色模式',
+    dark: '深色模式',
+    auto: '跟隨瀏覽器'
   },
   sidebar: {
     home: '首頁',

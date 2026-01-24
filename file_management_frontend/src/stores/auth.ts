@@ -46,7 +46,7 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   // 登录
-  const login = (loginData: LoginData) => {
+  const login = async (loginData: LoginData) => {
     user.value = loginData.user
     token.value = loginData.token
     refreshToken.value = loginData.refreshToken
@@ -55,6 +55,48 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.setItem('user', JSON.stringify(loginData.user))
     localStorage.setItem('token', loginData.token)
     localStorage.setItem('refreshToken', loginData.refreshToken)
+    
+    // 登录后加载用户配置
+    await loadUserPreferences()
+  }
+
+  // 加载用户配置
+  const loadUserPreferences = async () => {
+    try {
+      const { default: userPreferenceApi } = await import('../api/user-preference')
+      const { default: i18n } = await import('../locales')
+      const { useThemeStore } = await import('./theme')
+      
+      const preferences = await userPreferenceApi.getPreference()
+      
+      const themeStore = useThemeStore()
+      
+      // 应用语言设置
+      if (preferences.locale && preferences.locale !== 'auto') {
+        i18n.global.locale.value = preferences.locale as any
+        localStorage.setItem('locale', preferences.locale)
+      } else {
+        // 使用浏览器语言
+        const browserLang = navigator.language
+        let defaultLocale = 'zh-CN'
+        if (browserLang === 'zh-TW' || browserLang === 'zh-HK') {
+          defaultLocale = 'zh-TW'
+        } else if (browserLang.startsWith('en')) {
+          defaultLocale = 'en-US'
+        }
+        i18n.global.locale.value = defaultLocale as any
+        localStorage.setItem('locale', defaultLocale)
+      }
+      
+      // 应用主题设置
+      if (preferences.theme) {
+        themeStore.setThemeMode(preferences.theme as any)
+      }
+      
+    } catch (error) {
+      console.error('❌ 加载用户配置失败:', error)
+      // 加载失败时使用默认设置（浏览器语言 + auto 主题）
+    }
   }
 
   // 退出登录
@@ -64,10 +106,15 @@ export const useAuthStore = defineStore('auth', () => {
     token.value = ''
     refreshToken.value = ''
     
-    // 清除 localStorage
+    // 清除 localStorage（包括语言和主题设置）
     localStorage.removeItem('user')
     localStorage.removeItem('token')
     localStorage.removeItem('refreshToken')
+    localStorage.removeItem('locale')  // 清除语言设置
+    localStorage.removeItem('themeMode')  // 清除主题设置
+    
+    // 注意：不在这里刷新页面，由调用者处理路由跳转
+    // 当跳转到登录页时，i18n 会自动检测到没有 token，使用浏览器语言
   }
 
   // 更新用户信息

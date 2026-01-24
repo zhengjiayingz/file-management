@@ -86,7 +86,7 @@ const handleAuth = async () => {
 
     // 登录或注册成功后更新状态
     if (data.success && data.data) {
-      authStore.login({
+      await authStore.login({
         user: data.data.user,
         token: data.data.accessToken,
         refreshToken: data.data.refreshToken
