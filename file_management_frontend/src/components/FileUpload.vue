@@ -1,35 +1,17 @@
 <template>
   <div class="file-upload">
     <!-- 上传按钮 -->
-    <el-button 
-      type="primary" 
-      :icon="Upload" 
-      @click="triggerFileSelect"
-      :loading="isUploading"
-    >
+    <el-button type="primary" :icon="Upload" @click="triggerFileSelect" :loading="isUploading">
       {{ isUploading ? '上传中...' : '上传文件' }}
     </el-button>
 
     <!-- 隐藏的文件输入框 -->
-    <input
-      ref="fileInputRef"
-      type="file"
-      multiple
-      style="display: none"
-      @change="handleFileSelect"
-      :accept="acceptedTypes"
-    />
+    <input ref="fileInputRef" type="file" multiple style="display: none" @change="handleFileSelect"
+      :accept="acceptedTypes" />
 
     <!-- 拖拽上传区域 -->
-    <div
-      v-if="showDropZone"
-      class="drop-zone"
-      :class="{ 'drag-over': isDragOver }"
-      @drop="handleDrop"
-      @dragover="handleDragOver"
-      @dragenter="handleDragEnter"
-      @dragleave="handleDragLeave"
-    >
+    <div v-if="showDropZone" class="drop-zone" :class="{ 'drag-over': isDragOver }" @drop="handleDrop"
+      @dragover="handleDragOver" @dragenter="handleDragEnter" @dragleave="handleDragLeave">
       <el-icon class="drop-icon" size="48">
         <Upload />
       </el-icon>
@@ -41,27 +23,21 @@
     <div v-if="uploadQueue.length > 0" class="upload-queue">
       <div class="queue-header">
         <h4>上传队列 ({{ uploadQueue.length }})</h4>
-        <el-button 
-          size="small" 
-          type="danger" 
-          @click="clearQueue"
-          :disabled="isUploading"
-        >
+        <el-button size="small" type="danger" @click="clearQueue" :disabled="isUploading">
           清空队列
         </el-button>
       </div>
 
       <div class="queue-list">
-        <div
-          v-for="item in uploadQueue"
-          :key="item.id"
-          class="queue-item"
-          :class="{ 'uploading': item.status === 'uploading' }"
-        >
+        <div v-for="item in uploadQueue" :key="item.id" class="queue-item"
+          :class="{ 'uploading': item.status === 'uploading' }">
           <div class="file-info">
-            <el-icon class="file-icon">
-              <Document />
-            </el-icon>
+            <div class="file-icon-wrapper">
+              <img v-if="item.previewUrl" :src="item.previewUrl" class="file-preview-img" alt="preview" />
+              <el-icon v-else class="file-icon">
+                <Document />
+              </el-icon>
+            </div>
             <div class="file-details">
               <div class="file-name">{{ item.file.name }}</div>
               <div class="file-size">{{ formatFileSize(item.file.size) }}</div>
@@ -72,52 +48,34 @@
             <div class="progress-info">
               <span class="status-text">{{ getStatusText(item) }}</span>
               <span v-if="item.status === 'uploading'" class="progress-percent">
-                {{ item.progress }}%
+                {{ item.progress.toFixed(2) }}%
               </span>
             </div>
-            
-            <el-progress
-              v-if="item.status === 'uploading' || item.status === 'completed' || item.status === 'error'"
-              :percentage="item.progress"
-              :status="item.status === 'completed' ? 'success' : 
-                       item.status === 'error' ? 'exception' : undefined"
-              :stroke-width="4"
-            />
+
+            <el-progress v-if="item.status === 'uploading' || item.status === 'completed' || item.status === 'error'"
+              :percentage="item.progress" :status="item.status === 'completed' ? 'success' :
+                item.status === 'error' ? 'exception' : undefined" :stroke-width="4" />
+            <div v-if="item.status === 'uploading' && item.remainingTimeStr" class="remaining-time">
+              剩余 {{ item.remainingTimeStr }}
+            </div>
           </div>
 
           <div class="upload-actions">
-            <el-button
-              v-if="item.status === 'waiting' || item.status === 'paused'"
-              size="small"
-              type="primary"
-              @click="startUpload(item)"
-            >
+            <el-button v-if="item.status === 'waiting' || item.status === 'paused'" size="small" type="primary"
+              @click="startUpload(item)">
               开始
             </el-button>
-            
-            <el-button
-              v-if="item.status === 'uploading'"
-              size="small"
-              @click="pauseUpload(item)"
-            >
+
+            <el-button v-if="item.status === 'uploading'" size="small" @click="pauseUpload(item)">
               暂停
             </el-button>
-            
-            <el-button
-              v-if="item.status === 'paused'"
-              size="small"
-              type="primary"
-              @click="resumeUpload(item)"
-            >
+
+            <el-button v-if="item.status === 'paused'" size="small" type="primary" @click="resumeUpload(item)">
               继续
             </el-button>
-            
-            <el-button
-              size="small"
-              type="danger"
-              @click="removeFromQueue(item.id)"
-              :disabled="item.status === 'uploading'"
-            >
+
+            <el-button size="small" type="danger" @click="removeFromQueue(item.id)"
+              :disabled="item.status === 'uploading'">
               移除
             </el-button>
           </div>
@@ -132,9 +90,9 @@ import { ref, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Upload, Document } from '@element-plus/icons-vue'
 import fileApiService from '../api/file'
-import { 
-  validateFile, 
-  calculateFileHash, 
+import {
+  validateFile,
+  calculateFileHash,
   calculateChunkHash,
   createFileChunks,
   formatFileSize,
@@ -173,6 +131,9 @@ interface UploadQueueItem {
   currentChunk?: number
   error?: string
   abortController?: AbortController
+  startTime?: number
+  remainingTimeStr?: string
+  previewUrl?: string
 }
 
 // 响应式数据
@@ -218,7 +179,7 @@ const handleDragLeave = (event: DragEvent) => {
 const handleDrop = (event: DragEvent) => {
   event.preventDefault()
   isDragOver.value = false
-  
+
   if (event.dataTransfer?.files) {
     addFilesToQueue(Array.from(event.dataTransfer.files))
   }
@@ -233,7 +194,7 @@ const addFilesToQueue = (files: File[]) => {
   }
 
   const validFiles: File[] = []
-  
+
   for (const file of files) {
     // 验证文件
     const validation = validateFile(file)
@@ -243,10 +204,10 @@ const addFilesToQueue = (files: File[]) => {
     }
 
     // 检查是否已在队列中
-    const exists = uploadQueue.value.some(item => 
+    const exists = uploadQueue.value.some(item =>
       item.file.name === file.name && item.file.size === file.size
     )
-    
+
     if (exists) {
       ElMessage.warning(`${file.name} 已在上传队列中`)
       continue
@@ -260,18 +221,23 @@ const addFilesToQueue = (files: File[]) => {
     const queueItem: UploadQueueItem = {
       id: Date.now() + '-' + Math.random().toString(36).substr(2, 9),
       file,
-      status: 'waiting',
+      status: 'waiting', // 初始状态确保是 waiting
       progress: 0
     }
-    
+
+    // 生成图片预览
+    if (file.type.startsWith('image/')) {
+      queueItem.previewUrl = URL.createObjectURL(file)
+    }
+
     uploadQueue.value.push(queueItem)
   }
 
   emit('queueChange', uploadQueue.value.length)
-  
+
   if (validFiles.length > 0) {
     ElMessage.success(`已添加 ${validFiles.length} 个文件到上传队列`)
-    
+
     // 自动开始上传第一个文件
     if (!isUploading.value) {
       startNextUpload()
@@ -302,7 +268,7 @@ const startUpload = async (item: UploadQueueItem) => {
 
     // 检查文件是否已存在（秒传）
     const existsResult = await fileApiService.checkFileExists(item.fileHash)
-    
+
     if (existsResult.exists) {
       // 秒传
       const fileInfo = await fileApiService.instantUpload(
@@ -312,12 +278,12 @@ const startUpload = async (item: UploadQueueItem) => {
         item.file.type,
         props.parentId
       )
-      
+
       item.status = 'completed'
       item.progress = 100
       ElMessage.success(`${item.file.name} 秒传成功`)
       emit('uploadSuccess', fileInfo)
-      
+
       // 3秒后移除完成的项目
       setTimeout(() => {
         removeFromQueue(item.id)
@@ -334,7 +300,7 @@ const startUpload = async (item: UploadQueueItem) => {
           0, // 空文件的分片数为0
           props.parentId
         )
-        
+
         item.status = 'completed'
         item.progress = 100
         ElMessage.success(`${item.file.name} 上传成功`)
@@ -355,12 +321,14 @@ const startUpload = async (item: UploadQueueItem) => {
     ElMessage.error(`${item.file.name} 上传失败: ${item.error}`)
     emit('uploadError', item.error || '上传失败')
   } finally {
-    isUploading.value = false
-    
-    // 继续上传队列中的下一个文件
-    setTimeout(() => {
-      startNextUpload()
-    }, 1000)
+    if (item.status !== 'paused') {
+      isUploading.value = false
+
+      // 继续上传队列中的下一个文件
+      setTimeout(() => {
+        startNextUpload()
+      }, 1000)
+    }
   }
 }
 
@@ -381,6 +349,10 @@ const uploadWithChunks = async (item: UploadQueueItem) => {
   const totalChunks = item.chunks.length
   let uploadedCount = item.uploadedChunks.length
 
+  item.startTime = Date.now()
+  // 记录本此会话开始时的已上传量，用于计算瞬时速度
+  const startUploadedBytes = (uploadedCount / totalChunks) * item.file.size
+
   // 上传分片
   for (let i = 0; i < totalChunks; i++) {
     // 检查是否已暂停或取消
@@ -396,7 +368,7 @@ const uploadWithChunks = async (item: UploadQueueItem) => {
     item.currentChunk = i
     const chunk = item.chunks[i]
     if (!chunk) continue
-    
+
     const chunkHash = await calculateChunkHash(chunk)
 
     try {
@@ -409,13 +381,37 @@ const uploadWithChunks = async (item: UploadQueueItem) => {
           // 计算总进度
           const chunkProgress = progress.percentage / 100
           const totalProgress = ((uploadedCount + chunkProgress) / totalChunks) * 100
-          item.progress = Math.round(totalProgress)
+          item.progress = totalProgress
+
+          // 计算剩余时间
+          if (item.startTime) {
+            const now = Date.now()
+            const elapsedTime = (now - item.startTime) / 1000 // s
+
+            // 为了防止初始波动，至少等待1秒或有一定进度后再计算
+            if (elapsedTime > 1) {
+              const totalBytes = item.file.size
+              const currentUploadedBytes = (totalProgress / 100) * totalBytes
+
+              // 计算本此会话产生的上传量
+              const sessionUploadedBytes = currentUploadedBytes - startUploadedBytes
+
+              if (sessionUploadedBytes > 0) {
+                const speed = sessionUploadedBytes / elapsedTime // bytes/sec
+                const remainingBytes = totalBytes - currentUploadedBytes
+                if (speed > 0) {
+                  const remainingSeconds = Math.ceil(remainingBytes / speed)
+                  item.remainingTimeStr = formatRemainingTime(remainingSeconds)
+                }
+              }
+            }
+          }
         }
       )
 
       uploadedCount++
       item.uploadedChunks.push(i)
-      item.progress = Math.round((uploadedCount / totalChunks) * 100)
+      item.progress = (uploadedCount / totalChunks) * 100
     } catch (error: any) {
       if (error.name === 'AbortError') {
         return // 用户取消上传
@@ -423,6 +419,9 @@ const uploadWithChunks = async (item: UploadQueueItem) => {
       throw error
     }
   }
+
+  // 清除计时
+  item.remainingTimeStr = ''
 
   // 合并分片
   const fileInfo = await fileApiService.mergeChunks(
@@ -470,6 +469,10 @@ const removeFromQueue = (id: string) => {
       item.abortController?.abort()
       isUploading.value = false
     }
+    // 释放预览图 URL
+    if (item.previewUrl) {
+      URL.revokeObjectURL(item.previewUrl)
+    }
     uploadQueue.value.splice(index, 1)
     emit('queueChange', uploadQueue.value.length)
   }
@@ -482,8 +485,12 @@ const clearQueue = () => {
     if (item.status === 'uploading') {
       item.abortController?.abort()
     }
+    // 释放预览图 URL
+    if (item.previewUrl) {
+      URL.revokeObjectURL(item.previewUrl)
+    }
   })
-  
+
   uploadQueue.value = []
   isUploading.value = false
   emit('queueChange', 0)
@@ -495,7 +502,7 @@ const getStatusText = (item: UploadQueueItem): string => {
     case 'waiting':
       return '等待上传'
     case 'uploading':
-      return item.currentChunk !== undefined 
+      return item.currentChunk !== undefined
         ? `上传中 (${item.currentChunk + 1}/${item.chunks?.length || 0})`
         : '准备中...'
     case 'paused':
@@ -506,6 +513,25 @@ const getStatusText = (item: UploadQueueItem): string => {
       return item.error || '上传失败'
     default:
       return '未知状态'
+  }
+}
+
+// 格式化剩余时间
+const formatRemainingTime = (seconds: number): string => {
+  if (!seconds || seconds < 0) return '计算中...'
+
+  const h = Math.floor(seconds / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  const s = Math.floor(seconds % 60)
+
+  const pad = (num: number) => num.toString().padStart(2, '0')
+
+  if (h > 0) {
+    return `${pad(h)}时:${pad(m)}分:${pad(s)}秒`
+  } else if (m > 0) {
+    return `${pad(m)}分:${pad(s)}秒`
+  } else {
+    return `${pad(s)}秒`
   }
 }
 </script>
@@ -605,11 +631,26 @@ const getStatusText = (item: UploadQueueItem): string => {
           flex: 1;
           min-width: 0;
 
-          .file-icon {
-            font-size: 24px;
-            color: #909399;
+          .file-icon-wrapper {
             margin-right: 12px;
             flex-shrink: 0;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+
+            .file-preview-img {
+              width: 100%;
+              height: 100%;
+              object-fit: cover;
+              border-radius: 4px;
+            }
+
+            .file-icon {
+              font-size: 24px;
+              color: #909399;
+            }
           }
 
           .file-details {
@@ -645,12 +686,18 @@ const getStatusText = (item: UploadQueueItem): string => {
             .status-text {
               font-size: 12px;
               color: #606266;
+              white-space: nowrap;
+              overflow: hidden;
+              text-overflow: ellipsis;
+              margin-right: 8px;
             }
 
             .progress-percent {
               font-size: 12px;
               color: #409eff;
               font-weight: 600;
+              flex-shrink: 0;
+              text-align: right;
             }
           }
         }
@@ -663,5 +710,12 @@ const getStatusText = (item: UploadQueueItem): string => {
       }
     }
   }
+}
+
+.remaining-time {
+  font-size: 12px;
+  color: #909399;
+  margin-top: 4px;
+  text-align: right;
 }
 </style>

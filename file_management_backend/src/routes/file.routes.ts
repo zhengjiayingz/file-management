@@ -12,7 +12,8 @@ import {
   instantUpload,
   createFolder,
   renameFile,
-  moveFile
+  moveFile,
+  getFileThumbnail
 } from '../controllers/file.controller.js';
 import { authenticate } from '../middleware/auth.middleware.js';
 import { upload } from '../middleware/upload.middleware.js';
@@ -48,6 +49,9 @@ router.get('/', getFiles);
 
 // 获取单个文件信息
 router.get('/:id', getFileById);
+
+// 获取文件缩略图 (必须放在 getFileById 之后以免冲突，或者使用不同前缀，虽然正则应该没问题，但为了保险)
+router.get('/:id/thumbnail', getFileThumbnail);
 
 // 下载文件
 router.get('/:id/download', downloadFile);

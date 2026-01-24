@@ -12,18 +12,24 @@ dotenv.config();
  */
 export const authenticate = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
-    // 从请求头获取 token
+    // 从请求头或查询参数获取 token
+    let token = '';
     const authHeader = req.headers.authorization;
     
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.substring(7); // 移除 'Bearer ' 前缀
+    } else if (req.query.token) {
+      // 允许通过 query 参数传递 token (用于图片/文件下载)
+      token = req.query.token as string;
+    }
+
+    if (!token) {
       res.status(401).json({
         success: false,
         message: '未提供认证令牌'
       });
       return;
     }
-
-    const token = authHeader.substring(7); // 移除 'Bearer ' 前缀
 
     // 验证 token
     const decoded = jwt.verify(token, process.env.JWT_SECRET!) as JwtPayload;
