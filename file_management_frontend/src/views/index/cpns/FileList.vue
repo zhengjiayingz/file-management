@@ -14,7 +14,7 @@
             <!-- 文件项 -->
             <div v-for="file in files" :key="file.id" class="file-item"
                 :class="{ 'is-selected': selectedFile?.id === file.id }" :draggable="true"
-                @click.stop="handleFileClick(file)" @dblclick.stop="handleFileDoubleClick(file)"
+                @click.stop="handleFileClick(file)" @dblclick="handleFileDoubleClick(file)"
                 @contextmenu.prevent="handleRightClick($event, file)" @dragstart="handleDragStart($event, file)"
                 @drop="handleFileDrop($event, file)" @dragover="handleFileDragOver($event)">
 
@@ -22,16 +22,18 @@
                 <div class="file-icon-wrapper">
                     <div v-if="viewMode === 'list'" class="icon-box">
                         <!-- 列表模式小图标 -->
-                        <img v-if="file.fileType !== 'folder' && file.mimeType.startsWith('image/')"
-                            :src="getFilePreviewUrl(file)" class="list-thumbnail" loading="lazy" />
+                        <img v-if="file.fileType !== 'folder' && (isImageFile(file) || isVideoFile(file)) && !imageErrorMap[file.id]"
+                            :src="getFilePreviewUrl(file)" class="list-thumbnail" loading="lazy"
+                            @error="handleImageError(file.id)" />
                         <el-icon v-else class="file-icon" :size="24" :color="getFileIconColor(file)">
                             <component :is="getFileIcon(file)" />
                         </el-icon>
                     </div>
                     <div v-else class="image-thumbnail">
                         <!-- 网格模式大图标 或 图片缩略图 -->
-                        <img v-if="file.fileType !== 'folder' && file.mimeType.startsWith('image/')"
-                            :src="getFilePreviewUrl(file)" class="file-thumbnail-img" loading="lazy" />
+                        <img v-if="file.fileType !== 'folder' && (isImageFile(file) || isVideoFile(file)) && !imageErrorMap[file.id]"
+                            :src="getFilePreviewUrl(file)" class="file-thumbnail-img" loading="lazy"
+                            @error="handleImageError(file.id)" />
                         <el-icon v-else class="file-icon" :size="64" :color="getFileIconColor(file)">
                             <component :is="getFileIcon(file)" />
                         </el-icon>
@@ -52,7 +54,7 @@
                             <el-button link type="primary" @click.stop="emit('rename', file)">{{
                                 t('fileList.action.rename') }}</el-button>
                             <el-button link type="primary" @click.stop="emit('move', file)">{{ t('fileList.action.move')
-                                }}</el-button>
+                            }}</el-button>
                             <el-button link type="danger" @click.stop="emit('delete', file)">{{
                                 t('fileList.action.delete') }}</el-button>
                         </div>
@@ -75,7 +77,7 @@
                                 <el-dropdown-item command="rename">{{ t('fileList.action.rename') }}</el-dropdown-item>
                                 <el-dropdown-item command="move">{{ t('fileList.action.move') }}</el-dropdown-item>
                                 <el-dropdown-item command="delete" style="color: red">{{ t('fileList.action.delete')
-                                    }}</el-dropdown-item>
+                                }}</el-dropdown-item>
                             </el-dropdown-menu>
                         </template>
                     </el-dropdown>
@@ -127,25 +129,45 @@ const emit = defineEmits<{
 const authStore = useAuthStore()
 const selectedFile = ref<FileInfo | null>(null)
 const draggedFile = ref<FileInfo | null>(null)
+const imageErrorMap = ref<Record<number, boolean>>({})
+
+const handleImageError = (fileId: number) => {
+    imageErrorMap.value[fileId] = true
+}
 
 // 辅助函数
 const formatDate = (date: string) => {
     return dayjs(date).format('YYYY-MM-DD HH:mm')
 }
 
+const isImageFile = (file: FileInfo) => {
+    return file.mimeType.startsWith('image/') ||
+        /\.(jpg|jpeg|png|gif|webp|bmp)$/i.test(file.fileName)
+}
+
+const isVideoFile = (file: FileInfo) => {
+    return file.mimeType.startsWith('video/') ||
+        /\.(mp4|webm|ogg|mov|wmv|flv|avi|rmvb|mkv)$/i.test(file.fileName)
+}
+
+const isAudioFile = (file: FileInfo) => {
+    return file.mimeType.startsWith('audio/') ||
+        /\.(mp3|wav|ogg|flac|aac)$/i.test(file.fileName)
+}
+
 const getFileIcon = (file: FileInfo) => {
     if (file.fileType === 'folder') return Folder
-    if (file.mimeType.startsWith('image/')) return Picture
-    if (file.mimeType.startsWith('video/')) return VideoPlay
-    if (file.mimeType.startsWith('audio/')) return Headset
+    if (isImageFile(file)) return Picture
+    if (isVideoFile(file)) return VideoPlay
+    if (isAudioFile(file)) return Headset
     return Document
 }
 
 const getFileIconColor = (file: FileInfo): string => {
     if (file.fileType === 'folder') return '#ffd04b'
-    if (file.mimeType.startsWith('image/')) return '#67c23a'
-    if (file.mimeType.startsWith('video/')) return '#f56c6c'
-    if (file.mimeType.startsWith('audio/')) return '#e6a23c'
+    if (isImageFile(file)) return '#67c23a'
+    if (isVideoFile(file)) return '#f56c6c'
+    if (isAudioFile(file)) return '#e6a23c'
     return '#909399'
 }
 

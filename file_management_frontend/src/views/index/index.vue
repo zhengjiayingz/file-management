@@ -113,6 +113,10 @@
     <!-- 图片大图预览 -->
     <el-image-viewer v-if="previewVisible" @close="previewVisible = false" :url-list="previewUrlList"
       :initial-index="0" />
+
+    <!-- 视频播放弹窗 -->
+    <video-player-dialog v-model="videoPlayerVisible" :title="currentVideoTitle" :video-url="currentVideoUrl"
+      :file-name="currentVideoTitle" @download="currentVideoFile && downloadFile(currentVideoFile)" />
   </div>
 </template>
 
@@ -130,6 +134,7 @@ import { authApi } from '../../api/auth'
 import fileApiService, { type FileInfo } from '../../api/file'
 import FileUpload from '../../components/FileUpload.vue'
 import ImageCropperDialog from '../../components/ImageCropperDialog.vue'
+import VideoPlayerDialog from '../../components/VideoPlayerDialog.vue'
 import Sidebar from './cpns/Sidebar.vue'
 import FileList from './cpns/FileList.vue'
 import GlobalHeader from '../../components/GlobalHeader.vue'
@@ -161,6 +166,12 @@ const isRenaming = ref(false)
 const showCropper = ref(false)
 const croppingFile = ref<File | null>(null)
 const fileUploadRef = ref()
+
+// 视频播放相关
+const videoPlayerVisible = ref(false)
+const currentVideoUrl = ref('')
+const currentVideoTitle = ref('')
+const currentVideoFile = ref<FileInfo | null>(null)
 
 const handleSelectImage = (file: File) => {
   croppingFile.value = file
@@ -211,6 +222,8 @@ const loadFiles = async () => {
 const handleUploadSuccess = (fileInfo: FileInfo) => {
   files.value.unshift(fileInfo)
   ElMessage.success('文件上传成功')
+  // 刷新用户信息以更新存储配额显示
+  authStore.refreshUserInfo()
 }
 
 // 文件上传错误处理
@@ -261,7 +274,25 @@ const handleFileClick = (file: FileInfo) => {
 const previewVisible = ref(false)
 const previewUrlList = ref<string[]>([])
 
-// 获取文件下载链接（用于预览原图）
+// 获取文件下载链接（用于预览原图或播放视频）
+const getFileViewUrl = (file: FileInfo) => {
+  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
+  const token = authStore.token || ''
+  return `${API_BASE_URL}/api/files/${file.id}/download?token=${token}&preview=true`
+}
+
+// 辅助函数
+const isImageFile = (file: FileInfo) => {
+  return file.mimeType.startsWith('image/') ||
+    /\.(jpg|jpeg|png|gif|webp|bmp)$/i.test(file.fileName)
+}
+
+const isVideoFile = (file: FileInfo) => {
+  return file.mimeType.startsWith('video/') ||
+    /\.(mp4|webm|ogg|mov|wmv|flv|avi|rmvb|mkv)$/i.test(file.fileName)
+}
+
+// 获取文件下载链接
 const getFileDownloadUrl = (file: FileInfo) => {
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
   const token = authStore.token || ''
@@ -270,13 +301,20 @@ const getFileDownloadUrl = (file: FileInfo) => {
 
 // 文件双击处理
 const handleFileDoubleClick = (file: FileInfo) => {
+  console.log('Double clicked file:', file)
   if (file.fileType === 'folder') {
     navigateToFolder(file.id, file.fileName)
   } else {
     // 如果是图片，则打开大图预览
-    if (file.mimeType.startsWith('image/')) {
-      previewUrlList.value = [getFileDownloadUrl(file)]
+    if (isImageFile(file)) {
+      previewUrlList.value = [getFileViewUrl(file)]
       previewVisible.value = true
+    } else if (isVideoFile(file)) {
+      // 如果是视频，则打开视频播放器
+      currentVideoUrl.value = getFileViewUrl(file)
+      currentVideoTitle.value = file.fileName
+      currentVideoFile.value = file
+      videoPlayerVisible.value = true
     } else {
       // 其他文件下载
       downloadFile(file)
@@ -414,6 +452,7 @@ const handleCroppedUpload = async (file: File) => {
   }
 }
 const handleImageError = (e: Event) => {
+  console.error('Image load error:', e)
   const target = e.target as HTMLImageElement
   // 加载失败时隐藏图片，显示 fallback icon (可以通过样式控制，这里简单地设为 display none，让 v-else 生效需要逻辑配合，
   // 但 v-else 是基于 mimeType 判断的。

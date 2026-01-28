@@ -227,6 +227,9 @@ const permanentDeleteFile = async (file: FileInfo) => {
       files.value.splice(index, 1)
     }
     ElMessage.success('已彻底删除')
+
+    // 刷新用户信息以更新存储配额
+    authStore.refreshUserInfo()
   } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error('删除失败: ' + (error.message || '未知错误'))
@@ -260,6 +263,9 @@ const handleEmptyRecycleBin = async () => {
     // 重新加载
     await loadFiles()
     ElMessage.success('回收站已清空')
+
+    // 刷新用户信息以更新存储配额
+    authStore.refreshUserInfo()
   } catch (error: any) {
     if (error !== 'cancel') {
       console.error(error)

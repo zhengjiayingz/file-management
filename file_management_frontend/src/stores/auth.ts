@@ -131,6 +131,20 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.setItem('token', newToken)
   }
 
+  // 刷新用户信息
+  const refreshUserInfo = async () => {
+    try {
+      const { authApi } = await import('../api/auth')
+      const res = await authApi.getCurrentUser()
+      if (res && res.data) {
+        user.value = res.data
+        localStorage.setItem('user', JSON.stringify(res.data))
+      }
+    } catch (error) {
+      console.error('刷新用户信息失败:', error)
+    }
+  }
+
   return {
     user,
     token,
@@ -140,7 +154,8 @@ export const useAuthStore = defineStore('auth', () => {
     login,
     logout,
     updateUser,
-    updateToken
+    updateToken,
+    refreshUserInfo
   }
 })
 
