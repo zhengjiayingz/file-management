@@ -412,35 +412,9 @@ const getFilePreviewUrl = (file: FileInfo) => {
   return `${API_BASE_URL}/api/files/${file.id}/thumbnail?token=${token}`
 }
 
-// 图片加载失败处理
 // 处理裁剪后的上传
 const handleCroppedUpload = async (file: File) => {
-  // 构造 FileUpload 组件需要的格式或者直接调用 API
-  // 这里我们复用 FileUpload 的逻辑比较困难，因为 FileUpload 是封装好的。
-  // 最好的方式是：如果我们能通过 ref 调用 FileUpload 内部的 upload 方法？
-  // 或者更简单：我们直接在这里调用 uploadChunk 逻辑？ 
-  // 为了保持一致性，我们在 FileUpload 组件加一个方法 `uploadRawFile(file)`，
-  // 或者在这里手动调用 fileApiService.uploadFile(file) (如果是小文件，直接用 uploadFile 简单接口)
-  // 考虑到截图后的图片一般不会特别大，直接用简单上传接口即可。
-  // 还是说要保持分片？ fileApiService.uploadFile 是简单上传。
-
   try {
-    // 假设裁剪后的图，我们直接走简单上传
-    // 需要通知 FileUpload 组件更新状态？或者直接刷新列表即可。
-    // 为了用户体验，我们还是希望看到进度条。
-    // 但是 FileUpload 显示的是它选中的文件。
-    // 让我们直接调用 fileApiService.uploadFile
-
-    // 或者，我们可以将 file 塞给 FileUpload 组件？
-    // 通过 ref 访问 FileUpload，然后调用其中的 upload 方法？
-    // 假设 FileUpload 有一个 expose 的方法 addFile(file)
-    // 但现在我们直接上传吧，显示全局 loading
-
-    // 其实更好的做法是：拦截 Upload 组件的 onChange，如果是图片，则 return false，保存 file 到 croppingFile，打开弹窗。
-    // 弹窗 confirm 后，得到 newFile。
-    // 然后我们手动调用 upload 方法。
-
-    // 将裁剪后的文件添加回文件上传组件，利用其完整流程进行上传
     if (fileUploadRef.value) {
       fileUploadRef.value.addFile(file)
     } else {
@@ -452,20 +426,12 @@ const handleCroppedUpload = async (file: File) => {
   }
 }
 const handleImageError = (e: Event) => {
-  console.error('Image load error:', e)
   const target = e.target as HTMLImageElement
-  // 加载失败时隐藏图片，显示 fallback icon (可以通过样式控制，这里简单地设为 display none，让 v-else 生效需要逻辑配合，
-  // 但 v-else 是基于 mimeType 判断的。
-  // 更好的方式是：如果 error，替换为一个透明图或者默认图，或者让父级 div 显示 icon。
-  // 这里简化处理：设为默认占位图或隐藏
   target.style.display = 'none'
-  // 让兄弟节点显示 (这是个 trick，但在 Vue 模板里很难直接操作兄弟节点的 v-else 状态，除非我们用 reactive map)
-  // 为了简单，我们让 image-thumbnail 容器隐藏，CSS 里面处理
+
   const parent = target.closest('.image-thumbnail') as HTMLElement
   if (parent) {
     parent.style.display = 'none'
-    // 并且需要让后面的 el-icon 显示出来... 这有点麻烦。
-    // 让我们修改 template 结构，让 img 和 icon 共存，但 img 覆盖 icon。
   }
 }
 

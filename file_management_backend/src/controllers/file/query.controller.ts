@@ -229,15 +229,11 @@ export const downloadFile = async (req: AuthRequest, res: Response): Promise<voi
       contentType = mimeMap[ext];
     }
 
-    console.log(`Download/Preview request: ${userFile.fileName}, Mode: ${disposition}, Content-Type: ${contentType}`);
-
     res.setHeader('Content-Disposition', `${disposition}; filename="${encodeURIComponent(userFile.fileName)}"`);
     res.setHeader('Content-Type', contentType);
     res.setHeader('Accept-Ranges', 'bytes'); // 显式声明支持 Range
 
     // 记录下载日志
-    // 注意：日志失败不应影响下载，且应放在 sendFile 之前或者用 callback。
-    // 由于 sendFile 是异步但 Express 处理 respond，我们这里 await log 应该没问题。
     await logOperation({
       req,
       userId: req.user!.id,

@@ -9,12 +9,6 @@ import { logOperation, LogOperationType, LogResourceType } from '../../services/
 /**
  * 检查文件是否存在（秒传检测）
  */
-// ... (checkFileExists and uploadChunk remain same, skipping for brevity in this replace block if possible, but tool requires contiguous block or use multi_replace. Let's use multi_replace logic by providing the whole file content or targeted chunks)
-// Since I need to add import at top and modify 3 functions, I will use multi_replace strategy logic but via single replace if I can target the whole file or use multi_replace tool.
-// I will use replace_file_content for imports first, then individual function updates.
-// Wait, I can't use multiple tool calls in parallel if I need sequential updates.
-// I'll update the import first.
-
 export const checkFileExists = async (req: AuthRequest, res: Response): Promise<void> => {
 // ...
 
