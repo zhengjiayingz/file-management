@@ -358,9 +358,10 @@ export const instantUpload = async (req: AuthRequest, res: Response): Promise<vo
       return;
     }
 
-    // 查找已存在的文件
-    const existingFile = await prisma.fileStorage.findUnique({
-      where: { fileHash, status: 'active' }
+
+    // 查找已存在的文件（包括待删除的）
+    let existingFile = await prisma.fileStorage.findUnique({
+      where: { fileHash }
     });
 
     if (!existingFile) {
@@ -373,9 +374,21 @@ export const instantUpload = async (req: AuthRequest, res: Response): Promise<vo
 
     // 使用事务创建用户文件引用
     const result = await prisma.$transaction(async (tx) => {
+      // 如果文件状态为 pending_delete，将其复活
+      if (existingFile!.status === 'pending_delete') {
+        existingFile = await tx.fileStorage.update({
+          where: { id: existingFile!.id },
+          data: {
+            status: 'active',
+            markedDeleteAt: null
+          }
+        });
+        console.log(`Resurrected file storage for instant upload: ${fileHash}`);
+      }
+
       // 增加引用计数
       await tx.fileStorage.update({
-        where: { id: existingFile.id },
+        where: { id: existingFile!.id },
         data: { referenceCount: { increment: 1 } }
       });
 
@@ -383,7 +396,7 @@ export const instantUpload = async (req: AuthRequest, res: Response): Promise<vo
       const userFile = await tx.userFile.create({
         data: {
           userId: req.user!.id,
-          storageId: existingFile.id,
+          storageId: existingFile!.id,
           parentId: parentId ? parseInt(parentId) : null,
           fileName,
           fileType: 'file'
@@ -460,10 +473,22 @@ export const uploadFile = async (req: AuthRequest, res: Response): Promise<void>
     
     // 使用事务处理文件上传
     const result = await prisma.$transaction(async (tx) => {
-      // 检查文件是否已存在（去重）
+      // 检查文件是否已存在（包括待删除的文件）
       let fileStorage = await tx.fileStorage.findUnique({
         where: { fileHash }
       });
+
+      // 如果文件存在但状态为 pending_delete，将其"复活"
+      if (fileStorage && fileStorage.status === 'pending_delete') {
+        fileStorage = await tx.fileStorage.update({
+          where: { id: fileStorage.id },
+          data: {
+            status: 'active',
+            markedDeleteAt: null
+          }
+        });
+        console.log(`Resurrected file storage for hash: ${fileHash}`);
+      }
 
       // 如果文件不存在，创建新的存储记录
       if (!fileStorage) {
