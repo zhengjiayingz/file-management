@@ -66,34 +66,36 @@ const handleAuth = async () => {
   try {
     loading.value = true
 
-    let data;
     if (isRegister.value) {
-      const res = await authApi.register({
+      // 注册流程
+      await authApi.register({
         username: loginForm.value.username,
         password: loginForm.value.password,
         email: loginForm.value.email || undefined
       })
-      data = res
+
       ElMessage.success(t('login.register') + ' Success')
+
+      // 注册成功后切换到登录模式
+      toggleMode()
+      // 保留用户名密码方便登录
+      // loginForm.value.email = '' // 清理不需要的字段
     } else {
+      // 登录流程
       const res = await authApi.login({
         username: loginForm.value.username,
         password: loginForm.value.password
       })
-      data = res
-      ElMessage.success(t('login.login') + ' Success')
-    }
 
-    // 登录或注册成功后更新状态
-    if (data.success && data.data) {
+      ElMessage.success(t('login.login') + ' Success')
+
+      // 登录成功
       await authStore.login({
-        user: data.data.user,
-        token: data.data.accessToken,
-        refreshToken: data.data.refreshToken
+        user: res.user,
+        token: res.token,
+        refreshToken: res.refreshToken
       })
       router.push('/')
-    } else {
-      throw new Error(data.message || 'Operation failed')
     }
 
   } catch (error: any) {

@@ -47,7 +47,8 @@
                     </div>
 
                     <div v-if="viewMode === 'list'" class="file-meta-row">
-                        <div class="file-size">{{ file.fileType === 'folder' ? '-' : formatFileSize(file.fileSize) }}
+                        <div class="file-size">{{ file.fileType === 'folder' ? '-' : formatFileSize(file.fileSize || 0)
+                            }}
                         </div>
                         <div class="file-date">{{ formatDate(file.updatedAt) }}</div>
                         <div class="file-actions-col">
@@ -104,7 +105,7 @@ import {
 } from '@element-plus/icons-vue'
 import { useI18n } from 'vue-i18n'
 import { formatFileSize } from '../../../utils/fileUpload'
-import type { FileInfo } from '../../../api/file'
+import type { FileItem as FileInfo } from '../../../types/file'
 import { useAuthStore } from '../../../stores/auth'
 import dayjs from 'dayjs'
 
@@ -141,17 +142,17 @@ const formatDate = (date: string) => {
 }
 
 const isImageFile = (file: FileInfo) => {
-    return file.mimeType.startsWith('image/') ||
+    return (file.mimeType && file.mimeType.startsWith('image/')) ||
         /\.(jpg|jpeg|png|gif|webp|bmp)$/i.test(file.fileName)
 }
 
 const isVideoFile = (file: FileInfo) => {
-    return file.mimeType.startsWith('video/') ||
+    return (file.mimeType && file.mimeType.startsWith('video/')) ||
         /\.(mp4|webm|ogg|mov|wmv|flv|avi|rmvb|mkv)$/i.test(file.fileName)
 }
 
 const isAudioFile = (file: FileInfo) => {
-    return file.mimeType.startsWith('audio/') ||
+    return (file.mimeType && file.mimeType.startsWith('audio/')) ||
         /\.(mp3|wav|ogg|flac|aac)$/i.test(file.fileName)
 }
 
