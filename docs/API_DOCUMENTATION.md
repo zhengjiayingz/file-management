@@ -1,126 +1,49 @@
-# Swagger API 文档使用指南
+# API 文档指南
 
-## 访问 Swagger UI
+## 核心原则
+本项目使用 **Swagger (OpenAPI 3.0)** 作为 API 文档的唯一真理源。请**不要**维护静态的 Markdown API 列表。
 
-启动后端服务器后，在浏览器中访问：
+## 访问文档
+启动后端开发服务器后，访问：
+> **http://localhost:3000/api-docs**
 
-```
-http://localhost:3000/api-docs
-```
+在此页面，你可以：
+- 查看所有可用的 API
+- 查看请求参数和响应结构
+- 直接测试 API 调用
 
-## 使用 JWT 认证测试 API
+## 使用 JWT 认证
+大部分接口需要 Bearer Token。在 Swagger UI 中：
+1. 调用 `POST /api/auth/login` 获取 token。
+2. 点击页面右上角的 **Authorize** 按钮。
+3. 粘贴 token 值（无需 `Bearer` 前缀）。
+4. 点击 **Authorize** 确认。
 
-### 1. 获取 JWT Token
+## 开发指南
 
-#### 方法一：注册新用户
-1. 在 Swagger UI 中找到 **认证** 分类
-2. 展开 `POST /api/auth/register` 接口
-3. 点击 **Try it out**
-4. 填写请求体：
-   ```json
-   {
-     "username": "testuser",
-     "password": "password123",
-     "email": "test@example.com"
-   }
-   ```
-5. 点击 **Execute**
-6. 从响应中复制 `token` 值
+### 添加新接口文档
+我们使用 `api-documentation` skill 来规范化 Swagger 注释的编写。
 
-#### 方法二：使用现有用户登录
-1. 展开 `POST /api/auth/login` 接口
-2. 点击 **Try it out**
-3. 填写请求体：
-   ```json
-   {
-     "username": "your_username",
-     "password": "your_password"
-   }
-   ```
-4. 点击 **Execute**
-5. 从响应中复制 `token` 值
+**推荐做法**：
+参考 [.agent/skills/api-documentation/SKILL.md](../.agent/skills/api-documentation/SKILL.md) 获取最新的注释模板和最佳实践。
 
-### 2. 配置认证
-
-1. 点击页面顶部的 **Authorize** 按钮（锁形图标）
-2. 在弹出的对话框中，直接粘贴 token（不需要 "Bearer" 前缀）
-3. 点击 **Authorize**
-4. 点击 **Close**
-
-### 3. 测试需要认证的接口
-
-现在你可以测试需要认证的接口了，例如：
-- `GET /api/auth/me` - 获取当前用户信息
-- `GET /api/user-preferences` - 获取用户偏好设置
-- `PUT /api/user-preferences` - 更新用户偏好设置
-
-## API 文档结构
-
-### 认证接口 (Authentication)
-- `POST /api/auth/register` - 用户注册
-- `POST /api/auth/login` - 用户登录
-- `POST /api/auth/refresh` - 刷新访问令牌
-- `POST /api/auth/logout` - 用户登出
-- `GET /api/auth/me` - 获取当前用户信息 🔒
-
-### 用户偏好 (User Preferences)
-- `GET /api/user-preferences` - 获取用户偏好设置 🔒
-- `PUT /api/user-preferences` - 更新用户偏好设置 🔒
-
-> 🔒 表示需要 JWT 认证
-
-## 为新 API 添加文档注释
-
-当你添加新的 API 端点时，使用以下格式添加 Swagger 文档注释：
-
+### 示例
 ```typescript
 /**
  * @swagger
- * /api/your-endpoint:
+ * /api/example:
  *   get:
- *     summary: 接口简要描述
- *     tags: [分类名称]
- *     security:
- *       - bearerAuth: []  # 如果需要认证
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: integer
- *         description: 参数描述
- *     responses:
- *       200:
- *         description: 成功响应
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 message:
- *                   type: string
- *       401:
- *         $ref: '#/components/schemas/UnauthorizedError'
+ *     summary: 示例接口
+ *     tags: [示例]
+ *     ...详细配置请参考 api-documentation skill
  */
-router.get('/your-endpoint', yourHandler);
 ```
 
-### 常用标签（Tags）
-- `认证` - 认证相关接口
-- `用户偏好` - 用户偏好设置
-- `文件管理` - 文件上传、下载、删除等
-- `用户管理` - 用户信息管理
-
-### 常用响应引用
-- `$ref: '#/components/responses/UnauthorizedError'` - 401 未授权
-- `$ref: '#/components/responses/NotFoundError'` - 404 未找到
-- `$ref: '#/components/responses/ValidationError'` - 400 验证错误
-
-### 常用 Schema 引用
-- `$ref: '#/components/schemas/User'` - 用户对象
-- `$ref: '#/components/schemas/UserPreference'` - 用户偏好对象
-- `$ref: '#/components/schemas/File'` - 文件对象
-- `$ref: '#/components/schemas/Error'` - 错误对象
+### 常用引用
+为了保持一致性，请复用 `src/config/swagger.config.ts` 中的组件：
+- 认证错误: `$ref: '#/components/responses/UnauthorizedError'`
+- 参数错误: `$ref: '#/components/responses/ValidationError'`
+- 用户模型: `$ref: '#/components/schemas/User'`
 
 ## 导出 API 文档
 

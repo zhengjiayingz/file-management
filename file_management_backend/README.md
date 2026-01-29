@@ -1,148 +1,50 @@
-# File Management Backend API
+# File Management Backend
 
-基于 Node.js + Express 的文件管理系统后端 API
+基于 Node.js + Express + TypeScript + Prisma 的文件管理系统后端。
 
-## 📁 项目结构
+## 📁 目录结构
 
-```
-file_management_backend/
-├── src/
-│   ├── controllers/        # 控制器层
-│   │   ├── auth.controller.js
-│   │   ├── file.controller.js
-│   │   └── user.controller.js
-│   ├── middleware/         # 中间件
-│   │   ├── auth.middleware.js
-│   │   ├── error.middleware.js
-│   │   ├── notFound.middleware.js
-│   │   └── upload.middleware.js
-│   ├── models/            # 数据模型
-│   │   ├── user.model.js
-│   │   └── file.model.js
-│   ├── routes/            # 路由
-│   │   ├── auth.routes.js
-│   │   ├── file.routes.js
-│   │   └── user.routes.js
-│   ├── utils/             # 工具函数
-│   │   └── response.util.js
-│   └── app.js             # 应用入口
-├── uploads/               # 文件上传目录
-├── .env                   # 环境变量
-├── .env.example          # 环境变量示例
-├── .gitignore            # Git 忽略文件
-├── package.json          # 项目配置
-└── README.md             # 项目文档
-```
+请参考 [PROJECT_STRUCTURE.md](./PROJECT_STRUCTURE.md)
 
-## 🚀 快速开始
+## 🚀 快速启动
 
-### 1. 安装依赖
+详细启动指南请参考根目录的开发环境助手：
+`.agent/skills/dev-server/SKILL.md`
 
+或者简单运行：
 ```bash
-cd file_management_backend
-npm install
+# 安装依赖
+pnpm install
+
+# 数据库迁移
+pnpm prisma:db:push
+
+# 启动开发服务器
+pnpm dev
 ```
 
-### 2. 配置环境变量
+## 📡 API 文档
 
-复制 `.env.example` 为 `.env` 并修改配置：
-
-```bash
-cp .env.example .env
-```
-
-### 3. 启动开发服务器
-
-```bash
-npm run dev
-```
-
-服务器将在 http://localhost:3000 启动
-
-### 4. 生产环境启动
-
-```bash
-npm start
-```
-
-## 📡 API 接口
-
-### 认证接口
-
-#### 登录
-- **POST** `/api/auth/login`
-- Body: `{ "username": "admin", "password": "123456" }`
-
-#### 注册
-- **POST** `/api/auth/register`
-- Body: `{ "username": "user", "password": "password", "email": "user@example.com" }`
-
-#### 获取当前用户
-- **GET** `/api/auth/me`
-- Headers: `Authorization: Bearer <token>`
-
-### 文件接口
-
-#### 上传文件
-- **POST** `/api/files/upload`
-- Headers: `Authorization: Bearer <token>`
-- Body: FormData with `file` field
-
-#### 获取文件列表
-- **GET** `/api/files`
-- Headers: `Authorization: Bearer <token>`
-
-#### 获取文件详情
-- **GET** `/api/files/:id`
-- Headers: `Authorization: Bearer <token>`
-
-#### 下载文件
-- **GET** `/api/files/:id/download`
-- Headers: `Authorization: Bearer <token>`
-
-#### 删除文件
-- **DELETE** `/api/files/:id`
-- Headers: `Authorization: Bearer <token>`
-
-### 用户接口
-
-#### 获取用户资料
-- **GET** `/api/users/profile`
-- Headers: `Authorization: Bearer <token>`
-
-#### 更新用户资料
-- **PUT** `/api/users/profile`
-- Headers: `Authorization: Bearer <token>`
-- Body: `{ "email": "newemail@example.com" }`
-
-## 🔐 默认账号
-
-- 用户名: `admin`
-- 密码: `123456`
+本项目使用 Swagger UI 作为 API 文档。
+启动服务器后访问：**http://localhost:3000/api-docs**
 
 ## 🛠️ 技术栈
 
-- **Node.js** - JavaScript 运行环境
-- **Express** - Web 框架
-- **JWT** - 身份认证
-- **Bcrypt** - 密码加密
-- **Multer** - 文件上传
-- **CORS** - 跨域支持
+- **Runtime**: Node.js + TypeScript
+- **Framework**: Express.js
+- **Database**: MySQL 8.0+
+- **ORM**: Prisma
+- **Auth**: JWT (AccessToken + RefreshToken)
+- **Upload**: Multer + Stream (支持分片上传)
 
-## 📝 注意事项
+## 📝 核心功能
 
-1. 当前使用内存存储数据，重启服务器后数据会丢失
-2. 生产环境建议使用数据库（MySQL、MongoDB 等）
-3. 修改 `.env` 中的 `JWT_SECRET` 为更安全的密钥
-4. 根据需求调整文件上传大小限制
+1. **用户认证**: 注册、登录、Token 刷新
+2. **文件管理**: 上传（普通/分片/秒传）、下载、删除、重命名
+3. **回收站**: 软删除、还原、彻底删除
+4. **日志系统**: 全局操作日志记录
 
-## 🔄 后续优化建议
+## ⚠️ 注意事项
 
-1. 集成数据库（MySQL/MongoDB）
-2. 添加数据验证（express-validator）
-3. 添加日志系统（winston/morgan）
-4. 添加单元测试（Jest）
-5. 添加 API 文档（Swagger）
-6. 添加限流保护（express-rate-limit）
-7. 添加文件预览功能
-8. 添加文件分类和标签
+- **数据库**: 请确保 `.env` 中的 `DATABASE_URL` 配置正确。
+- **上传目录**: 默认上传到根目录下的 `uploads/`，请确保有写入权限。

@@ -91,29 +91,37 @@ FileManagement_proj/
 ## 📖 文档
 
 - [📋 需求文档](./docs/REQUIREMENTS.md) - 详细的功能需求和技术规格
+- [🔌 API 文档指南](./docs/API_DOCUMENTATION.md) - Swagger 访问和开发指南
 - [🗄️ 数据库设计](./docs/DATABASE_DESIGN.md) - 数据库结构和关系设计
 - [🔄 业务流程](./docs/BUSINESS_FLOWS.md) - 详细的业务逻辑和数据流
-- [⚡ 后端快速开始](./file_management_backend/QUICK_START.md) - 后端开发指南
-- [🎯 后端项目结构](./file_management_backend/PROJECT_STRUCTURE.md) - 后端代码组织
 
 ## 🔐 默认账户
 
 - **管理员**: `admin` / `Admin@123`
 - **测试用户**: `test` / `Test@123`
 
-## 🤝 开发规范
+## 🤝 开发规范与 Skills
 
-- [后端编码规范](./file_management_backend/.kiro/steering/coding-standards.md)
-- [前端编码规范](./file_management_frontend/.kiro/steering/coding-standards.md)
+项目使用 **Cursor Skills** 来管理开发规范和最佳实践。请查阅 `.agent/skills/` 目录：
+
+- [API 文档助手](./.agent/skills/api-documentation/SKILL.md) (Swagger 注释)
+- [前端开发助手](./.agent/skills/frontend-development/SKILL.md) (Vue/TS 规范)
+- [数据库迁移助手](./.agent/skills/database-migration/SKILL.md)
+- [开发环境启动助手](./.agent/skills/dev-server/SKILL.md)
+
+请参考 [Skills 概览](./.agent/skills/README.md) 了解更多。
 
 ## 🚧 开发状态
 
 - ✅ 用户认证系统 (登录/注册/JWT)
 - ✅ 数据库设计和 ORM 集成
-- 🚧 文件上传和管理
+- ✅ 文件上传（分片、秒传）
+- ✅ 文件管理（基本操作、回收站）
+- ✅ 系统日志管理
+- ✅ 国际化与主题设置
 - 🚧 文件分享功能
-- 🚧 用户权限管理
-- 🚧 管理员面板
+- 🚧 预览功能支持
+- 🚧 管理员面板 (部分完成)
 
 ## 📄 许可证
 
