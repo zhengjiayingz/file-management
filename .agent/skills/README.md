@@ -93,6 +93,17 @@ pnpm add -D package-name
 **快速参考**：
 请查看 [SKILL.md](api-documentation/SKILL.md) 获取详细的注释模板。
 
+### 6. 前端开发助手 (`frontend-development`)
+**用途**：指导前端 TypeScript 类型定义、API 封装和 Vue 组件开发规范
+
+**使用场景**：
+- 编写新的前端 API 调用时
+- 定义新的 TypeScript 接口时
+- 开发 Vue 组件遇到类型问题时
+
+**快速参考**：
+请查看 [SKILL.md](frontend-development/SKILL.md) 获取代码模板。
+
 
 ## 如何使用 Skills
 
