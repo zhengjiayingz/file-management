@@ -1,43 +1,32 @@
 import request from '../utils/request'
+import type { 
+  FileItem, 
+  CheckFileExistsResponse, 
+  CreateFolderParams, 
+  RenameFileParams, 
+  MoveFileParams,
+  FileQueryParams
+} from '../types/file'
 
-// 文件信息接口
-export interface FileInfo {
-  id: number
-  fileName: string
-  fileType: 'file' | 'folder'
-  fileSize: number
-  mimeType: string
-  createdAt: string
-  updatedAt: string
-}
-
-// 上传进度回调
+// 上传进度回调类型
 export interface UploadProgress {
   loaded: number
   total: number
   percentage: number
 }
 
-// 分片信息
-export interface ChunkInfo {
-  chunkIndex: number
-  chunkSize: number
-  chunkHash: string
-  uploaded: boolean
-}
-
 // 文件上传相关API
 export const fileApiService = {
   // 检查文件是否已存在（秒传检测）
-  async checkFileExists(fileHash: string): Promise<{ exists: boolean; fileInfo?: FileInfo }> {
-    const response = await request.post('/files/check-exists', { fileHash })
-    return response.data.data // 注意这里要取 data.data
+  async checkFileExists(fileHash: string): Promise<CheckFileExistsResponse> {
+    const res = await request.post<CheckFileExistsResponse>('/files/check-exists', { fileHash })
+    return res.data
   },
 
   // 获取已上传的分片列表（断点续传）
   async getUploadedChunks(fileHash: string): Promise<number[]> {
-    const response = await request.get(`/files/chunks/${fileHash}`)
-    return response.data.data || []
+    const res = await request.get<number[]>(`/files/chunks/${fileHash}`)
+    return res.data
   },
 
   // 上传单个分片
@@ -74,20 +63,16 @@ export const fileApiService = {
   async mergeChunks(
     fileHash: string,
     fileName: string,
-    fileSize: number,
-    mimeType: string,
     totalChunks: number,
     parentId?: number
-  ): Promise<FileInfo> {
-    const response = await request.post('/files/merge-chunks', {
+  ): Promise<FileItem> {
+    const res = await request.post<{ message: string; file: FileItem }>('/files/merge-chunks', {
       fileHash,
       fileName,
-      fileSize,
-      mimeType,
       totalChunks,
       parentId
     })
-    return response.data.data
+    return res.data.file
   },
 
   // 秒传文件（文件已存在）
@@ -95,25 +80,24 @@ export const fileApiService = {
     fileHash: string,
     fileName: string,
     fileSize: number,
-    mimeType: string,
     parentId?: number
-  ): Promise<FileInfo> {
-    const response = await request.post('/files/instant-upload', {
+  ): Promise<FileItem> {
+    const res = await request.post<FileItem>('/files/instant-upload', {
       fileHash,
       fileName,
       fileSize,
-      mimeType,
       parentId
     })
-    return response.data.data
+    return res.data
   },
 
-  // 简单文件上传（适用于小文件或头像等）
-  async uploadFile(file: File, onProgress?: (percentage: number) => void): Promise<FileInfo> {
+  // 简单文件上传
+  async uploadFile(file: File, parentId?: number, onProgress?: (percentage: number) => void): Promise<FileItem> {
     const formData = new FormData()
     formData.append('file', file)
+    if (parentId) formData.append('parentId', parentId.toString())
 
-    const response = await request.post('/files/upload', formData, {
+    const res = await request.post<FileItem>('/files/upload', formData, {
       headers: {
         'Content-Type': 'multipart/form-data'
       },
@@ -123,37 +107,35 @@ export const fileApiService = {
         }
       }
     })
-    return response.data.data
+    return res.data
   },
 
   // 获取文件列表
-  async getFiles(parentId?: number): Promise<FileInfo[]> {
-    const response = await request.get('/files', {
-      params: { parentId, isDeleted: false }
-    })
-    return response.data.data
+  async getFiles(params: FileQueryParams): Promise<FileItem[]> {
+    const res = await request.get<FileItem[]>('/files', { params })
+    return res.data
   },
 
   // 获取回收站文件列表
-  async getRecycleBinFiles(): Promise<FileInfo[]> {
-    const response = await request.get('/files', {
+  async getRecycleBinFiles(): Promise<FileItem[]> {
+    const res = await request.get<FileItem[]>('/files', {
       params: { isDeleted: true }
     })
-    return response.data.data
+    return res.data
   },
 
   // 获取单个文件信息
-  async getFileById(id: number): Promise<FileInfo> {
-    const response = await request.get(`/files/${id}`)
-    return response.data.data
+  async getFileById(id: number): Promise<FileItem> {
+    const res = await request.get<FileItem>(`/files/${id}`)
+    return res.data
   },
 
   // 下载文件
   async downloadFile(id: number): Promise<Blob> {
-    const response = await request.get(`/files/${id}/download`, {
+    const res = await request.get(`/files/${id}/download`, {
       responseType: 'blob'
     })
-    return response.data
+    return res.data as Blob
   },
 
   // 删除文件（移入回收站）
@@ -172,26 +154,22 @@ export const fileApiService = {
   },
 
   // 创建文件夹
-  async createFolder(name: string, parentId?: number): Promise<FileInfo> {
-    const response = await request.post('/files/folder', {
-      name,
-      parentId
-    })
-    return response.data.data
+  async createFolder(folderName: string, parentId?: number): Promise<FileItem> {
+    const data: CreateFolderParams = { folderName, parentId: parentId || null }
+    const res = await request.post<FileItem>('/files/folder', data)
+    return res.data
   },
 
   // 重命名文件/文件夹
   async renameFile(id: number, newName: string): Promise<void> {
-    await request.put(`/files/${id}/rename`, {
-      name: newName
-    })
+    const data: RenameFileParams = { newName }
+    await request.put(`/files/${id}/rename`, data)
   },
 
   // 移动文件/文件夹
   async moveFile(id: number, targetParentId?: number): Promise<void> {
-    await request.put(`/files/${id}/move`, {
-      parentId: targetParentId
-    })
+    const data: MoveFileParams = { targetParentId: targetParentId || null }
+    await request.put(`/files/${id}/move`, data)
   }
 }
 

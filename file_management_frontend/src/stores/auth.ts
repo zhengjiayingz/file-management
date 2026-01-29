@@ -1,20 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-
-interface User {
-  id: number
-  username: string
-  email?: string
-  role: string
-  storage_quota: number
-  storage_used: number
-}
-
-interface LoginData {
-  token: string
-  refreshToken: string
-  user: User
-}
+import type { User, LoginResult } from '../types/user'
 
 export const useAuthStore = defineStore('auth', () => {
   // 状态
@@ -46,7 +32,7 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   // 登录
-  const login = async (loginData: LoginData) => {
+  const login = async (loginData: Omit<LoginResult, 'message'>) => {
     user.value = loginData.user
     token.value = loginData.token
     refreshToken.value = loginData.refreshToken
@@ -63,7 +49,7 @@ export const useAuthStore = defineStore('auth', () => {
   // 加载用户配置
   const loadUserPreferences = async () => {
     try {
-      const { default: userPreferenceApi } = await import('../api/user-preference')
+      const { userPreferenceApi } = await import('../api/user-preference')
       const { default: i18n } = await import('../locales')
       const { useThemeStore } = await import('./theme')
       
@@ -135,10 +121,10 @@ export const useAuthStore = defineStore('auth', () => {
   const refreshUserInfo = async () => {
     try {
       const { authApi } = await import('../api/auth')
-      const res = await authApi.getCurrentUser()
-      if (res && res.data) {
-        user.value = res.data
-        localStorage.setItem('user', JSON.stringify(res.data))
+      const currentUser = await authApi.getCurrentUser()
+      if (currentUser) {
+        user.value = currentUser
+        localStorage.setItem('user', JSON.stringify(currentUser))
       }
     } catch (error) {
       console.error('刷新用户信息失败:', error)

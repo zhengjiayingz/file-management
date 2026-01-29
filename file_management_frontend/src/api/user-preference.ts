@@ -1,21 +1,17 @@
 import request from '../utils/request'
-
-export interface UserPreference {
-  locale: string  // 'zh-CN' | 'zh-TW' | 'en-US' | 'auto'
-  theme: string   // 'light' | 'dark' | 'auto'
-}
+import type { UserPreference, UpdatePreferenceParams, UpdatePreferenceResponse } from '../types/user-preference'
 
 export const userPreferenceApi = {
   // 获取用户配置
   async getPreference(): Promise<UserPreference> {
-    const response = await request.get('/user-preferences')
-    return response.data.data
+    const res = await request.get<UserPreference>('/user-preferences')
+    return res.data
   },
 
   // 更新用户配置
-  async updatePreference(preference: Partial<UserPreference>): Promise<UserPreference> {
-    const response = await request.put('/user-preferences', preference)
-    return response.data.data
+  async updatePreference(preference: UpdatePreferenceParams): Promise<UpdatePreferenceResponse> {
+    const res = await request.put<UpdatePreferenceResponse>('/user-preferences', preference)
+    return res.data
   }
 }
 
