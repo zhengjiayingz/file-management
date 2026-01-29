@@ -1,0 +1,4 @@
+# 数据库备份文件
+*.dump
+*.sql
+backup_*.json

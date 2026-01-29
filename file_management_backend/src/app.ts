@@ -14,6 +14,7 @@ import userPreferenceRoutes from './routes/user-preference.routes.js';
 // 导入中间件
 import { errorHandler } from './middleware/error.middleware.js';
 import { notFound } from './middleware/notFound.middleware.js';
+import { setupSwagger } from './config/swagger.config.js';
 
 // 配置环境变量
 dotenv.config();
@@ -46,7 +47,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // 健康检查路由
-app.get('/health', (req, res) => {
+app.get('/health', (_req, res) => {
   res.json({
     status: 'ok',
     message: 'File Management API is running',
@@ -54,6 +55,9 @@ app.get('/health', (req, res) => {
     database: 'MySQL'
   });
 });
+
+// 配置 Swagger API 文档
+setupSwagger(app);
 
 // API 路由
 app.use('/api/auth', authRoutes);
