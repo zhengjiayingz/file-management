@@ -193,8 +193,8 @@ const handleFileAction = async (command: string, file: FileInfo) => {
 // 还原文件
 const restoreFile = async (file: FileInfo) => {
   try {
-    await fileApiService.restoreFile(file.id)
-    ElMessage.success('还原成功')
+    const message = await fileApiService.restoreFile(file.id)
+    ElMessage.success(message || '还原成功')
 
     // 从列表中移除
     const index = files.value.findIndex((f: FileInfo) => f.id === file.id)

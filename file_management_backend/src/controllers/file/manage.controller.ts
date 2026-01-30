@@ -362,12 +362,32 @@ export const restoreFile = async (req: AuthRequest, res: Response): Promise<void
       return;
     }
 
+    // 检查父文件夹状态
+    let newParentId = userFile.parentId;
+    let restoreToRoot = false;
+
+    if (newParentId) {
+      const parentFolder = await prisma.userFile.findFirst({
+        where: {
+          id: newParentId,
+          userId: req.user.id
+        }
+      });
+
+      // 如果父文件夹不存在，或者父文件夹也在回收站中
+      if (!parentFolder || parentFolder.isDeleted) {
+        newParentId = null; // 还原到根目录
+        restoreToRoot = true;
+      }
+    }
+
     // 还原文件
     await prisma.userFile.update({
       where: { id: fileId },
       data: {
         isDeleted: false,
-        deletedAt: null
+        deletedAt: null,
+        parentId: newParentId // 更新父目录ID（可能变为根目录）
       }
     });
 
@@ -379,12 +399,14 @@ export const restoreFile = async (req: AuthRequest, res: Response): Promise<void
       operationType: LogOperationType.RESTORE,
       resourceType: userFile.fileType === 'folder' ? LogResourceType.FOLDER : LogResourceType.FILE,
       resourceId: fileId,
-      description: `Restored file: ${userFile.fileName}`
+      description: `Restored file: ${userFile.fileName}${restoreToRoot ? ' (to root)' : ''}`
     });
 
     res.json({
       success: true,
-      message: '文件已还原'
+      message: restoreToRoot 
+        ? '原文件夹不存在或已删除，文件已还原到根目录' 
+        : '文件已还原'
     });
   } catch (error) {
     console.error('Restore file error:', error);

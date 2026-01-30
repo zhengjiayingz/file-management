@@ -150,8 +150,9 @@ export const fileApiService = {
   },
 
   // 还原文件
-  async restoreFile(id: number): Promise<void> {
-    await request.post(`/files/${id}/restore`)
+  async restoreFile(id: number): Promise<string> {
+    const res = await request.post<any>(`/files/${id}/restore`)
+    return res.data.message
   },
 
   // 彻底删除文件
