@@ -117,6 +117,9 @@
     <!-- 视频播放弹窗 -->
     <video-player-dialog v-model="videoPlayerVisible" :title="currentVideoTitle" :video-url="currentVideoUrl"
       :file-name="currentVideoTitle" @download="currentVideoFile && downloadFile(currentVideoFile)" />
+
+    <!-- 移动文件弹窗 -->
+    <MoveDialog v-model="moveDialogVisible" :file-to-move="fileToMove" @success="handleMoveSuccess" />
   </div>
 </template>
 
@@ -136,6 +139,7 @@ import type { FileItem as FileInfo } from '../../types/file'
 import FileUpload from '../../components/FileUpload.vue'
 import ImageCropperDialog from '../../components/ImageCropperDialog.vue'
 import VideoPlayerDialog from '../../components/VideoPlayerDialog.vue'
+import MoveDialog from '../../components/MoveDialog.vue'
 import Sidebar from './cpns/Sidebar.vue'
 import FileList from './cpns/FileList.vue'
 import GlobalHeader from '../../components/GlobalHeader.vue'
@@ -173,6 +177,10 @@ const videoPlayerVisible = ref(false)
 const currentVideoUrl = ref('')
 const currentVideoTitle = ref('')
 const currentVideoFile = ref<FileInfo | null>(null)
+
+// 移动文件相关
+const moveDialogVisible = ref(false)
+const fileToMove = ref<FileInfo | null>(null)
 
 const handleSelectImage = (file: File) => {
   croppingFile.value = file
@@ -399,7 +407,7 @@ const handleFileAction = async (command: string, file: FileInfo) => {
       showRenameDialog(file)
       break
     case 'move':
-      ElMessage.info('移动功能开发中...')
+      handleMoveFile(file)
       break
     case 'delete':
       await deleteFile(file)
@@ -548,7 +556,14 @@ const deleteFile = async (file: FileInfo) => {
 }
 
 const handleMoveFile = (file: FileInfo) => {
-  ElMessage.info('移动功能开发中...')
+  fileToMove.value = file
+  moveDialogVisible.value = true
+}
+
+const handleMoveSuccess = () => {
+  loadFiles()
+  // 刷新左侧空间信息等（如果需要）
+  authStore.refreshUserInfo()
 }
 
 const handleFileItemDrop = async (source: FileInfo, target: FileInfo) => {

@@ -37,13 +37,19 @@ export const getFiles = async (req: AuthRequest, res: Response): Promise<void> =
 
     const { parentId, isDeleted } = req.query;
 
+    const whereClause: any = {
+      userId: req.user.id,
+      isDeleted: isDeleted === 'true'
+    };
+
+    // 如果不是查询回收站（即查询正常文件），则必须添加 parentId 过滤
+    if (isDeleted !== 'true') {
+      whereClause.parentId = parentId ? parseInt(parentId as string) : null;
+    }
+
     // 获取当前用户的文件列表
     const userFiles = await prisma.userFile.findMany({
-      where: { 
-        userId: req.user.id,
-        parentId: parentId ? parseInt(parentId as string) : null,
-        isDeleted: isDeleted === 'true'
-      },
+      where: whereClause,
       include: {
         storage: {
           select: {
@@ -60,6 +66,7 @@ export const getFiles = async (req: AuthRequest, res: Response): Promise<void> =
 
     const files = userFiles.map(file => ({
       id: file.id,
+      parentId: file.parentId, // Add mapping for parentId
       fileName: file.fileName,
       fileType: file.fileType,
       fileSize: file.storage ? Number(file.storage.fileSize) : 0,
@@ -133,6 +140,7 @@ export const getFileById = async (req: AuthRequest, res: Response): Promise<void
       success: true,
       data: {
         id: userFile.id,
+        parentId: userFile.parentId,
         fileName: userFile.fileName,
         fileType: userFile.fileType,
         fileSize: userFile.storage ? Number(userFile.storage.fileSize) : 0,

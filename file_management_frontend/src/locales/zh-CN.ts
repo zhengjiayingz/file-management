@@ -160,4 +160,13 @@ export default {
       unknown: 'Unknown'
     }
   }
+  ,
+  file: {
+    move: {
+      title: '移动到',
+      selectFolderWarning: '请选择目标文件夹',
+      success: '移动成功',
+      failed: '移动失败'
+    }
+  }
 }
