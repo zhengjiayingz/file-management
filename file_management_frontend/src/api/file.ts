@@ -160,21 +160,21 @@ export const fileApiService = {
   },
 
   // 创建文件夹
-  async createFolder(folderName: string, parentId?: number): Promise<FileItem> {
-    const data: CreateFolderParams = { folderName, parentId: parentId || null }
+  async createFolder(name: string, parentId?: number): Promise<FileItem> {
+    const data = { name, parentId: parentId || null }
     const res = await request.post<any>('/files/folder', data)
     return res.data.data
   },
 
   // 重命名文件/文件夹
-  async renameFile(id: number, newName: string): Promise<void> {
-    const data: RenameFileParams = { newName }
+  async renameFile(id: number, name: string): Promise<void> {
+    const data = { name }
     await request.put(`/files/${id}/rename`, data)
   },
 
   // 移动文件/文件夹
-  async moveFile(id: number, targetParentId?: number): Promise<void> {
-    const data: MoveFileParams = { targetParentId: targetParentId || null }
+  async moveFile(id: number, parentId?: number): Promise<void> {
+    const data = { parentId: parentId || null }
     await request.put(`/files/${id}/move`, data)
   }
 }
