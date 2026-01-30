@@ -9,7 +9,7 @@
       <GlobalHeader>
         <template #left>
           <FileUpload ref="fileUploadRef" :parent-id="currentFolderId" :show-drop-zone="false"
-            @upload-success="handleUploadSuccess" @upload-error="handleUploadError" :intercept-image="true"
+            @upload-success="handleUploadSuccess" @upload-error="handleUploadError" :interceptImage="true"
             @select-image="handleSelectImage" />
           <el-button :icon="FolderAdd" @click="showCreateFolderDialog">{{ t('index.createFolder') }}</el-button>
         </template>
@@ -69,8 +69,8 @@
             </el-icon>
           </div>
           <div class="storage-text">
-            {{ formatStorage(authStore.user.storage_used) }} /
-            {{ authStore.user.storage_quota === -1 ? '无限制' : formatStorage(authStore.user.storage_quota) }}
+            {{ formatStorage(authStore.user.storageUsed) }} /
+            {{ authStore.user.storageQuota === -1 ? '无限制' : formatStorage(authStore.user.storageQuota) }}
           </div>
         </div>
       </el-main>
@@ -131,7 +131,8 @@ import {
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '../../stores/auth'
 import { authApi } from '../../api/auth'
-import fileApiService, { type FileInfo } from '../../api/file'
+import fileApiService from '../../api/file'
+import type { FileItem as FileInfo } from '../../types/file'
 import FileUpload from '../../components/FileUpload.vue'
 import ImageCropperDialog from '../../components/ImageCropperDialog.vue'
 import VideoPlayerDialog from '../../components/VideoPlayerDialog.vue'
@@ -185,13 +186,13 @@ const filteredFiles = computed(() => {
   // 搜索过滤
   if (searchText.value) {
     const keyword = searchText.value.toLowerCase()
-    result = result.filter(file =>
+    result = result.filter((file: FileInfo) =>
       file.fileName.toLowerCase().includes(keyword)
     )
   }
 
   // 排序：文件夹优先，然后按时间倒序
-  return result.sort((a, b) => {
+  return result.sort((a: FileInfo, b: FileInfo) => {
     // 1. 文件夹优先
     if (a.fileType === 'folder' && b.fileType !== 'folder') return -1
     if (a.fileType !== 'folder' && b.fileType === 'folder') return 1
@@ -199,7 +200,10 @@ const filteredFiles = computed(() => {
     // 2. 按创建时间倒序
     return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   })
+
+
 })
+
 
 // 生命周期
 onMounted(() => {
@@ -210,7 +214,7 @@ onMounted(() => {
 const loadFiles = async () => {
   try {
     loading.value = true
-    files.value = await fileApiService.getFiles(currentFolderId.value)
+    files.value = await fileApiService.getFiles({ parentId: currentFolderId.value })
   } catch (error: any) {
     ElMessage.error('加载文件列表失败: ' + (error.message || '未知错误'))
   } finally {
@@ -283,12 +287,12 @@ const getFileViewUrl = (file: FileInfo) => {
 
 // 辅助函数
 const isImageFile = (file: FileInfo) => {
-  return file.mimeType.startsWith('image/') ||
+  return (file.mimeType && file.mimeType.startsWith('image/')) ||
     /\.(jpg|jpeg|png|gif|webp|bmp)$/i.test(file.fileName)
 }
 
 const isVideoFile = (file: FileInfo) => {
-  return file.mimeType.startsWith('video/') ||
+  return (file.mimeType && file.mimeType.startsWith('video/')) ||
     /\.(mp4|webm|ogg|mov|wmv|flv|avi|rmvb|mkv)$/i.test(file.fileName)
 }
 
@@ -356,11 +360,11 @@ const getFileIconColor = (file: FileInfo): string => {
   }
 
   // 根据文件类型返回不同颜色
-  if (file.mimeType.startsWith('image/')) {
+  if (file.mimeType && file.mimeType.startsWith('image/')) {
     return '#67c23a'
-  } else if (file.mimeType.startsWith('video/')) {
+  } else if (file.mimeType && file.mimeType.startsWith('video/')) {
     return '#e6a23c'
-  } else if (file.mimeType.includes('pdf')) {
+  } else if (file.mimeType && file.mimeType.includes('pdf')) {
     return '#f56c6c'
   } else {
     return '#909399'
@@ -500,7 +504,7 @@ const confirmRename = async () => {
     await fileApiService.renameFile(currentRenameFile.value.id, newFileName.value.trim())
 
     // 更新本地数据
-    const index = files.value.findIndex(f => f.id === currentRenameFile.value?.id)
+    const index = files.value.findIndex((f: FileInfo) => f.id === currentRenameFile.value?.id)
     if (index > -1 && currentRenameFile.value && files.value[index]) {
       files.value[index].fileName = newFileName.value.trim()
     }
@@ -530,7 +534,7 @@ const deleteFile = async (file: FileInfo) => {
     await fileApiService.deleteFile(file.id)
 
     // 从列表中移除
-    const index = files.value.findIndex(f => f.id === file.id)
+    const index = files.value.findIndex((f: FileInfo) => f.id === file.id)
     if (index > -1) {
       files.value.splice(index, 1)
     }

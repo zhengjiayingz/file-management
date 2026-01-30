@@ -265,6 +265,7 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
 
     // 使用事务处理登录成功的操作
     const result = await prisma.$transaction(async (tx) => {
+      // ... (existing code)
       // 生成tokens
       const accessToken = generateAccessToken(user.id, user.username);
       const refreshToken = generateRefreshToken();

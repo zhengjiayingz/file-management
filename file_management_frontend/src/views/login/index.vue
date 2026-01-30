@@ -64,6 +64,7 @@ const handleAuth = async () => {
   }
 
   try {
+    console.log('rrrrrrrrrrrrrrttttt:', loginForm.value)
     loading.value = true
 
     if (isRegister.value) {
@@ -82,23 +83,38 @@ const handleAuth = async () => {
       // loginForm.value.email = '' // 清理不需要的字段
     } else {
       // 登录流程
+      console.log('🔵 [1] 开始登录,用户名:', loginForm.value.username)
+
       const res = await authApi.login({
         username: loginForm.value.username,
         password: loginForm.value.password
       })
+      console.log('🔵 [2] API 返回数据:', res)
+      console.log('🔵 [3] 检查 token:', res.token)
+      console.log('🔵 [4] 检查 refreshToken:', res.refreshToken)
+      console.log('🔵 [5] 检查 user:', res.user)
 
       ElMessage.success(t('login.login') + ' Success')
 
       // 登录成功
+      console.log('🔵 [6] 准备保存到 store')
       await authStore.login({
         user: res.user,
         token: res.token,
         refreshToken: res.refreshToken
       })
+      console.log('🔵 [7] Store 保存完成')
+      console.log('🔵 [8] 检查 localStorage token:', localStorage.getItem('token'))
+      console.log('🔵 [9] 检查 store.isLoggedIn:', authStore.isLoggedIn)
+
+      console.log('🔵 [10] 准备跳转到首页')
       router.push('/')
     }
 
   } catch (error: any) {
+    console.error('❌ [登录错误]', error)
+    console.error('❌ [错误详情] response:', error.response)
+    console.error('❌ [错误详情] message:', error.message)
     ElMessage.error((isRegister.value ? t('login.register') : t('login.login')) + ' Failed: ' + (error.response?.data?.message || error.message || 'Error'))
   } finally {
     loading.value = false

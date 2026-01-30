@@ -535,7 +535,7 @@ const removeFromQueue = (id: string) => {
       isUploading.value = false
     }
     // 释放预览图 URL
-    if (item.previewUrl) {
+    if (item && item.previewUrl) {
       URL.revokeObjectURL(item.previewUrl)
     }
     uploadQueue.value.splice(index, 1)

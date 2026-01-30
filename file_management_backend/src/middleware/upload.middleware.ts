@@ -35,13 +35,19 @@ const fileFilter = (req: Express.Request, file: Express.Multer.File, cb: multer.
   }
 
   // 允许的文件类型
-  const allowedTypes = /jpeg|jpg|png|gif|webp|pdf|doc|docx|xls|xlsx|ppt|pptx|txt|zip|rar|7z|mp3|wav|ogg|mp4|avi|mov/;
+  // Added rmvb support
+  const allowedTypes = /jpeg|jpg|png|gif|webp|pdf|doc|docx|xls|xlsx|ppt|pptx|txt|zip|rar|7z|mp3|wav|ogg|mp4|avi|mov|rmvb/;
   const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
   const mimetype = allowedTypes.test(file.mimetype);
 
   if (extname && mimetype) {
     cb(null, true);
   } else {
+    // 特殊处理 rmvb mimeType 可能不标准的情况
+    if (path.extname(file.originalname).toLowerCase() === '.rmvb') {
+        cb(null, true);
+        return;
+    }
     cb(new Error('不支持的文件类型'));
   }
 };

@@ -33,7 +33,7 @@ export const getOperationLogs = async (req: AuthRequest, res: Response): Promise
     const limit = parseInt(req.query.limit as string) || 20;
     const skip = (page - 1) * limit;
 
-    const { operationType, startDate, endDate, keyword, targetUserId, sortOrder } = req.query;
+    const { operationType, type, startDate, endDate, keyword, targetUserId, sortOrder } = req.query;
 
     // 构建查询条件
     const where: any = {};
@@ -50,6 +50,8 @@ export const getOperationLogs = async (req: AuthRequest, res: Response): Promise
     // 2. 操作类型过滤
     if (operationType) {
       where.operationType = operationType;
+    } else if (type) {
+      where.operationType = type;
     }
 
     // 3. 日期范围过滤

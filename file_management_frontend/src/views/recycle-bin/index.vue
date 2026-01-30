@@ -51,7 +51,7 @@
             <div class="file-info">
               <div class="file-name" :title="file.fileName">{{ file.fileName }}</div>
               <div class="file-meta">
-                <span v-if="file.fileType === 'file'">{{ formatFileSize(file.fileSize) }}</span>
+                <span v-if="file.fileType === 'file'">{{ formatFileSize(file.fileSize || 0) }}</span>
                 <span>删除时间: {{ formatDate(file.updatedAt) }}</span>
               </div>
             </div>
@@ -95,7 +95,8 @@ import {
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '../../stores/auth'
 import { authApi } from '../../api/auth'
-import fileApiService, { type FileInfo } from '../../api/file'
+import fileApiService from '../../api/file'
+import type { FileItem as FileInfo } from '../../types/file'
 import { formatFileSize } from '../../utils/fileUpload'
 import Sidebar from '../index/cpns/Sidebar.vue'
 import GlobalHeader from '../../components/GlobalHeader.vue'
@@ -118,13 +119,13 @@ const filteredFiles = computed(() => {
   // 搜索过滤
   if (searchText.value) {
     const keyword = searchText.value.toLowerCase()
-    result = result.filter(file =>
+    result = result.filter((file: FileInfo) =>
       file.fileName.toLowerCase().includes(keyword)
     )
   }
 
   // 排序：按更新时间(删除时间)倒序
-  return result.sort((a, b) => {
+  return result.sort((a: FileInfo, b: FileInfo) => {
     return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
   })
 })
@@ -162,11 +163,11 @@ const getFileIconColor = (file: FileInfo): string => {
   if (file.fileType === 'folder') {
     return '#ffd04b'
   }
-  if (file.mimeType.startsWith('image/')) {
+  if (file.mimeType && file.mimeType.startsWith('image/')) {
     return '#67c23a'
-  } else if (file.mimeType.startsWith('video/')) {
+  } else if (file.mimeType && file.mimeType.startsWith('video/')) {
     return '#e6a23c'
-  } else if (file.mimeType.includes('pdf')) {
+  } else if (file.mimeType && file.mimeType.includes('pdf')) {
     return '#f56c6c'
   } else {
     return '#909399'
@@ -196,7 +197,7 @@ const restoreFile = async (file: FileInfo) => {
     ElMessage.success('还原成功')
 
     // 从列表中移除
-    const index = files.value.findIndex(f => f.id === file.id)
+    const index = files.value.findIndex((f: FileInfo) => f.id === file.id)
     if (index > -1) {
       files.value.splice(index, 1)
     }

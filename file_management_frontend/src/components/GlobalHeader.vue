@@ -107,7 +107,7 @@ const handleLanguageChange = async (lang: string) => {
 
     // 保存到数据库
     try {
-        await userPreferenceApi.updatePreference({ locale: lang })
+        await userPreferenceApi.updatePreference({ locale: lang as any })
     } catch (error) {
         console.error('保存语言设置失败:', error)
         // 即使保存失败也不影响用户体验，已经保存到 localStorage
@@ -119,7 +119,7 @@ const handleThemeChange = async (mode: string) => {
 
     // 保存到数据库
     try {
-        await userPreferenceApi.updatePreference({ theme: mode })
+        await userPreferenceApi.updatePreference({ theme: mode as any })
     } catch (error) {
         console.error('保存主题设置失败:', error)
         // 即使保存失败也不影响用户体验，已经保存到 localStorage

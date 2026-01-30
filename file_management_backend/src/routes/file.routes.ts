@@ -70,7 +70,7 @@ router.post('/check-exists', checkFileExists);
  * @swagger
  * /api/files/upload-chunk:
  *   post:
- *     summary:上传文件分片
+ *     summary: 上传文件分片
  *     tags: [文件上传]
  *     security:
  *       - bearerAuth: []
