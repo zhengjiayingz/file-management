@@ -59,18 +59,25 @@
         <!-- 文件列表 -->
         <FileList :files="filteredFiles" :view-mode="viewMode" :loading="loading" @click-file="handleFileClick"
           @dblclick-file="handleFileDoubleClick" @context-menu="handleRightClick" @rename="showRenameDialog"
-          @delete="deleteFile" @move="handleMoveFile" @file-drop="handleFileItemDrop" />
+          @delete="deleteFile" @move="handleMoveFile" @download="downloadFile" @file-drop="handleFileItemDrop" />
 
         <!-- 存储空间信息 -->
+        <!-- 存储空间信息 -->
         <div class="storage-info" v-if="authStore.user">
-          <div class="storage-icon">
-            <el-icon size="24" color="#409eff">
-              <Upload />
-            </el-icon>
-          </div>
-          <div class="storage-text">
-            {{ formatStorage(authStore.user.storageUsed) }} /
-            {{ authStore.user.storageQuota === -1 ? '无限制' : formatStorage(authStore.user.storageQuota) }}
+          <div class="storage-content">
+            <div class="storage-text-row">
+              <el-icon class="storage-icon" size="20" color="#409eff">
+                <Upload />
+              </el-icon>
+              <span class="storage-text">
+                {{ formatStorage(authStore.user.storageUsed) }} /
+                {{ authStore.user.storageQuota === -1 ? '无限制' : formatStorage(authStore.user.storageQuota) }}
+              </span>
+            </div>
+            <el-progress v-if="authStore.user.storageQuota !== -1" :percentage="storagePercentage" :show-text="false"
+              :stroke-width="6"
+              :status="storagePercentage > 90 ? 'exception' : (storagePercentage > 75 ? 'warning' : 'success')"
+              class="storage-progress" />
           </div>
         </div>
       </el-main>
@@ -111,8 +118,7 @@
       </template>
     </el-dialog>
     <!-- 图片大图预览 -->
-    <el-image-viewer v-if="previewVisible" @close="previewVisible = false" :url-list="previewUrlList"
-      :initial-index="0" />
+    <CustomImageViewer v-model="previewVisible" :url-list="previewUrlList" :initial-index="previewInitialIndex" />
 
     <!-- 视频播放弹窗 -->
     <video-player-dialog v-model="videoPlayerVisible" :title="currentVideoTitle" :video-url="currentVideoUrl"
@@ -140,6 +146,7 @@ import FileUpload from '../../components/FileUpload.vue'
 import ImageCropperDialog from '../../components/ImageCropperDialog.vue'
 import VideoPlayerDialog from '../../components/VideoPlayerDialog.vue'
 import MoveDialog from '../../components/MoveDialog.vue'
+import CustomImageViewer from '../../components/CustomImageViewer.vue'
 import Sidebar from './cpns/Sidebar.vue'
 import FileList from './cpns/FileList.vue'
 import GlobalHeader from '../../components/GlobalHeader.vue'
@@ -208,7 +215,12 @@ const filteredFiles = computed(() => {
     // 2. 按创建时间倒序
     return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   })
+})
 
+const storagePercentage = computed(() => {
+  if (!authStore.user || authStore.user.storageQuota <= 0) return 0
+  let pct = (authStore.user.storageUsed / authStore.user.storageQuota) * 100
+  return Math.min(Math.max(pct, 0), 100) // Clamp between 0 and 100
 
 })
 
@@ -285,6 +297,7 @@ const handleFileClick = (file: FileInfo) => {
 // 图片预览相关
 const previewVisible = ref(false)
 const previewUrlList = ref<string[]>([])
+const previewInitialIndex = ref(0)
 
 // 获取文件下载链接（用于预览原图或播放视频）
 const getFileViewUrl = (file: FileInfo) => {
@@ -319,7 +332,14 @@ const handleFileDoubleClick = (file: FileInfo) => {
   } else {
     // 如果是图片，则打开大图预览
     if (isImageFile(file)) {
-      previewUrlList.value = [getFileViewUrl(file)]
+      // 获取当前列表中的所有图片
+      const imageFiles = filteredFiles.value.filter(f => isImageFile(f))
+      // 生成 URL 列表
+      previewUrlList.value = imageFiles.map(f => getFileViewUrl(f))
+      // 找到当前点击图片的索引
+      previewInitialIndex.value = imageFiles.findIndex(f => f.id === file.id)
+      if (previewInitialIndex.value === -1) previewInitialIndex.value = 0
+
       previewVisible.value = true
     } else if (isVideoFile(file)) {
       // 如果是视频，则打开视频播放器
@@ -328,8 +348,8 @@ const handleFileDoubleClick = (file: FileInfo) => {
       currentVideoFile.value = file
       videoPlayerVisible.value = true
     } else {
-      // 其他文件下载
-      downloadFile(file)
+      // 其他文件不进行默认操作，如需下载请点击下载按钮
+      // downloadFile(file)
     }
   }
 }
@@ -725,18 +745,29 @@ const formatStorage = (bytes: number) => {
   position: fixed;
   bottom: 20px;
   right: 20px;
-  display: flex;
-  align-items: center;
-  padding: 12px 16px;
   background: white;
   border-radius: 8px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
-  font-size: 14px;
-  color: #606266;
-}
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+  padding: 12px 16px;
+  min-width: 200px;
+  z-index: 100;
 
-.storage-icon {
-  margin-right: 8px;
+  .storage-content {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .storage-text-row {
+    display: flex;
+    align-items: center;
+    font-size: 14px;
+    color: #606266;
+  }
+
+  .storage-icon {
+    margin-right: 8px;
+  }
 }
 
 // 响应式设计

@@ -406,6 +406,10 @@ const handleEmptyRecycleBin = async () => {
 
       &:hover {
         background-color: #f8f9fa;
+
+        @at-root html.dark & {
+          background-color: #1d1e1f;
+        }
       }
 
       .file-icon {
@@ -425,6 +429,11 @@ const handleEmptyRecycleBin = async () => {
         .file-name {
           font-size: 14px;
           color: #333;
+
+          @at-root html.dark & {
+            color: #CFD3DC;
+          }
+
           margin-bottom: 4px;
           white-space: nowrap;
           overflow: hidden;
@@ -479,6 +488,10 @@ const handleEmptyRecycleBin = async () => {
       &:hover {
         background-color: #f5f7fa;
 
+        @at-root html.dark & {
+          background-color: #1d1e1f;
+        }
+
         .file-actions {
           opacity: 1;
         }
@@ -500,6 +513,11 @@ const handleEmptyRecycleBin = async () => {
         .file-name {
           font-size: 14px;
           color: #333;
+
+          @at-root html.dark & {
+            color: #CFD3DC;
+          }
+
           margin-bottom: 4px;
           overflow: hidden;
           text-overflow: ellipsis;
@@ -520,6 +538,10 @@ const handleEmptyRecycleBin = async () => {
         transition: opacity 0.2s;
         background-color: rgba(255, 255, 255, 0.8);
         border-radius: 4px;
+
+        @at-root html.dark & {
+          background-color: rgba(0, 0, 0, 0.6);
+        }
       }
     }
   }

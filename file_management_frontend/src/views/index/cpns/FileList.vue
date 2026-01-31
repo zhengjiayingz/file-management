@@ -52,6 +52,8 @@
                         </div>
                         <div class="file-date">{{ formatDate(file.updatedAt) }}</div>
                         <div class="file-actions-col">
+                            <el-button link type="primary" @click.stop="emit('download', file)">{{
+                                t('fileList.action.download') || '下载' }}</el-button>
                             <el-button link type="primary" @click.stop="emit('rename', file)">{{
                                 t('fileList.action.rename') }}</el-button>
                             <el-button link type="primary" @click.stop="emit('move', file)">{{ t('fileList.action.move')
@@ -75,10 +77,12 @@
                         </el-icon>
                         <template #dropdown>
                             <el-dropdown-menu>
+                                <el-dropdown-item command="download">{{ t('fileList.action.download') || '下载'
+                                    }}</el-dropdown-item>
                                 <el-dropdown-item command="rename">{{ t('fileList.action.rename') }}</el-dropdown-item>
                                 <el-dropdown-item command="move">{{ t('fileList.action.move') }}</el-dropdown-item>
                                 <el-dropdown-item command="delete" style="color: red">{{ t('fileList.action.delete')
-                                }}</el-dropdown-item>
+                                    }}</el-dropdown-item>
                             </el-dropdown-menu>
                         </template>
                     </el-dropdown>
@@ -123,6 +127,7 @@ const emit = defineEmits<{
     (e: 'context-menu', event: MouseEvent, file: FileInfo): void
     (e: 'rename', file: FileInfo): void
     (e: 'move', file: FileInfo): void
+    (e: 'download', file: FileInfo): void
     (e: 'delete', file: FileInfo): void
     (e: 'file-drop', sourceFile: FileInfo, targetFolder: FileInfo): void
 }>()
@@ -197,6 +202,7 @@ const handleGridCommand = (command: string, file: FileInfo) => {
     if (command === 'rename') emit('rename', file)
     else if (command === 'move') emit('move', file)
     else if (command === 'delete') emit('delete', file)
+    else if (command === 'download') emit('download', file)
 }
 
 // 拖拽逻辑
@@ -246,7 +252,7 @@ const handleFileDrop = (event: DragEvent, targetFile: FileInfo) => {
                 }
 
                 &.actions {
-                    width: 150px;
+                    width: 220px;
                     text-align: right;
                 }
             }
@@ -262,10 +268,18 @@ const handleFileDrop = (event: DragEvent, targetFile: FileInfo) => {
 
             &:hover {
                 background-color: #f5f7fa;
+
+                @at-root html.dark & {
+                    background-color: #1d1e1f; // Element dark mode hover color
+                }
             }
 
             &.is-selected {
                 background-color: #ecf5ff;
+
+                @at-root html.dark & {
+                    background-color: #2b2b2b; // Darker selection color
+                }
             }
 
             .file-icon-wrapper {
@@ -316,7 +330,7 @@ const handleFileDrop = (event: DragEvent, targetFile: FileInfo) => {
                     }
 
                     .file-actions-col {
-                        width: 150px;
+                        width: 220px;
                         text-align: right;
                     }
                 }
@@ -345,6 +359,11 @@ const handleFileDrop = (event: DragEvent, targetFile: FileInfo) => {
                 background-color: #f5f7fa;
                 border-color: #ebeef5;
 
+                @at-root html.dark & {
+                    background-color: #1d1e1f;
+                    border-color: #4c4d4f;
+                }
+
                 .grid-actions {
                     opacity: 1;
                 }
@@ -353,6 +372,11 @@ const handleFileDrop = (event: DragEvent, targetFile: FileInfo) => {
             &.is-selected {
                 background-color: #ecf5ff;
                 border-color: #d9ecff;
+
+                @at-root html.dark & {
+                    background-color: #2b2b2b;
+                    border-color: #1e4063; // Slightly blue-ish border for selection
+                }
             }
 
             .file-icon-wrapper {
