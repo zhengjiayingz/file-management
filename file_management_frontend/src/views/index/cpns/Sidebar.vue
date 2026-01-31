@@ -3,7 +3,7 @@
         <div class="sidebar-header">
             <h2 class="logo">{{ t('login.title') }}</h2>
         </div>
-        <el-menu default-active="1" class="sidebar-menu" :background-color="menuColors.background"
+        <el-menu :default-active="activeMenu" class="sidebar-menu" :background-color="menuColors.background"
             :text-color="menuColors.text" :active-text-color="menuColors.activeText">
             <el-menu-item index="1" @click="router.push('/')">
                 <el-icon>
@@ -41,14 +41,24 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { Folder, Clock, Star, Delete, List } from '@element-plus/icons-vue'
 import { useI18n } from 'vue-i18n'
 import { useThemeStore } from '../../../stores/theme'
 
 const router = useRouter()
+const route = useRoute()
 const { t } = useI18n()
 const themeStore = useThemeStore()
+
+const activeMenu = computed(() => {
+    const path = route.path
+    if (path.startsWith('/recycle-bin')) return '4'
+    if (path.startsWith('/logs')) return '5'
+    // if (path.startsWith('/sync')) return '2'
+    // if (path.startsWith('/favorites')) return '3'
+    return '1' // Default to home/files
+})
 
 // 根据主题动态设置菜单颜色
 const menuColors = computed(() => {
