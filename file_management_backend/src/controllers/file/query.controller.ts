@@ -118,6 +118,44 @@ export const getFiles = async (req: AuthRequest, res: Response): Promise<void> =
 };
 
 /**
+ * 检查文件名是否存在
+ */
+export const checkFileName = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+     const { parentId, fileName, type = 'file' } = req.body;
+     
+     if (!fileName) {
+         res.status(400).json({ success: false, message: '文件名不能为空' });
+         return;
+     }
+
+     if (!req.user) {
+         res.status(401).json({ success: false, message: '未认证' });
+         return;
+     }
+
+     const exists = await prisma.userFile.findFirst({
+         where: {
+             userId: req.user.id,
+             parentId: parentId ? parseInt(parentId) : null,
+             fileName: fileName,
+             isDeleted: false,
+             fileType: type as any
+         }
+     });
+
+     res.json({
+         success: true,
+         exists: !!exists
+     });
+
+  } catch (error) {
+     console.error('Check filename error:', error);
+     res.status(500).json({ success: false, message: '检查文件名失败' });
+  }
+};
+
+/**
  * 获取单个文件信息
  */
 export const getFileById = async (req: AuthRequest, res: Response): Promise<void> => {
@@ -353,11 +391,13 @@ export const getFileThumbnail = async (req: AuthRequest, res: Response): Promise
     const isImage = mimeType.startsWith('image/') || 
                     /\.(jpg|jpeg|png|gif|webp|bmp|tif|tiff|svg)$/i.test(fileName);
     
-    const isVideo = mimeType.startsWith('video/') || 
-                    /\.(mp4|webm|ogg|mov|wmv|flv|avi|rmvb|mkv|3gp|asf|m4v)$/i.test(fileName);
+    // 排除 audio 类型，并从列表中移除 ogg
+    const isVideo = (mimeType.startsWith('video/') || 
+                    /\.(mp4|webm|mov|wmv|flv|avi|rmvb|mkv|3gp|asf|m4v)$/i.test(fileName)) && 
+                    !mimeType.startsWith('audio/');
 
     if (!isImage && !isVideo) {
-        console.warn(`Thumbnail not supported for: ${fileName} (${mimeType})`);
+        // console.warn(`Thumbnail not supported for: ${fileName} (${mimeType})`);
         res.status(400).json({
             success: false,
             message: '不支持该文件类型的缩略图'
@@ -410,30 +450,27 @@ export const getFileThumbnail = async (req: AuthRequest, res: Response): Promise
         try {
           await new Promise((resolve, reject) => {
             ffmpeg(userFile.storage!.filePath)
-              .screenshots({
-                timestamps: ['00:00:05'], // 5秒处，更稳健
-                filename: tempThumbName,
-                folder: thumbnailsDir,
-                size: '200x200'
-              })
+              .seekInput('00:00:05')
+              .frames(1)
               .on('end', () => resolve(true))
               .on('error', (err) => {
                 reject(err);
-              });
+              })
+              .save(tempThumbPath);
           });
         } catch (ffmpegErr) {
-          // 尝试第1秒
-          await new Promise((resolve, reject) => {
-             ffmpeg(userFile.storage!.filePath)
-               .screenshots({
-                 timestamps: ['00:00:01'], 
-                 filename: tempThumbName,
-                 folder: thumbnailsDir,
-                 size: '200x200'
-               })
-               .on('end', resolve)
-               .on('error', reject);
-          });
+          // 尝试失败，回退到不Seek直接截取第一帧
+          try {
+            await new Promise((resolve, reject) => {
+               ffmpeg(userFile.storage!.filePath)
+                 .frames(1)
+                 .on('end', resolve)
+                 .on('error', reject)
+                 .save(tempThumbPath);
+            });
+          } catch (e) {
+             console.warn(`[Thumbnail] Failed to extract video frame for file ${userFile.id} (${userFile.fileName}). Is it a valid video?`);
+          }
         }
 
         // 检查生成的临时文件并转换为 webp
@@ -456,8 +493,14 @@ export const getFileThumbnail = async (req: AuthRequest, res: Response): Promise
       } else {
         throw new Error('生成的缩略图文件不存在');
       }
-    } catch (genError) {
-      console.error('Thumbnail generation error:', genError);
+    } catch (genError: any) {
+      // 优化错误日志，避免无效视频文件刷屏
+      const msg = genError.message || '';
+      if (msg.includes('ffmpeg') || msg === '无法生成视频预览图' || msg === '生成的缩略图文件不存在') {
+         console.warn(`[Thumbnail] Generation failed for file ${req.params.id}: ${msg.split('\n')[0]}`);
+      } else {
+         console.error('Thumbnail generation error:', genError);
+      }
       res.status(500).json({
         success: false,
         message: '缩略图生成失败'

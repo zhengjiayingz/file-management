@@ -94,7 +94,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox, type Action } from 'element-plus'
 import { Upload, Document, Loading } from '@element-plus/icons-vue'
 import { useI18n } from 'vue-i18n'
 import fileApiService from '../api/file'
@@ -147,6 +147,7 @@ interface UploadQueueItem {
   startTime?: number
   remainingTimeStr?: string
   previewUrl?: string
+  conflictAction?: 'rename' | 'override' | 'version'
 }
 
 // 响应式数据
@@ -279,7 +280,6 @@ const addFile = (file: File) => {
 
   // 验证文件（这里就不再重复 calculateHash 等逻辑，直接走 addFilesToQueue 但需要绕过拦截）
   // 为了简单，我们直接构造 queueItem 并 push，类似 addFilesToQueue
-
   // 复用逻辑：把这一步封装？或者简单点，我们这里临时把 interceptImage 改一下？不推荐。
   // 我们可以给 addFilesToQueue 加一个参数 bypassIntercept?
 
@@ -331,6 +331,35 @@ const startUpload = async (item: UploadQueueItem) => {
       item.fileHash = await calculateFileHash(item.file)
     }
 
+    // 检查文件名冲突
+    try {
+      const nameCheck = await fileApiService.checkFileName(item.file.name, props.parentId)
+      if (nameCheck.exists) {
+        await ElMessageBox.confirm(
+          `当前目录下已存在同名文件 "${item.file.name}"，是否保存为新版本？`,
+          '文件冲突',
+          {
+            distinguishCancelAndClose: true,
+            confirmButtonText: '保存为新版本',
+            cancelButtonText: '保留两者',
+            type: 'warning'
+          }
+        ).then(() => {
+          item.conflictAction = 'version'
+        }).catch((action: Action) => {
+          if (action === 'cancel') {
+            item.conflictAction = 'rename'
+          } else {
+            throw new Error('用户取消上传')
+          }
+        })
+      }
+    } catch (e: any) {
+      if (e.message === '用户取消上传') {
+        throw e
+      }
+    }
+
     // 检查文件是否已存在（秒传）
     const existsResult = await fileApiService.checkFileExists(item.fileHash)
 
@@ -341,12 +370,13 @@ const startUpload = async (item: UploadQueueItem) => {
         item.file.name,
         item.file.size,
         item.file.type || (item.file.name.toLowerCase().endsWith('.rmvb') ? 'application/vnd.rn-realmedia' : 'application/octet-stream'),
-        props.parentId
+        props.parentId,
+        item.conflictAction
       )
 
       item.status = 'completed'
       item.progress = 100
-      ElMessage.success(`${item.file.name} 秒传成功`)
+      ElMessage.success(`${item.file.name} 秒传成功` + (item.conflictAction === 'version' ? ' (新版本)' : ''))
       emit('uploadSuccess', fileInfo)
 
       // 3秒后移除完成的项目
@@ -363,12 +393,13 @@ const startUpload = async (item: UploadQueueItem) => {
           item.file.size,
           item.file.type || (item.file.name.toLowerCase().endsWith('.rmvb') ? 'application/vnd.rn-realmedia' : 'application/octet-stream'),
           0, // 空文件的分片数为0
-          props.parentId
+          props.parentId,
+          item.conflictAction
         )
 
         item.status = 'completed'
         item.progress = 100
-        ElMessage.success(`${item.file.name} 上传成功`)
+        ElMessage.success(`${item.file.name} 上传成功` + (item.conflictAction === 'version' ? ' (新版本)' : ''))
         emit('uploadSuccess', fileInfo)
 
         // 3秒后移除完成的项目
@@ -381,10 +412,20 @@ const startUpload = async (item: UploadQueueItem) => {
       }
     }
   } catch (error: any) {
-    item.status = 'error'
-    item.error = error.message || '上传失败'
-    ElMessage.error(`${item.file.name} 上传失败: ${item.error}`)
-    emit('uploadError', item.error || '上传失败')
+    if (item.status !== 'paused') {
+      item.status = 'error'
+      item.error = error.message || '上传失败'
+      // 如果是用户取消，不算失败？算，但显示为取消？
+      if (error.message === '用户取消上传') {
+        ElMessage.info('已取消上传')
+        // Remove from queue immediately or show cancelled status
+        item.status = 'error' // Or add 'cancelled' status? keeping 'error' for now.
+        item.error = '已取消'
+      } else {
+        ElMessage.error(`${item.file.name} 上传失败: ${item.error}`)
+      }
+      emit('uploadError', item.error || '上传失败')
+    }
   } finally {
     if (item.status !== 'paused') {
       isUploading.value = false
@@ -495,12 +536,13 @@ const uploadWithChunks = async (item: UploadQueueItem) => {
     item.file.size,
     item.file.type || (item.file.name.toLowerCase().endsWith('.rmvb') ? 'application/vnd.rn-realmedia' : 'application/octet-stream'),
     totalChunks,
-    props.parentId
+    props.parentId,
+    item.conflictAction
   )
 
   item.status = 'completed'
   item.progress = 100
-  ElMessage.success(`${item.file.name} 上传成功`)
+  ElMessage.success(`${item.file.name} 上传成功` + (item.conflictAction === 'version' ? ' (新版本)' : ''))
   emit('uploadSuccess', fileInfo)
 
   // 3秒后移除完成的项目

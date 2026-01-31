@@ -1,58 +1,73 @@
 import { PrismaClient } from '@prisma/client';
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const prisma = new PrismaClient();
 
 async function backupDatabase() {
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const backupDir = path.join(__dirname, '../backups');
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0]; // Simple date YYYY-MM-DD
+  // Use project root 'backups' folder
+  const backupDir = path.resolve(process.cwd(), 'backups');
   
   // 创建备份目录
   if (!fs.existsSync(backupDir)) {
     fs.mkdirSync(backupDir, { recursive: true });
   }
+  
+  console.log(`Starting backup to ${backupDir}...`);
 
-  console.log('🔄 开始备份数据库...');
+  // Models list in order of no-dependency first (ideally)
+  const models = [
+    'User',
+    'UserPreference',
+    'FileStorage',
+    'UserFile',
+    'UploadChunk',
+    'FileShare',
+    'ShareAccessLog',
+    'Friendship',
+    'Message',
+    'FileTag',
+    'UserFileTag',
+    'OperationLog',
+    'LoginLog',
+    'RefreshToken',
+    'FileVersion'
+  ];
 
-  try {
-    // 备份所有表
-    const users = await prisma.user.findMany();
-    const files = await prisma.file.findMany();
-    const preferences = await prisma.userPreference.findMany();
+  const backupData: Record<string, any[]> = {};
 
-    const backup = {
-      timestamp,
-      version: '1.0',
-      tables: {
-        users,
-        files,
-        preferences
+  for (const model of models) {
+    try {
+      // @ts-ignore
+      const data = await prisma[model.charAt(0).toLowerCase() + model.slice(1)].findMany();
+      if (data) {
+        // Save individually to files
+        const fileName = `${model}.json`;
+        const filePath = path.join(backupDir, fileName);
+        fs.writeFileSync(filePath, JSON.stringify(data, (key, value) =>
+            typeof value === 'bigint'
+                ? value.toString()
+                : value
+        , 2));
+        console.log(`✅ Backed up ${model}: ${data.length} records`);
       }
-    };
-
-    const backupPath = path.join(backupDir, `backup_${timestamp}.json`);
-    fs.writeFileSync(backupPath, JSON.stringify(backup, null, 2));
-    
-    console.log(`\n✅ 备份完成: ${backupPath}`);
-    console.log(`\n📊 备份统计:`);
-    console.log(`   - 用户: ${users.length}`);
-    console.log(`   - 文件: ${files.length}`);
-    console.log(`   - 偏好设置: ${preferences.length}`);
-    console.log(`\n💾 备份文件大小: ${(fs.statSync(backupPath).size / 1024).toFixed(2)} KB`);
-  } catch (error) {
-    console.error('❌ 备份失败:', error);
-    throw error;
+    } catch (e: any) {
+       console.error(`❌ Failed to backup ${model}: ${e.message}`);
+    }
   }
+  
+  console.log('Backup completed successfully.');
 }
 
 backupDatabase()
-  .then(() => {
-    console.log('\n✨ 备份任务完成');
-    return prisma.$disconnect();
-  })
+  .then(() => prisma.$disconnect())
   .catch((error) => {
-    console.error('\n💥 备份过程出错:', error);
+    console.error('Backup failed:', error);
     prisma.$disconnect();
     process.exit(1);
   });

@@ -144,6 +144,10 @@
 
     <!-- 移动文件弹窗 -->
     <MoveDialog v-model="moveDialogVisible" :files-to-move="filesToMove" @success="handleMoveSuccess" />
+
+    <!-- 历史版本弹窗 -->
+    <FileHistoryDialog v-model="showHistoryDialog" :file-id="historyFile?.id"
+      @rollback-success="handleHistorySuccess" />
   </div>
 </template>
 
@@ -164,6 +168,7 @@ import FileUpload from '../../components/FileUpload.vue'
 import ImageCropperDialog from '../../components/ImageCropperDialog.vue'
 import VideoPlayerDialog from '../../components/VideoPlayerDialog.vue'
 import MoveDialog from '../../components/MoveDialog.vue'
+import FileHistoryDialog from '../../components/FileHistoryDialog.vue'
 import CustomImageViewer from '../../components/CustomImageViewer.vue'
 import Sidebar from './cpns/Sidebar.vue'
 import FileList from './cpns/FileList.vue'
@@ -197,6 +202,9 @@ const isRenaming = ref(false)
 const showCropper = ref(false)
 const croppingFile = ref<File | null>(null)
 const fileUploadRef = ref()
+
+const showHistoryDialog = ref(false)
+const historyFile = ref<FileInfo | null>(null)
 
 // 视频播放相关
 const videoPlayerVisible = ref(false)
@@ -463,7 +471,7 @@ const handleFileDoubleClick = (file: FileInfo) => {
     } else if (isOfficeFile(file)) {
       // 检查是否为本地环境
       const hostname = window.location.hostname;
-      const isLocal = hostname === 'localhost' || hostname === '127.0.0.1' || hostname.startsWith('192.168.') || hostname.startsWith('10.') || (hostname.startsWith('172.') && parseInt(hostname.split('.')[1]) >= 16 && parseInt(hostname.split('.')[1]) <= 31);
+      const isLocal = hostname === 'localhost' || hostname === '127.0.0.1' || hostname.startsWith('192.168.') || hostname.startsWith('10.') || (hostname.startsWith('172.') && parseInt(hostname.split('.')[1] || '0') >= 16 && parseInt(hostname.split('.')[1] || '0') <= 31);
 
       if (isLocal) {
         ElMessage.warning('本地环境无法预览 Office 文件，请部署到公网或使用内网穿透');
@@ -608,6 +616,16 @@ const batchDelete = async () => {
   } catch (e) {
     // user cancel
   }
+}
+
+const showHistory = (file: FileInfo) => {
+  historyFile.value = file
+  showHistoryDialog.value = true
+}
+
+const handleHistorySuccess = () => {
+  loadFiles()
+  authStore.refreshUserInfo()
 }
 
 // 文件操作处理

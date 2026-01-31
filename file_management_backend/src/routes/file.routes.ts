@@ -11,7 +11,8 @@ import {
   getFiles,
   getFileById,
   downloadFile,
-  getFileThumbnail
+  getFileThumbnail,
+  checkFileName
 } from '../controllers/file/query.controller.js';
 import {
   createFolder,
@@ -21,6 +22,10 @@ import {
   restoreFile,
   permanentDeleteFile
 } from '../controllers/file/manage.controller.js';
+import {
+  getFileVersions,
+  rollbackVersion
+} from '../controllers/file/version.controller.js';
 import { authenticate } from '../middleware/auth.middleware.js';
 import { upload } from '../middleware/upload.middleware.js';
 
@@ -64,6 +69,29 @@ router.use(authenticate);
  *                   $ref: '#/components/schemas/File'
  */
 router.post('/check-exists', checkFileExists);
+
+// 检查文件名是否可用
+/**
+ * @swagger
+ * /api/files/check-name:
+ *   get:
+ *     summary: 检查文件名是否可用/冲突
+ *     tags: [文件上传]
+ *     parameters:
+ *       - in: query
+ *         name: fileName
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: parentId
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: 检查结果
+ */
+router.get('/check-name', checkFileName);
 
 // 分片上传
 /**
@@ -501,5 +529,75 @@ router.post('/:id/restore', restoreFile);
  *         description: 彻底删除成功
  */
 router.delete('/:id/permanent', permanentDeleteFile);
+
+// 版本管理路由
+
+// 获取文件历史版本
+/**
+ * @swagger
+ * /api/files/{id}/versions:
+ *   get:
+ *     summary: 获取文件历史版本
+ *     tags: [文件管理]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: 成功获取版本列表
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: integer
+ *                       version:
+ *                         type: integer
+ *                       fileName:
+ *                         type: string
+ *                       fileSize:
+ *                         type: integer
+ *                       createdAt:
+ *                         type: string
+ *                         format: date-time
+ */
+router.get('/:id/versions', getFileVersions);
+
+// 回滚版本
+/**
+ * @swagger
+ * /api/files/{id}/versions/{versionId}/rollback:
+ *   post:
+ *     summary: 回滚到指定历史版本
+ *     tags: [文件管理]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         description: 文件ID
+ *       - in: path
+ *         name: versionId
+ *         required: true
+ *         description: 历史记录ID (FileHistory ID)
+ *     responses:
+ *       200:
+ *         description: 回滚成功
+ */
+router.post('/:id/versions/:versionId/rollback', rollbackVersion);
 
 export default router;

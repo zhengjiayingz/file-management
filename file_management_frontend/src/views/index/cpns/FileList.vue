@@ -73,7 +73,7 @@
 
                     <div v-if="viewMode === 'list'" class="file-meta-row">
                         <div class="file-size">{{ file.fileType === 'folder' ? '-' : formatFileSize(file.fileSize || 0)
-                        }}
+                            }}
                         </div>
                         <div class="file-date">{{ formatDate(file.updatedAt) }}</div>
                         <div class="file-actions-col">
@@ -82,7 +82,9 @@
                             <el-button link type="primary" @click.stop="emit('rename', file)">{{
                                 t('fileList.action.rename') }}</el-button>
                             <el-button link type="primary" @click.stop="emit('move', file)">{{ t('fileList.action.move')
-                                }}</el-button>
+                            }}</el-button>
+                            <el-button link type="primary" @click.stop="emit('history', file)">{{
+                                t('fileList.action.history') || '历史' }}</el-button>
                             <el-button link type="danger" @click.stop="emit('delete', file)">{{
                                 t('fileList.action.delete') }}</el-button>
                         </div>
@@ -103,11 +105,13 @@
                         <template #dropdown>
                             <el-dropdown-menu>
                                 <el-dropdown-item command="download">{{ t('fileList.action.download') || '下载'
-                                }}</el-dropdown-item>
+                                    }}</el-dropdown-item>
+                                <el-dropdown-item command="history">{{ t('fileList.action.history') || '历史版本'
+                                    }}</el-dropdown-item>
                                 <el-dropdown-item command="rename">{{ t('fileList.action.rename') }}</el-dropdown-item>
                                 <el-dropdown-item command="move">{{ t('fileList.action.move') }}</el-dropdown-item>
                                 <el-dropdown-item command="delete" style="color: red">{{ t('fileList.action.delete')
-                                }}</el-dropdown-item>
+                                    }}</el-dropdown-item>
                             </el-dropdown-menu>
                         </template>
                     </el-dropdown>
@@ -157,6 +161,7 @@ const emit = defineEmits<{
     (e: 'rename', file: FileInfo): void
     (e: 'move', file: FileInfo): void
     (e: 'download', file: FileInfo): void
+    (e: 'history', file: FileInfo): void
     (e: 'delete', file: FileInfo): void
     (e: 'file-drop', sourceFile: FileInfo, targetFolder: FileInfo): void
     (e: 'sort-change', column: 'name' | 'size' | 'time'): void
@@ -254,6 +259,7 @@ const handleGridCommand = (command: string, file: FileInfo) => {
     else if (command === 'move') emit('move', file)
     else if (command === 'delete') emit('delete', file)
     else if (command === 'download') emit('download', file)
+    else if (command === 'history') emit('history', file)
 }
 
 // 拖拽逻辑

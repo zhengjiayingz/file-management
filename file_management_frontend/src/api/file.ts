@@ -66,7 +66,8 @@ export const fileApiService = {
     fileSize: number,
     mimeType: string,
     totalChunks: number,
-    parentId?: number
+    parentId?: number,
+    conflictAction?: 'rename' | 'override' | 'version'
   ): Promise<FileItem> {
     const res = await request.post<any>('/files/merge-chunks', {
       fileHash,
@@ -74,7 +75,8 @@ export const fileApiService = {
       fileSize,
       mimeType,
       totalChunks,
-      parentId
+      parentId,
+      conflictAction
     })
     return res.data.data
   },
@@ -85,16 +87,35 @@ export const fileApiService = {
     fileName: string,
     fileSize: number,
     mimeType: string,
-    parentId?: number
+    parentId?: number,
+    conflictAction?: 'rename' | 'override' | 'version'
   ): Promise<FileItem> {
     const res = await request.post<any>('/files/instant-upload', {
       fileHash,
       fileName,
       fileSize,
       mimeType,
-      parentId
+      parentId,
+      conflictAction
     })
     return res.data.data
+  },
+
+  // 检查文件名是否存在
+  async checkFileName(fileName: string, parentId?: number): Promise<{ exists: boolean }> {
+      const res = await request.post<any>('/files/check-name', { fileName, parentId });
+      return res.data;
+  },
+
+  // 获取文件历史版本
+  async getFileVersions(id: number): Promise<any[]> {
+      const res = await request.get<any>(`/files/${id}/versions`);
+      return res.data.data;
+  },
+
+  // 回滚版本
+  async rollbackVersion(id: number, versionId: number): Promise<void> {
+      await request.post(`/files/${id}/versions/${versionId}/rollback`);
   },
 
   // 简单文件上传

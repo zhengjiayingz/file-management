@@ -12,7 +12,9 @@ export enum LogOperationType {
   MOVE = 'MOVE',
   SHARE = 'SHARE',
   LOGIN = 'LOGIN',
-  REGISTER = 'REGISTER'
+  REGISTER = 'REGISTER',
+  UPDATE = 'UPDATE',
+  VERSION_ROLLBACK = 'VERSION_ROLLBACK'
 }
 
 export enum LogResourceType {

@@ -176,7 +176,7 @@ export const mergeChunks = async (req: AuthRequest, res: Response): Promise<void
       return;
     }
 
-    const { fileHash, fileName, fileSize, mimeType, totalChunks, parentId } = req.body;
+    const { fileHash, fileName, fileSize, mimeType, totalChunks, parentId, conflictAction } = req.body;
 
     if (!fileHash || !fileName || fileSize === undefined || fileSize === null || !mimeType || totalChunks === undefined || totalChunks === null) {
       res.status(400).json({
@@ -270,28 +270,79 @@ export const mergeChunks = async (req: AuthRequest, res: Response): Promise<void
 
     // 使用事务创建文件记录
     const result = await prisma.$transaction(async (tx) => {
-      // 创建物理文件记录
-      const fileStorage = await tx.fileStorage.create({
-        data: {
-          fileHash,
-          filePath: finalFilePath,
-          fileSize: BigInt(fileSize),
-          mimeType: finalMimeType,
-          referenceCount: 1,
-          status: 'active'
-        }
-      });
+      // 1. 创建物理文件记录 (如果 fileHash 已存在，这会失败，但这符合 mergeChunks 仅用于新文件的预期)
+      // 如果需要支持"重新上传已存在的文件"（例如之前上传失败残留？），应使用 upsert 或 findUnique
+      // 为了安全，先 try find
+      let fileStorage = await tx.fileStorage.findUnique({ where: { fileHash } });
+      if (!fileStorage) {
+         fileStorage = await tx.fileStorage.create({
+            data: {
+              fileHash,
+              filePath: finalFilePath,
+              fileSize: BigInt(fileSize),
+              mimeType: finalMimeType,
+              referenceCount: 1,
+              status: 'active'
+            }
+          });
+      }
 
-      // 创建用户文件记录
-      const userFile = await tx.userFile.create({
-        data: {
+      // 2. 检查文件名冲突与版本管理
+      const existingUserFile = await tx.userFile.findFirst({
+        where: {
           userId: req.user!.id,
-          storageId: fileStorage.id,
           parentId: parentId ? parseInt(parentId) : null,
           fileName,
+          isDeleted: false,
           fileType: 'file'
-        }
+        },
+        include: { storage: true }
       });
+
+      let userFile;
+      if (existingUserFile && conflictAction === 'version') {
+         // --- 版本更新逻辑 ---
+         // 归档旧版本
+         if (existingUserFile.storage) {
+             await tx.fileHistory.create({
+                 data: {
+                     userFileId: existingUserFile.id,
+                     storageId: existingUserFile.storageId!,
+                     fileName: existingUserFile.fileName,
+                     version: existingUserFile.version,
+                     fileSize: existingUserFile.storage.fileSize
+                 }
+             });
+         }
+         
+         // 更新主文件指向新 storage
+         userFile = await tx.userFile.update({
+             where: { id: existingUserFile.id },
+             data: {
+                 storageId: fileStorage.id,
+                 version: { increment: 1 },
+                 updatedAt: new Date()
+             }
+         });
+         
+         // 注意：FileStorage 的 referenceCount
+         // fileStorage (新) 是刚刚创建的，count=1。 userFile 现在指向它。正确。
+         // existingUserFile.storage (旧) 现在的 userFile 不指向它了，但 fileHistory 指向它。
+         // 我们的设计是 referenceCount 包含 history 引用吗？
+         // 假如我们不减少旧 storage 的 count，那么它就不会被删除。正确。
+      } else {
+         // --- 默认创建逻辑 ---
+         // 允许重名文件并存
+          userFile = await tx.userFile.create({
+            data: {
+              userId: req.user!.id,
+              storageId: fileStorage.id,
+              parentId: parentId ? parseInt(parentId) : null,
+              fileName,
+              fileType: 'file'
+            }
+          });
+      }
 
       // 更新用户存储使用量
       await tx.user.update({
@@ -365,7 +416,7 @@ export const instantUpload = async (req: AuthRequest, res: Response): Promise<vo
       return;
     }
 
-    const { fileHash, fileName, fileSize, mimeType, parentId } = req.body;
+    const { fileHash, fileName, fileSize, mimeType, parentId, conflictAction } = req.body;
 
     if (!fileHash || !fileName || fileSize === undefined || fileSize === null || !mimeType) {
       res.status(400).json({
@@ -409,16 +460,54 @@ export const instantUpload = async (req: AuthRequest, res: Response): Promise<vo
         data: { referenceCount: { increment: 1 } }
       });
 
-      // 创建用户文件记录
-      const userFile = await tx.userFile.create({
-        data: {
+      // 检查文件名冲突与版本管理
+      const existingUserFile = await tx.userFile.findFirst({
+        where: {
           userId: req.user!.id,
-          storageId: existingFile!.id,
           parentId: parentId ? parseInt(parentId) : null,
           fileName,
+          isDeleted: false,
           fileType: 'file'
-        }
+        },
+        include: { storage: true }
       });
+
+      let userFile;
+      if (existingUserFile && conflictAction === 'version') {
+           // --- 版本更新逻辑 ---
+           // 1. Archive
+           if (existingUserFile.storage) {
+              await tx.fileHistory.create({
+                  data: {
+                      userFileId: existingUserFile.id,
+                      storageId: existingUserFile.storageId!,
+                      fileName: existingUserFile.fileName,
+                      version: existingUserFile.version,
+                      fileSize: existingUserFile.storage.fileSize
+                  }
+              });
+           }
+           // 2. Update Master
+           userFile = await tx.userFile.update({
+               where: { id: existingUserFile.id },
+               data: {
+                   storageId: existingFile!.id,
+                   version: { increment: 1 },
+                   updatedAt: new Date()
+               }
+           });
+      } else {
+          // 创建用户文件记录
+          userFile = await tx.userFile.create({
+            data: {
+              userId: req.user!.id,
+              storageId: existingFile!.id,
+              parentId: parentId ? parseInt(parentId) : null,
+              fileName,
+              fileType: 'file'
+            }
+          });
+      }
 
       // 更新用户存储使用量
       await tx.user.update({
