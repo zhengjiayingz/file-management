@@ -21,7 +21,12 @@ export default {
     sync: '同步',
     favorites: '收藏',
     recycleBin: '回收站',
-    logs: '操作记录'
+    logs: '操作记录',
+    images: '图片',
+    videos: '视频',
+    audio: '音频',
+    documents: '文档',
+    categories: '分类'
   },
   login: {
     title: '文件管理系统',

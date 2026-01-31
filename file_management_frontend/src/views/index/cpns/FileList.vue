@@ -5,18 +5,43 @@
 
             <!-- 列表模式表头 -->
             <div v-if="viewMode === 'list'" class="file-list-header">
-                <div class="header-item name">{{ t('fileList.header.name') }}</div>
-                <div class="header-item size">{{ t('fileList.header.size') }}</div>
-                <div class="header-item date">{{ t('fileList.header.date') }}</div>
+                <div class="header-check" style="width: 40px; display: flex; justify-content: center;">
+                    <el-checkbox :model-value="isAllSelected" :indeterminate="isIndeterminate"
+                        @change="handleSelectAll" />
+                </div>
+                <div class="header-item name clickable" @click="emit('sort-change', 'name')">
+                    {{ t('fileList.header.name') }}
+                    <el-icon v-if="sortBy === 'name'" class="sort-icon">
+                        <component :is="sortOrder === 'asc' ? 'CaretTop' : 'CaretBottom'" />
+                    </el-icon>
+                </div>
+                <div class="header-item size clickable" @click="emit('sort-change', 'size')">
+                    {{ t('fileList.header.size') }}
+                    <el-icon v-if="sortBy === 'size'" class="sort-icon">
+                        <component :is="sortOrder === 'asc' ? 'CaretTop' : 'CaretBottom'" />
+                    </el-icon>
+                </div>
+                <div class="header-item date clickable" @click="emit('sort-change', 'time')">
+                    {{ t('fileList.header.date') }}
+                    <el-icon v-if="sortBy === 'time'" class="sort-icon">
+                        <component :is="sortOrder === 'asc' ? 'CaretTop' : 'CaretBottom'" />
+                    </el-icon>
+                </div>
                 <div class="header-item actions">{{ t('fileList.header.action') }}</div>
             </div>
 
             <!-- 文件项 -->
             <div v-for="file in files" :key="file.id" class="file-item"
-                :class="{ 'is-selected': selectedFile?.id === file.id }" :draggable="true"
-                @click.stop="handleFileClick(file)" @dblclick="handleFileDoubleClick(file)"
+                :class="{ 'is-selected': selectedFiles?.has(file.id) }" :draggable="true"
+                @click.stop="handleFileClick(file, $event)" @dblclick="handleFileDoubleClick(file)"
                 @contextmenu.prevent="handleRightClick($event, file)" @dragstart="handleDragStart($event, file)"
                 @drop="handleFileDrop($event, file)" @dragover="handleFileDragOver($event)">
+
+                <div class="file-check" v-if="viewMode === 'list'"
+                    style="width: 40px; display: flex; justify-content: center;">
+                    <el-checkbox :model-value="selectedFiles?.has(file.id)" @click.stop
+                        @change="(val) => emit('toggle-selection', file, true)" />
+                </div>
 
                 <!-- 文件图标/预览 -->
                 <div class="file-icon-wrapper">
@@ -48,7 +73,7 @@
 
                     <div v-if="viewMode === 'list'" class="file-meta-row">
                         <div class="file-size">{{ file.fileType === 'folder' ? '-' : formatFileSize(file.fileSize || 0)
-                            }}
+                        }}
                         </div>
                         <div class="file-date">{{ formatDate(file.updatedAt) }}</div>
                         <div class="file-actions-col">
@@ -57,7 +82,7 @@
                             <el-button link type="primary" @click.stop="emit('rename', file)">{{
                                 t('fileList.action.rename') }}</el-button>
                             <el-button link type="primary" @click.stop="emit('move', file)">{{ t('fileList.action.move')
-                            }}</el-button>
+                                }}</el-button>
                             <el-button link type="danger" @click.stop="emit('delete', file)">{{
                                 t('fileList.action.delete') }}</el-button>
                         </div>
@@ -78,11 +103,11 @@
                         <template #dropdown>
                             <el-dropdown-menu>
                                 <el-dropdown-item command="download">{{ t('fileList.action.download') || '下载'
-                                    }}</el-dropdown-item>
+                                }}</el-dropdown-item>
                                 <el-dropdown-item command="rename">{{ t('fileList.action.rename') }}</el-dropdown-item>
                                 <el-dropdown-item command="move">{{ t('fileList.action.move') }}</el-dropdown-item>
                                 <el-dropdown-item command="delete" style="color: red">{{ t('fileList.action.delete')
-                                    }}</el-dropdown-item>
+                                }}</el-dropdown-item>
                             </el-dropdown-menu>
                         </template>
                     </el-dropdown>
@@ -103,9 +128,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import {
-    Folder, Document, MoreFilled, VideoPlay, Picture, Headset
+    Folder, Document, MoreFilled, VideoPlay, Picture, Headset,
+    CaretTop, CaretBottom
 } from '@element-plus/icons-vue'
 import { useI18n } from 'vue-i18n'
 import { formatFileSize } from '../../../utils/fileUpload'
@@ -119,10 +145,13 @@ const props = defineProps<{
     files: FileInfo[]
     viewMode: 'list' | 'grid'
     loading: boolean
+    selectedFiles?: Set<number>
+    sortBy?: 'name' | 'size' | 'time'
+    sortOrder?: 'asc' | 'desc'
 }>()
 
 const emit = defineEmits<{
-    (e: 'click-file', file: FileInfo): void
+    (e: 'click-file', file: FileInfo, event?: MouseEvent): void
     (e: 'dblclick-file', file: FileInfo): void
     (e: 'context-menu', event: MouseEvent, file: FileInfo): void
     (e: 'rename', file: FileInfo): void
@@ -130,15 +159,31 @@ const emit = defineEmits<{
     (e: 'download', file: FileInfo): void
     (e: 'delete', file: FileInfo): void
     (e: 'file-drop', sourceFile: FileInfo, targetFolder: FileInfo): void
+    (e: 'sort-change', column: 'name' | 'size' | 'time'): void
+    (e: 'toggle-selection', file: FileInfo, multi: boolean): void
+    (e: 'select-all', checked: boolean): void
 }>()
 
 const authStore = useAuthStore()
-const selectedFile = ref<FileInfo | null>(null)
 const draggedFile = ref<FileInfo | null>(null)
 const imageErrorMap = ref<Record<number, boolean>>({})
 
 const handleImageError = (fileId: number) => {
     imageErrorMap.value[fileId] = true
+}
+
+// Computed for Checkbox state
+const isAllSelected = computed(() => {
+    return props.files.length > 0 && props.selectedFiles?.size === props.files.length
+})
+
+const isIndeterminate = computed(() => {
+    const size = props.selectedFiles?.size || 0
+    return size > 0 && size < props.files.length
+})
+
+const handleSelectAll = (val: string | number | boolean) => {
+    emit('select-all', !!val)
 }
 
 // 辅助函数
@@ -184,9 +229,11 @@ const getFilePreviewUrl = (file: FileInfo) => {
 }
 
 // 事件处理
-const handleFileClick = (file: FileInfo) => {
-    selectedFile.value = file
-    emit('click-file', file)
+const handleFileClick = (file: FileInfo, event?: MouseEvent) => {
+    // Determine if multi-select
+    const multi = event ? (event.ctrlKey || event.metaKey) : false
+    emit('toggle-selection', file, multi)
+    emit('click-file', file, event)
 }
 
 const handleFileDoubleClick = (file: FileInfo) => {
@@ -194,7 +241,11 @@ const handleFileDoubleClick = (file: FileInfo) => {
 }
 
 const handleRightClick = (event: MouseEvent, file: FileInfo) => {
-    selectedFile.value = file
+    // If not selected, select it (single select to avoid confusion, or just add it?)
+    // Windows behavior: if right click on selection, keep selection. If right click outside, select only that one.
+    if (!props.selectedFiles?.has(file.id)) {
+        emit('toggle-selection', file, false)
+    }
     emit('context-menu', event, file)
 }
 
@@ -238,7 +289,27 @@ const handleFileDrop = (event: DragEvent, targetFile: FileInfo) => {
             font-size: 13px;
             line-height: 40px;
 
+            .header-check {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+
             .header-item {
+                &.clickable {
+                    cursor: pointer;
+                    display: flex;
+                    align-items: center;
+
+                    &:hover {
+                        color: #409eff;
+                    }
+
+                    .sort-icon {
+                        margin-left: 4px;
+                    }
+                }
+
                 &.name {
                     flex: 1;
                 }
@@ -265,6 +336,13 @@ const handleFileDrop = (event: DragEvent, targetFile: FileInfo) => {
             border-bottom: 1px solid #f0f0f0;
             cursor: pointer;
             transition: background-color 0.2s;
+
+            .file-check {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                margin-right: 4px;
+            }
 
             &:hover {
                 background-color: #f5f7fa;

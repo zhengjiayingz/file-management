@@ -43,6 +43,21 @@
         </div>
       </div>
 
+      <!-- 批量操作工具栏 (当有选中文件时显示) -->
+      <div class="batch-toolbar" v-if="selectedFiles.size > 0">
+        <div class="batch-info">
+          已选中 {{ selectedFiles.size }} 项
+          <el-button link type="primary" @click="clearSelection">取消选择</el-button>
+        </div>
+        <div class="batch-actions">
+          <el-button type="primary" :icon="Document" @click="batchDownload">{{ t('fileList.action.download') || '下载'
+          }}</el-button>
+          <el-button type="success" :icon="Folder" @click="batchMove">{{ t('fileList.action.move') }}</el-button>
+          <el-button type="danger" :icon="Delete" @click="batchDelete">{{ t('fileList.action.delete') }}</el-button>
+        </div>
+      </div>
+
+
       <!-- 文件列表区域 -->
       <el-main class="file-content">
         <!-- 拖拽上传区域 -->
@@ -57,9 +72,12 @@
         </div>
 
         <!-- 文件列表 -->
-        <FileList :files="filteredFiles" :view-mode="viewMode" :loading="loading" @click-file="handleFileClick"
-          @dblclick-file="handleFileDoubleClick" @context-menu="handleRightClick" @rename="showRenameDialog"
-          @delete="deleteFile" @move="handleMoveFile" @download="downloadFile" @file-drop="handleFileItemDrop" />
+        <!-- 文件列表 -->
+        <FileList :files="filteredFiles" :view-mode="viewMode" :loading="loading" :selected-files="selectedFiles"
+          :sort-by="sortBy" :sort-order="sortOrder" @click-file="handleFileClick" @dblclick-file="handleFileDoubleClick"
+          @context-menu="handleRightClick" @rename="showRenameDialog" @delete="deleteFile" @move="handleMoveFile"
+          @download="downloadFile" @file-drop="handleFileItemDrop" @sort-change="handleSortChange"
+          @toggle-selection="toggleSelection" @select-all="selectAll" />
 
         <!-- 存储空间信息 -->
         <!-- 存储空间信息 -->
@@ -125,17 +143,17 @@
       :file-name="currentVideoTitle" @download="currentVideoFile && downloadFile(currentVideoFile)" />
 
     <!-- 移动文件弹窗 -->
-    <MoveDialog v-model="moveDialogVisible" :file-to-move="fileToMove" @success="handleMoveSuccess" />
+    <MoveDialog v-model="moveDialogVisible" :files-to-move="filesToMove" @success="handleMoveSuccess" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, onMounted, watch } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox, ElImageViewer } from 'element-plus'
 import {
   User, ArrowDown, Folder, Search, FolderAdd,
-  Clock, Star, Delete, List, Grid, MoreFilled, Document
+  Clock, Star, Delete, List, Grid, MoreFilled, Document, Download
 } from '@element-plus/icons-vue'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '../../stores/auth'
@@ -153,6 +171,7 @@ import GlobalHeader from '../../components/GlobalHeader.vue'
 import { formatFileSize } from '../../utils/fileUpload'
 
 const router = useRouter()
+const route = useRoute()
 const authStore = useAuthStore()
 const { t, locale } = useI18n()
 
@@ -187,7 +206,7 @@ const currentVideoFile = ref<FileInfo | null>(null)
 
 // 移动文件相关
 const moveDialogVisible = ref(false)
-const fileToMove = ref<FileInfo | null>(null)
+const filesToMove = ref<FileInfo[]>([])
 
 const handleSelectImage = (file: File) => {
   croppingFile.value = file
@@ -195,8 +214,13 @@ const handleSelectImage = (file: File) => {
 }
 
 // 计算属性
+const sortBy = ref<'name' | 'size' | 'time'>('time')
+const sortOrder = ref<'asc' | 'desc'>('desc')
+const selectedFiles = ref<Set<number>>(new Set())
+
+// 计算属性
 const filteredFiles = computed(() => {
-  let result = files.value
+  let result = [...files.value] // Create a shallow copy
 
   // 搜索过滤
   if (searchText.value) {
@@ -206,16 +230,67 @@ const filteredFiles = computed(() => {
     )
   }
 
-  // 排序：文件夹优先，然后按时间倒序
+  // 排序
   return result.sort((a: FileInfo, b: FileInfo) => {
-    // 1. 文件夹优先
+    // 始终将文件夹排在前面 (可选，根据需求)
+    // 如果想要纯排序，可以去掉这部分，但通常文件管理器文件夹在最前
     if (a.fileType === 'folder' && b.fileType !== 'folder') return -1
     if (a.fileType !== 'folder' && b.fileType === 'folder') return 1
 
-    // 2. 按创建时间倒序
-    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    // 如果都是文件夹或都是文件，则按规则排序
+    let compareResult = 0
+    switch (sortBy.value) {
+      case 'name':
+        compareResult = a.fileName.localeCompare(b.fileName, 'zh-CN')
+        break
+      case 'size':
+        compareResult = (a.fileSize || 0) - (b.fileSize || 0)
+        break
+      case 'time':
+      default:
+        compareResult = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+        break
+    }
+
+    return sortOrder.value === 'asc' ? compareResult : -compareResult
   })
 })
+
+const handleSortChange = (column: 'name' | 'size' | 'time') => {
+  if (sortBy.value === column) {
+    sortOrder.value = sortOrder.value === 'asc' ? 'desc' : 'asc'
+  } else {
+    sortBy.value = column
+    sortOrder.value = 'desc' // 默认降序
+  }
+}
+
+// 多选相关逻辑
+const toggleSelection = (file: FileInfo, multiSelect = false) => {
+  if (multiSelect) {
+    if (selectedFiles.value.has(file.id)) {
+      selectedFiles.value.delete(file.id)
+    } else {
+      selectedFiles.value.add(file.id)
+    }
+  } else {
+    // 单选模式 (或者点击非选框区域)
+    selectedFiles.value.clear()
+    selectedFiles.value.add(file.id)
+  }
+}
+
+const clearSelection = () => {
+  selectedFiles.value.clear()
+}
+
+const selectAll = (checked: boolean) => {
+  if (checked) {
+    files.value.forEach(f => selectedFiles.value.add(f.id))
+  } else {
+    selectedFiles.value.clear()
+  }
+}
 
 const storagePercentage = computed(() => {
   if (!authStore.user || authStore.user.storageQuota <= 0) return 0
@@ -234,13 +309,38 @@ onMounted(() => {
 const loadFiles = async () => {
   try {
     loading.value = true
-    files.value = await fileApiService.getFiles({ parentId: currentFolderId.value })
+    const params: any = {}
+
+    // Check for type filter (category view)
+    const type = route.query.type
+    if (type) {
+      params.type = type
+      // In category view, we ignore parentId (handled by backend or we don't send it)
+    } else {
+      params.parentId = currentFolderId.value
+    }
+
+    if (searchText.value.trim()) {
+      params.q = searchText.value.trim()
+      delete params.parentId
+      delete params.type
+    }
+    files.value = await fileApiService.getFiles(params)
   } catch (error: any) {
     ElMessage.error('加载文件列表失败: ' + (error.message || '未知错误'))
   } finally {
     loading.value = false
   }
 }
+
+// Watch for route query changes (e.g. switching categories)
+watch(() => route.query, () => {
+  // Clear search text when switching categories or views
+  searchText.value = ''
+  currentFolderId.value = undefined // Reset folder when switching top-level views via URL
+  breadcrumbs.value = []
+  loadFiles()
+})
 
 // 文件上传成功处理
 const handleUploadSuccess = (fileInfo: FileInfo) => {
@@ -255,9 +355,13 @@ const handleUploadError = (error: string) => {
   ElMessage.error('文件上传失败: ' + error)
 }
 
+let searchTimeout: any = null
 // 搜索处理
 const handleSearch = () => {
-  // 搜索逻辑已在计算属性中处理
+  if (searchTimeout) clearTimeout(searchTimeout)
+  searchTimeout = setTimeout(() => {
+    loadFiles()
+  }, 300)
 }
 
 // 拖拽处理
@@ -360,7 +464,13 @@ const handleRightClick = (event: MouseEvent, file: FileInfo) => {
 
 // 导航到文件夹
 const navigateToFolder = (folderId?: number, folderName?: string) => {
+  // If we are in category view, we must exit it first
+  if (route.query.type) {
+    router.push({ path: '/', query: {} })
+  }
+
   currentFolderId.value = folderId
+  searchText.value = ''
 
   // 更新面包屑导航
   if (folderId === undefined) {
@@ -414,6 +524,57 @@ const formatDate = (dateString: string): string => {
     return `${days}天前`
   } else {
     return date.toLocaleDateString()
+  }
+}
+
+// 批量下载
+const batchDownload = async () => {
+  if (selectedFiles.value.size === 0) return
+  const ids = Array.from(selectedFiles.value)
+
+  // 浏览器通常会阻止同时弹出多个下载。
+  // MVP 方案：循环下载。
+  for (const id of ids) {
+    const file = files.value.find(f => f.id === id)
+    if (file && file.fileType !== 'folder') {
+      downloadFile(file)
+    }
+  }
+}
+
+// 批量移动
+const batchMove = () => {
+  if (selectedFiles.value.size === 0) return
+  const selected = files.value.filter(f => selectedFiles.value.has(f.id))
+  filesToMove.value = selected
+  moveDialogVisible.value = true
+}
+
+// 批量删除
+const batchDelete = async () => {
+  if (selectedFiles.value.size === 0) return
+
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除选中的 ${selectedFiles.value.size} 个文件吗？`,
+      '批量删除',
+      {
+        confirmButtonText: '删除',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+
+    const ids = Array.from(selectedFiles.value)
+    // 循环调用删除 (Promise.all)
+    const promises = ids.map(id => fileApiService.deleteFile(id))
+    await Promise.allSettled(promises)
+
+    ElMessage.success('批量删除完成')
+    clearSelection()
+    loadFiles()
+  } catch (e) {
+    // user cancel
   }
 }
 
@@ -576,7 +737,7 @@ const deleteFile = async (file: FileInfo) => {
 }
 
 const handleMoveFile = (file: FileInfo) => {
-  fileToMove.value = file
+  filesToMove.value = [file]
   moveDialogVisible.value = true
 }
 
@@ -667,6 +828,33 @@ const formatStorage = (bytes: number) => {
 
   .el-icon {
     margin: 0 4px;
+  }
+}
+
+.batch-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 20px;
+  background-color: #ecf5ff;
+  border-bottom: 1px solid #d9ecff;
+
+  @at-root html.dark & {
+    background-color: #2b2b2b;
+    border-bottom-color: #4c4d4f;
+  }
+
+  .batch-info {
+    font-size: 14px;
+    color: #409eff;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .batch-actions {
+    display: flex;
+    gap: 8px;
   }
 }
 

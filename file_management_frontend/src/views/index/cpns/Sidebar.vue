@@ -23,6 +23,38 @@
                 </el-icon>
                 <span>{{ t('sidebar.favorites') }}</span>
             </el-menu-item>
+            <el-sub-menu index="categories">
+                <template #title>
+                    <el-icon>
+                        <Collection />
+                    </el-icon>
+                    <span>{{ t('sidebar.categories') }}</span>
+                </template>
+                <el-menu-item index="file-type-image" @click="router.push('/?type=image')">
+                    <el-icon>
+                        <Picture />
+                    </el-icon>
+                    <span>{{ t('sidebar.images') }}</span>
+                </el-menu-item>
+                <el-menu-item index="file-type-video" @click="router.push('/?type=video')">
+                    <el-icon>
+                        <VideoPlay />
+                    </el-icon>
+                    <span>{{ t('sidebar.videos') }}</span>
+                </el-menu-item>
+                <el-menu-item index="file-type-audio" @click="router.push('/?type=audio')">
+                    <el-icon>
+                        <Headset />
+                    </el-icon>
+                    <span>{{ t('sidebar.audio') }}</span>
+                </el-menu-item>
+                <el-menu-item index="file-type-document" @click="router.push('/?type=document')">
+                    <el-icon>
+                        <Document />
+                    </el-icon>
+                    <span>{{ t('sidebar.documents') }}</span>
+                </el-menu-item>
+            </el-sub-menu>
             <el-menu-item index="4" @click="router.push('/recycle-bin')">
                 <el-icon>
                     <Delete />
@@ -42,7 +74,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { Folder, Clock, Star, Delete, List } from '@element-plus/icons-vue'
+import { Folder, Clock, Star, Delete, List, Picture, VideoPlay, Headset, Document, Collection } from '@element-plus/icons-vue'
 import { useI18n } from 'vue-i18n'
 import { useThemeStore } from '../../../stores/theme'
 
@@ -53,8 +85,12 @@ const themeStore = useThemeStore()
 
 const activeMenu = computed(() => {
     const path = route.path
+    const query = route.query
     if (path.startsWith('/recycle-bin')) return '4'
     if (path.startsWith('/logs')) return '5'
+    if (path === '/' && query.type) {
+        return `file-type-${query.type}`
+    }
     // if (path.startsWith('/sync')) return '2'
     // if (path.startsWith('/favorites')) return '3'
     return '1' // Default to home/files

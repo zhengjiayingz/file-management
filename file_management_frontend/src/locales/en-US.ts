@@ -21,7 +21,12 @@ export default {
     sync: 'Sync',
     favorites: 'Favorites',
     recycleBin: 'Recycle Bin',
-    logs: 'Logs'
+    logs: 'Logs',
+    images: 'Images',
+    videos: 'Videos',
+    audio: 'Audio',
+    documents: 'Documents',
+    categories: 'Categories'
   },
   login: {
     title: 'File Management',

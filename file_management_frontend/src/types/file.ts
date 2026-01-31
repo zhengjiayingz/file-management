@@ -29,6 +29,7 @@ export interface FileQueryParams {
   type?: 'all' | 'image' | 'video' | 'document' | 'audio' | 'other';
   sort?: 'name_asc' | 'name_desc' | 'date_asc' | 'date_desc' | 'size_asc' | 'size_desc';
   isDeleted?: boolean;
+  q?: string;
 }
 
 // 检查文件是否存在响应

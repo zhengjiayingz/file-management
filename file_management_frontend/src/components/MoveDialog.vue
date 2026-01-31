@@ -37,7 +37,7 @@ import type { FileItem } from '../types/file'
 
 const props = defineProps<{
     modelValue: boolean
-    fileToMove: FileItem | null
+    filesToMove: FileItem[]
 }>()
 
 const emit = defineEmits<{
@@ -74,8 +74,6 @@ watch(() => props.modelValue, (val) => {
 const loadNode = async (node: any, resolve: (data: any[]) => void) => {
     if (node.level === 0) {
         // 根目录级别：显示"根目录"或者仅加载顶级文件夹
-        // 我们可以模拟一个"根"节点，让用户可以移动到根目录，或者只是列出顶级文件夹。
-        // 这里添加一个虚拟的"根"节点在顶部。
         return resolve([{
             id: 0,
             fileName: '根目录', // 根目录
@@ -90,13 +88,17 @@ const loadNode = async (node: any, resolve: (data: any[]) => void) => {
         // 仅筛选文件夹
         const folders = files.filter(f => f.fileType === 'folder').map(f => ({
             ...f,
-            // 如果文件夹是被移动的那个，我们不应该显示它（不能移动到自己内部）
-            // 移动逻辑：不能移动到自己或者自己的子文件夹中。
-            disabled: props.fileToMove?.id === f.id
+            // 禁用逻辑: 如果文件夹是被移动的那个，我们不应该显示它（或者禁用它）
+            // 这里我们直接在后面过滤掉它，但为了UI更友好，也可以显示但disabled
+            disabled: props.filesToMove.some(m => m.id === f.id)
         }))
 
-        // 进一步过滤掉 fileToMove 本身（如果它是文件夹）
-        const validFolders = folders.filter(f => f.id !== props.fileToMove?.id)
+        // 过滤掉已经在 filesToMove列表中的文件夹（防止移动到自己内部 - 简单防止）
+        // 注意：这种简单过滤并不能防止移动到自己的子文件夹（如果树展开在移动之前）。
+        // 但由于是懒加载，当展示子节点时，如果子节点属于被移动文件夹的子孙，也应该隐藏/禁用。
+        // 由于没有完整树结构，很难完全做到。
+        // MVP: 至少不能选自己。
+        const validFolders = folders.filter(f => !props.filesToMove.some(m => m.id === f.id))
 
         resolve(validFolders)
     } catch (error) {
@@ -120,27 +122,28 @@ const confirmMove = async () => {
         return
     }
 
-    if (!props.fileToMove) return
+    if (props.filesToMove.length === 0) return
 
-    // 检查是否移动到相同位置
-    // 注意：props.fileToMove.parentId 可能为 null，等同于根目录（0 或 undefined）
-    const currentParentId = props.fileToMove.parentId || 0
-    const targetId = selectedFolderId.value === 0 ? 0 : selectedFolderId.value
-
-    if (currentParentId === targetId) {
-        ElMessage.warning('不能移动到原位置')
-        return
-    }
+    const targetId = selectedFolderId.value === 0 ? undefined : selectedFolderId.value
 
     try {
         moving.value = true
-        // 如果 targetId 是 0 (根目录)，传 undefined 或 null 给 API？
-        // API 期望 number | undefined。
-        // 让我们检查 api/file.ts: moveFile(id, parentId?)
-        // 如果 parentId 是 0，我们应该传 undefined 或 null 来表示根目录。
-        // 0 对根目录有效。
 
-        await fileApiService.moveFile(props.fileToMove.id, selectedFolderId.value === 0 ? undefined : selectedFolderId.value)
+        // 并行执行移动
+        const promises = props.filesToMove.map(file => {
+            // 检查是否原位置
+            const currentParentId = file.parentId || undefined
+            // targetId is undefined for root (0)
+            // currentParentId is undefined for root
+            // So if equal, skip
+            if (currentParentId === targetId) {
+                return Promise.resolve()
+            }
+            return fileApiService.moveFile(file.id, targetId)
+        })
+
+        await Promise.all(promises)
+
         ElMessage.success(t('file.move.success'))
         emit('success')
         handleClose()

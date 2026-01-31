@@ -35,16 +35,44 @@ export const getFiles = async (req: AuthRequest, res: Response): Promise<void> =
       return;
     }
 
-    const { parentId, isDeleted } = req.query;
+    const { parentId, isDeleted, q, type } = req.query;
 
     const whereClause: any = {
       userId: req.user.id,
       isDeleted: isDeleted === 'true'
     };
 
-    // 如果不是查询回收站（即查询正常文件），则必须添加 parentId 过滤
-    if (isDeleted !== 'true') {
-      whereClause.parentId = parentId ? parseInt(parentId as string) : null;
+    if (q) {
+      whereClause.fileName = {
+        contains: q as string
+      };
+    } else if (type && type !== 'all') {
+      const typeStr = type as string;
+      if (typeStr === 'image') {
+        whereClause.storage = { mimeType: { startsWith: 'image/' } };
+      } else if (typeStr === 'video') {
+        whereClause.storage = { mimeType: { startsWith: 'video/' } };
+      } else if (typeStr === 'audio') {
+        whereClause.storage = { mimeType: { startsWith: 'audio/' } };
+      } else if (typeStr === 'document') {
+        whereClause.storage = {
+          OR: [
+            { mimeType: { startsWith: 'text/' } },
+            { mimeType: { contains: 'pdf' } },
+            { mimeType: { contains: 'word' } },
+            { mimeType: { contains: 'excel' } },
+            { mimeType: { contains: 'sheet' } },
+            { mimeType: { contains: 'powerpoint' } },
+            { mimeType: { contains: 'presentation' } },
+            { mimeType: { contains: 'document' } }
+          ]
+        };
+      }
+    } else {
+      // 如果不是查询回收站（即查询正常文件），则必须添加 parentId 过滤
+      if (isDeleted !== 'true') {
+        whereClause.parentId = parentId ? parseInt(parentId as string) : null;
+      }
     }
 
     // 获取当前用户的文件列表
