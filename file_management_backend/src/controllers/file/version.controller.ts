@@ -32,7 +32,7 @@ export const getFileVersions = async (req: AuthRequest, res: Response): Promise<
     }
 
     // 查询历史版本
-    const versions = await prisma.fileHistory.findMany({
+    const versions = await (prisma as any).fileHistory.findMany({
       where: {
         userFileId: parseInt(id)
       },
@@ -45,7 +45,7 @@ export const getFileVersions = async (req: AuthRequest, res: Response): Promise<
     });
 
     // 格式化返回
-    const data = versions.map(v => ({
+    const data = versions.map((v: any) => ({
       id: v.id,
       version: v.version,
       fileName: v.fileName,
@@ -76,7 +76,7 @@ export const rollbackVersion = async (req: AuthRequest, res: Response): Promise<
     const userId = req.user!.id;
 
     // 使用事务处理回滚
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx: any) => {
       // 1. 获取主文件
       const userFile = await tx.userFile.findFirst({
         where: { id: parseInt(id), userId, isDeleted: false },
@@ -187,7 +187,7 @@ export const downloadVersion = async (req: AuthRequest, res: Response): Promise<
     }
 
     // 2. 获取历史版本信息
-    const version = await prisma.fileHistory.findFirst({
+    const version = await (prisma as any).fileHistory.findFirst({
       where: {
         id: parseInt(versionId),
         userFileId: parseInt(id)

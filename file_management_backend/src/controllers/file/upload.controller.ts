@@ -269,7 +269,7 @@ export const mergeChunks = async (req: AuthRequest, res: Response): Promise<void
     }
 
     // 使用事务创建文件记录
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx: any) => {
       // 1. 创建物理文件记录 (如果 fileHash 已存在，这会失败，但这符合 mergeChunks 仅用于新文件的预期)
       // 如果需要支持"重新上传已存在的文件"（例如之前上传失败残留？），应使用 upsert 或 findUnique
       // 为了安全，先 try find
@@ -441,7 +441,7 @@ export const instantUpload = async (req: AuthRequest, res: Response): Promise<vo
     }
 
     // 使用事务创建用户文件引用
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx: any) => {
       // 如果文件状态为 pending_delete，将其复活
       if (existingFile!.status === 'pending_delete') {
         existingFile = await tx.fileStorage.update({
