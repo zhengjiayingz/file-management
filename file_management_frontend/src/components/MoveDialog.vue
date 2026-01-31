@@ -63,7 +63,7 @@ const defaultProps = {
     isLeaf: 'isLeaf'
 }
 
-// Watch for dialog opening to reset state if needed
+// 监听弹窗打开以按需重置状态
 watch(() => props.modelValue, (val) => {
     if (val) {
         selectedFolder.value = null
@@ -73,35 +73,29 @@ watch(() => props.modelValue, (val) => {
 
 const loadNode = async (node: any, resolve: (data: any[]) => void) => {
     if (node.level === 0) {
-        // Root level: show "Root Folder" or just load top-level folders
-        // We can simulate a "Root" node so user can move to root, or just list top level folders.
-        // Let's list top level folders, and also provide an option to move to "Root" if we are not at root.
-        // Actually, usually the tree itself represents the root.
-        // Let's add a virtual "Root" node at the top?
-        // Or just load top level folders. If current selection is empty, it means "Root"? 
-        // No, users expect to select "Root".
-        // Let's return a single root node.
+        // 根目录级别：显示"根目录"或者仅加载顶级文件夹
+        // 我们可以模拟一个"根"节点，让用户可以移动到根目录，或者只是列出顶级文件夹。
+        // 这里添加一个虚拟的"根"节点在顶部。
         return resolve([{
             id: 0,
-            fileName: '根目录', // Root Directory
+            fileName: '根目录', // 根目录
             fileType: 'folder'
         }])
     }
 
-    // Load children for a folder
+    // 加载文件夹的子节点
     const parentId = node.data.id === 0 ? undefined : node.data.id
     try {
         const files = await fileApiService.getFiles({ parentId })
-        // Filter only folders
+        // 仅筛选文件夹
         const folders = files.filter(f => f.fileType === 'folder').map(f => ({
             ...f,
-            // If the folder is the one being moved, we shouldn't show it (cannot move into itself)
-            // Actually we should show it but disable it? Or just hide it to be simple.
-            // Move logic: cannot move into itself or its children.
+            // 如果文件夹是被移动的那个，我们不应该显示它（不能移动到自己内部）
+            // 移动逻辑：不能移动到自己或者自己的子文件夹中。
             disabled: props.fileToMove?.id === f.id
         }))
 
-        // further filter out the fileToMove itself if it is a folder
+        // 进一步过滤掉 fileToMove 本身（如果它是文件夹）
         const validFolders = folders.filter(f => f.id !== props.fileToMove?.id)
 
         resolve(validFolders)
@@ -128,8 +122,8 @@ const confirmMove = async () => {
 
     if (!props.fileToMove) return
 
-    // Check if moving to same location
-    // Note: props.fileToMove.parentId might be null, which equals root (0 or undefined)
+    // 检查是否移动到相同位置
+    // 注意：props.fileToMove.parentId 可能为 null，等同于根目录（0 或 undefined）
     const currentParentId = props.fileToMove.parentId || 0
     const targetId = selectedFolderId.value === 0 ? 0 : selectedFolderId.value
 
@@ -140,14 +134,11 @@ const confirmMove = async () => {
 
     try {
         moving.value = true
-        // If targetId is 0 (Root), pass undefined or null to API? 
-        // API expects number | undefined. 
-        // Let's check api/file.ts: moveFile(id, parentId?)
-        // If parentId is 0, we should probably pass undefined or null to signify root if backend expects that.
-        // In manage.controller.ts: `parentId ? parseInt(parentId) : null`
-        // So if we pass 0, typical JS `if (parentId)` is false, so it becomes null -> Root. Reference step 147.
-        // Wait, step 147 shows `const data = { parentId: parentId || null }`. If parentId is 0, it becomes null. 
-        // So 0 works for root.
+        // 如果 targetId 是 0 (根目录)，传 undefined 或 null 给 API？
+        // API 期望 number | undefined。
+        // 让我们检查 api/file.ts: moveFile(id, parentId?)
+        // 如果 parentId 是 0，我们应该传 undefined 或 null 来表示根目录。
+        // 0 对根目录有效。
 
         await fileApiService.moveFile(props.fileToMove.id, selectedFolderId.value === 0 ? undefined : selectedFolderId.value)
         ElMessage.success(t('file.move.success'))

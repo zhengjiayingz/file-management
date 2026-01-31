@@ -66,7 +66,7 @@ export const getFiles = async (req: AuthRequest, res: Response): Promise<void> =
 
     const files = userFiles.map(file => ({
       id: file.id,
-      parentId: file.parentId, // Add mapping for parentId
+      parentId: file.parentId, // 添加 parentId 映射
       fileName: file.fileName,
       fileType: file.fileType,
       fileSize: file.storage ? Number(file.storage.fileSize) : 0,

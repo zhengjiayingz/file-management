@@ -320,7 +320,7 @@ const handleEmptyRecycleBin = async () => {
   flex-direction: column;
 }
 
-// Header
+// 头部
 .header {
   background: white;
   border-bottom: 1px solid #e4e7ed;
@@ -369,7 +369,7 @@ const handleEmptyRecycleBin = async () => {
   }
 }
 
-// Toolbar
+// 工具栏
 .toolbar {
   display: flex;
   justify-content: space-between;
@@ -385,7 +385,7 @@ const handleEmptyRecycleBin = async () => {
   }
 }
 
-// File Content
+// 文件内容
 .file-content {
   background: white;
   padding: 20px;
@@ -393,7 +393,7 @@ const handleEmptyRecycleBin = async () => {
   position: relative;
 }
 
-// File List
+// 文件列表
 .file-list {
   &.list {
     .file-item {
