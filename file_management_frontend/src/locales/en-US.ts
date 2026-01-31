@@ -65,7 +65,8 @@ export default {
       rename: 'Rename',
       move: 'Move',
       delete: 'Delete',
-      download: 'Download'
+      download: 'Download',
+      history: 'History'
     }
   },
   dialog: {

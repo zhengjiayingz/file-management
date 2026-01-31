@@ -65,7 +65,8 @@ export default {
       rename: '重命名',
       move: '移动',
       delete: '删除',
-      download: '下载'
+      download: '下载',
+      history: '历史记录'
     }
   },
   dialog: {

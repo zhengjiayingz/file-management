@@ -60,7 +60,8 @@ export default {
       rename: '重新命名',
       move: '移動',
       delete: '刪除',
-      download: '下載'
+      download: '下載',
+      history: '歷史紀錄'
     }
   },
   dialog: {
