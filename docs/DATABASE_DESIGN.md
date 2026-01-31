@@ -757,6 +757,8 @@ WHERE uf.user_id = ? AND uf.is_deleted = FALSE AND uf.file_type = 'file'
 3. **版本删除**：
     - 删除主文件 (`user_files`) 时，级联删除所有的 `file_histories`。
     - 也可以单独删除某个历史版本记录。
+4. **版本预览/下载**：
+    - 支持直接通过 `file_histories.id` 获取物理文件（`storage_id`）进行预览或下载，无需回滚。
 
 ## 6. 性能优化建议
 

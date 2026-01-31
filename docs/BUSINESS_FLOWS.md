@@ -779,6 +779,32 @@ SET storage_id = ?, file_size = ?, version = version + 1
 WHERE id = ?;
 ```
 
+#### 2.7.3 查看/预览历史版本
+
+1. **获取版本列表**
+   - 查询 file_histories 表
+   - 按 version 倒序排列
+
+2. **预览/下载历史版本**
+   - 用户双击历史记录
+   - 后端通过 version_id 和 user_file_id 验证权限
+   - 返回物理文件流（支持 inline 预览或 attachment 下载）
+
+**SQL 示例：**
+```sql
+-- 获取版本列表
+SELECT id, version, file_name, file_size, created_at 
+FROM file_histories 
+WHERE user_file_id = ? 
+ORDER BY version DESC;
+
+-- 获取特定版本文件信息
+SELECT fh.id, fs.file_path, fs.mime_type
+FROM file_histories fh
+JOIN file_storage fs ON fh.storage_id = fs.id
+WHERE fh.id = ? AND fh.user_file_id = ?;
+```
+
 ---
 
 ## 3. 文件分享流程
