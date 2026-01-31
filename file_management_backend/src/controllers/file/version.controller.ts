@@ -1,4 +1,6 @@
 import { Response } from 'express';
+import fs from 'fs';
+import path from 'path';
 import prisma from '../../lib/prisma.js';
 import { AuthRequest } from '../../types/index.js';
 import { logOperation, LogOperationType, LogResourceType } from '../../services/logger.service.js';
@@ -162,5 +164,92 @@ export const rollbackVersion = async (req: AuthRequest, res: Response): Promise<
     } else {
        res.status(500).json({ success: false, message: '回滚失败' });
     }
+  }
+};
+
+/**
+ * 下载/预览历史版本文件
+ * GET /api/files/:id/versions/:versionId/download
+ */
+export const downloadVersion = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id, versionId } = req.params;
+    const userId = req.user!.id;
+
+    // 1. 检查文件所有权
+    const userFile = await prisma.userFile.findFirst({
+      where: { id: parseInt(id), userId, isDeleted: false }
+    });
+
+    if (!userFile) {
+      res.status(404).json({ success: false, message: '文件不存在或无权访问' });
+      return;
+    }
+
+    // 2. 获取历史版本信息
+    const version = await prisma.fileHistory.findFirst({
+      where: {
+        id: parseInt(versionId),
+        userFileId: parseInt(id)
+      },
+      include: {
+        storage: {
+            select: {
+                filePath: true,
+                mimeType: true
+            }
+        }
+      }
+    });
+
+    if (!version || !version.storage) {
+        res.status(404).json({ success: false, message: '版本文件不存在' });
+        return;
+    }
+
+    // 3. 检查物理文件
+    if (!fs.existsSync(version.storage.filePath)) {
+        res.status(404).json({ success: false, message: '物理文件已丢失' });
+        return;
+    }
+
+    // 4. 设置响应头
+    const isPreview = req.query.preview === 'true';
+    const disposition = isPreview ? 'inline' : 'attachment';
+    
+    // MimeType logic
+    let contentType = version.storage.mimeType || 'application/octet-stream';
+    const ext = path.extname(version.fileName).toLowerCase();
+    const mimeMap: Record<string, string> = {
+      '.mp4': 'video/mp4',
+      '.webm': 'video/webm',
+      '.ogg': 'video/ogg',
+      '.mov': 'video/quicktime',
+      '.avi': 'video/x-msvideo',
+      '.wmv': 'video/x-ms-wmv',
+      '.flv': 'video/x-flv',
+      '.mkv': 'video/x-matroska',
+      '.rmvb': 'application/vnd.rn-realmedia',
+      '.rm': 'application/vnd.rn-realmedia'
+    };
+    if (mimeMap[ext]) {
+      contentType = mimeMap[ext];
+    }
+    
+    if (isPreview && (contentType.startsWith('text/') || ext === '.txt' || ext === '.md' || ext === '.json' || ext === '.js' || ext === '.css' || ext === '.html')) {
+        if (!contentType.includes('charset')) {
+            contentType += '; charset=utf-8';
+        }
+    }
+
+    res.setHeader('Content-Disposition', `${disposition}; filename="${encodeURIComponent(version.fileName)}"`);
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Accept-Ranges', 'bytes');
+
+    res.sendFile(path.resolve(version.storage.filePath));
+
+  } catch (error) {
+    console.error('Download version error:', error);
+    res.status(500).json({ success: false, message: '下载失败' });
   }
 };

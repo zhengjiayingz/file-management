@@ -24,7 +24,8 @@ import {
 } from '../controllers/file/manage.controller.js';
 import {
   getFileVersions,
-  rollbackVersion
+  rollbackVersion,
+  downloadVersion
 } from '../controllers/file/version.controller.js';
 import { authenticate } from '../middleware/auth.middleware.js';
 import { upload } from '../middleware/upload.middleware.js';
@@ -91,7 +92,7 @@ router.post('/check-exists', checkFileExists);
  *       200:
  *         description: 检查结果
  */
-router.get('/check-name', checkFileName);
+router.post('/check-name', checkFileName);
 
 // 分片上传
 /**
@@ -599,5 +600,8 @@ router.get('/:id/versions', getFileVersions);
  *         description: 回滚成功
  */
 router.post('/:id/versions/:versionId/rollback', rollbackVersion);
+
+// 下载/预览历史版本
+router.get('/:id/versions/:versionId/download', downloadVersion);
 
 export default router;

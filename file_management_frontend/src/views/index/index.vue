@@ -76,8 +76,8 @@
         <FileList :files="filteredFiles" :view-mode="viewMode" :loading="loading" :selected-files="selectedFiles"
           :sort-by="sortBy" :sort-order="sortOrder" @click-file="handleFileClick" @dblclick-file="handleFileDoubleClick"
           @context-menu="handleRightClick" @rename="showRenameDialog" @delete="deleteFile" @move="handleMoveFile"
-          @download="downloadFile" @file-drop="handleFileItemDrop" @sort-change="handleSortChange"
-          @toggle-selection="toggleSelection" @select-all="selectAll" />
+          @download="downloadFile" @history="showHistory" @file-drop="handleFileItemDrop"
+          @sort-change="handleSortChange" @toggle-selection="toggleSelection" @select-all="selectAll" />
 
         <!-- 存储空间信息 -->
         <!-- 存储空间信息 -->

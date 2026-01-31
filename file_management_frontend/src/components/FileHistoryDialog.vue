@@ -2,12 +2,12 @@
     <el-dialog :model-value="modelValue" @update:model-value="emit('update:modelValue', $event)" title="历史版本"
         width="600px" @open="loadHistory">
         <div class="history-container">
-            <el-table :data="historyList" v-loading="loading" stripe style="width: 100%" max-height="400">
+            <el-alert title="双击记录可预览文件内容" type="info" :closable="false" style="margin-bottom: 10px;" />
+            <el-table :data="historyList" v-loading="loading" stripe style="width: 100%" max-height="400"
+                @row-dblclick="handleRowDblClick">
                 <el-table-column prop="version" label="版本号" width="100" align="center">
                     <template #default="scope">
                         <el-tag size="small">V{{ scope.row.version }}</el-tag>
-                        <el-tag v-if="scope.$index === 0" size="small" type="success"
-                            style="margin-left: 5px">当前</el-tag>
                     </template>
                 </el-table-column>
                 <el-table-column prop="createdAt" label="保存时间" width="180">
@@ -51,6 +51,9 @@ import { ElMessage } from 'element-plus'
 import fileApiService from '../api/file'
 import { formatFileSize } from '../utils/fileUpload'
 import dayjs from 'dayjs'
+import { useAuthStore } from '../stores/auth'
+
+const authStore = useAuthStore()
 
 const props = defineProps<{
     modelValue: boolean
@@ -100,6 +103,14 @@ const handleRollback = async (item: HistoryItem) => {
     } finally {
         rollingBack.value = false
     }
+}
+
+const handleRowDblClick = (row: HistoryItem) => {
+    if (!props.fileId) return
+    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
+    const token = authStore.token || ''
+    const url = `${API_BASE_URL}/api/files/${props.fileId}/versions/${row.id}/download?token=${token}&preview=true`
+    window.open(url, '_blank')
 }
 
 const formatDate = (date: string) => {
