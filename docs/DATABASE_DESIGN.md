@@ -87,6 +87,7 @@
 | file_type | ENUM('file', 'folder') | NOT NULL | 类型 |
 | is_deleted | BOOLEAN | NOT NULL, DEFAULT FALSE | 是否删除（软删除） |
 | deleted_at | DATETIME | NULL | 删除时间 |
+| version | INT | NOT NULL, DEFAULT 1 | 当前版本号 |
 | created_at | DATETIME | NOT NULL, DEFAULT CURRENT_TIMESTAMP | 创建时间 |
 | updated_at | DATETIME | NOT NULL, DEFAULT CURRENT_TIMESTAMP ON UPDATE | 更新时间 |
 
@@ -330,22 +331,23 @@
 
 ---
 
-### 3.13 文件版本表 (file_versions)
+### 3.13 文件历史版本表 (file_histories)
 
-存储文件的历史版本（可选功能）。
+存储文件的历史版本记录（主从表模式，存旧版本）。
 
 | 字段名 | 类型 | 约束 | 说明 |
 |--------|------|------|------|
-| id | INT | PRIMARY KEY, AUTO_INCREMENT | 版本ID |
+| id | INT | PRIMARY KEY, AUTO_INCREMENT | 历史ID |
 | user_file_id | INT | NOT NULL | 用户文件ID |
 | storage_id | INT | NOT NULL | 物理文件ID |
-| version_number | INT | NOT NULL | 版本号 |
+| file_name | VARCHAR(255) | NOT NULL | 当时文件名 |
 | file_size | BIGINT | NOT NULL | 文件大小 |
-| created_at | DATETIME | NOT NULL, DEFAULT CURRENT_TIMESTAMP | 创建时间 |
+| version | INT | NOT NULL | 版本号 |
+| created_at | DATETIME | NOT NULL, DEFAULT CURRENT_TIMESTAMP | 归档时间 |
 
 **索引：**
 - PRIMARY KEY (id)
-- INDEX (user_file_id, version_number)
+- INDEX (user_file_id, version)
 - FOREIGN KEY (user_file_id) REFERENCES user_files(id) ON DELETE CASCADE
 - FOREIGN KEY (storage_id) REFERENCES file_storage(id) ON DELETE CASCADE
 
@@ -429,11 +431,11 @@ erDiagram
     
     file_storage ||--o{ user_files : "被引用"
     file_storage ||--o{ upload_chunks : "分片记录"
-    file_storage ||--o{ file_versions : "历史版本"
+    file_storage ||--o{ file_histories : "历史版本"
     
     user_files ||--o{ file_shares : "被分享"
     user_files ||--o{ user_file_tags : "关联标签"
-    user_files ||--o{ file_versions : "版本历史"
+    user_files ||--o{ file_histories : "版本历史"
     user_files ||--o{ user_files : "父子关系"
     user_files ||--o{ messages : "文件消息"
     
@@ -475,6 +477,7 @@ erDiagram
         string file_name
         enum file_type
         boolean is_deleted
+        int version
         datetime deleted_at
         datetime created_at
         datetime updated_at
@@ -599,11 +602,12 @@ erDiagram
         datetime updated_at
     }
     
-    file_versions {
+    file_histories {
         int id PK
         int user_file_id FK
         int storage_id FK
-        int version_number
+        string file_name
+        int version
         bigint file_size
         datetime created_at
     }
@@ -640,7 +644,7 @@ users (用户)
   ├─→ user_files (用户文件)
   │     ├─→ file_storage (物理文件)
   │     ├─→ user_file_tags (文件标签关联)
-  │     └─→ file_versions (文件版本)
+  │     └─→ file_histories (文件历史)
   ├─→ file_shares (文件分享)
   ├─→ friendships (好友关系)
   ├─→ messages (消息)
@@ -738,6 +742,21 @@ WHERE uf.user_id = ? AND uf.is_deleted = FALSE AND uf.file_type = 'file'
 1. 用户A发送好友请求：创建 `friendships` 记录，`status = 'pending'`
 2. 用户B接受：更新 `status = 'accepted'`，同时创建反向关系记录
 3. 用户B拒绝：更新 `status = 'rejected'`
+
+### 5.5 文件版本管理
+
+1. **版本更新**：
+    - 用户上传同名文件（且选择“覆盖”或“保存新版本”）。
+    - 将当前的 `user_files` 记录（包含 `storage_id`, `file_name`, `file_size`, `version` 等）归档到 `file_histories` 表。
+    - 更新 `user_files` 表为新上传的文件信息（新的 `storage_id`），同时 `version` + 1。
+2. **版本回滚**：
+    - 用户选择某个历史版本进行回滚。
+    - 将当前的 `user_files` 记录再次归档到 `file_histories`。
+    - 将选中的历史版本信息（`storage_id`, `file_size` 等）覆盖回 `user_files` 表。
+    - `version` 继续 +1，以保持线性历史。
+3. **版本删除**：
+    - 删除主文件 (`user_files`) 时，级联删除所有的 `file_histories`。
+    - 也可以单独删除某个历史版本记录。
 
 ## 6. 性能优化建议
 

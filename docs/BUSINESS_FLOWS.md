@@ -711,6 +711,76 @@ WHERE uf.user_id = ? AND ft.id = ? AND uf.is_deleted = FALSE
 
 ---
 
+### 2.7 文件版本管理流程
+
+**流程步骤：**
+
+#### 2.7.1 版本更新（上传同名文件）
+
+1. **上传文件**
+   - 用户选择上传文件，前端检测到同名文件
+   - 用户确认“保存新版本”
+
+2. **归档旧版本**
+   - 将当前 `user_files` 记录复制到 `file_histories`
+   - 记录 version = current_version
+
+3. **更新主文件**
+   - 更新 `user_files` 为新文件的 storage_id, file_size
+   - version = current_version + 1
+
+**涉及的表操作：**
+
+| 表名 | 操作类型 | 说明 |
+|------|---------|------|
+| user_files | SELECT | 获取当前文件信息 |
+| file_histories | INSERT | 归档旧版本 |
+| user_files | UPDATE | 更新新版本信息 |
+
+**SQL 示例：**
+```sql
+-- 1. 获取当前文件信息
+SELECT * FROM user_files WHERE id = ?;
+
+-- 2. 归档旧版本
+INSERT INTO file_histories (user_file_id, storage_id, file_name, file_size, version)
+VALUES (?, ?, ?, ?, ?);
+
+-- 3. 更新新版本
+UPDATE user_files 
+SET storage_id = ?, file_size = ?, version = version + 1 
+WHERE id = ?;
+```
+
+#### 2.7.2 版本回滚
+
+1. **选择版本**
+   - 用户在历史列表选择某个版本
+
+2. **归档当前版本**
+   - 将当前状态再次归档到 `file_histories`
+
+3. **恢复旧版本**
+   - 从 `file_histories` 获取旧版本的 storage_id, file_size
+   - 更新 `user_files`
+   - version + 1 (确保版本号递增)
+
+**SQL 示例：**
+```sql
+-- 1. 获取选中的历史版本
+SELECT storage_id, file_size FROM file_histories WHERE id = ?;
+
+-- 2. 归档当前
+INSERT INTO file_histories ... (同上)
+
+-- 3. 覆盖回 user_files
+UPDATE user_files
+SET storage_id = ?, file_size = ?, version = version + 1
+WHERE id = ?;
+```
+
+---
+
 ## 3. 文件分享流程
 
 ### 3.1 创建分享链接流程
