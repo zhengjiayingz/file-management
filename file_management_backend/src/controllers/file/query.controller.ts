@@ -264,6 +264,13 @@ export const downloadFile = async (req: AuthRequest, res: Response): Promise<voi
     if (mimeMap[ext]) {
       contentType = mimeMap[ext];
     }
+    
+    // 如果是文本文件预览，强制指定 utf-8 编码，防止中文乱码
+    if (isPreview && (contentType.startsWith('text/') || ext === '.txt' || ext === '.md' || ext === '.json' || ext === '.js' || ext === '.css' || ext === '.html')) {
+        if (!contentType.includes('charset')) {
+            contentType += '; charset=utf-8';
+        }
+    }
 
     res.setHeader('Content-Disposition', `${disposition}; filename="${encodeURIComponent(userFile.fileName)}"`);
     res.setHeader('Content-Type', contentType);

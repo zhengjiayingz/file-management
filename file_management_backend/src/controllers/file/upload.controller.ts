@@ -4,7 +4,10 @@ import fs from 'fs';
 import prisma from '../../lib/prisma.js';
 import { AuthRequest } from '../../types/index.js';
 import { calculateFileHash, ensureDirectoryExists } from '../../utils/file.utils.js';
+import { authService } from '../../services/auth.service.js';
 import { logOperation, LogOperationType, LogResourceType } from '../../services/logger.service.js';
+// @ts-ignore
+import jschardet from 'jschardet';
 
 /**
  * 检查文件是否存在（秒传检测）
@@ -245,6 +248,27 @@ export const mergeChunks = async (req: AuthRequest, res: Response): Promise<void
       fs.writeFileSync(finalFilePath, ''); // 创建空文件
     }
 
+    // Detect encoding for text files
+    let finalMimeType = mimeType;
+    if (mimeType.startsWith('text/') || /\.(txt|md|json|csv|html|css|js|ts)$/i.test(fileName)) {
+        try {
+             // Read a chunk to detect encoding
+             const buffer = Buffer.alloc(4096);
+             const fd = fs.openSync(finalFilePath, 'r');
+             const bytesRead = fs.readSync(fd, buffer, 0, buffer.length, 0);
+             fs.closeSync(fd);
+             
+             const slice = buffer.slice(0, bytesRead);
+             const detected = jschardet.detect(slice);
+             
+             if (detected && detected.encoding && detected.confidence > 0.8) {
+                 finalMimeType = `${mimeType}; charset=${detected.encoding.toLowerCase()}`;
+             }
+        } catch (e) {
+            console.warn('Encoding detection failed:', e);
+        }
+    }
+
     // 使用事务创建文件记录
     const result = await prisma.$transaction(async (tx) => {
       // 创建物理文件记录
@@ -253,7 +277,7 @@ export const mergeChunks = async (req: AuthRequest, res: Response): Promise<void
           fileHash,
           filePath: finalFilePath,
           fileSize: BigInt(fileSize),
-          mimeType,
+          mimeType: finalMimeType,
           referenceCount: 1,
           status: 'active'
         }

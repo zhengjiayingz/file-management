@@ -421,6 +421,15 @@ const isVideoFile = (file: FileInfo) => {
     /\.(mp4|webm|ogg|mov|wmv|flv|avi|rmvb|mkv)$/i.test(file.fileName)
 }
 
+const isDocumentFile = (file: FileInfo) => {
+  const mime = file.mimeType || ''
+  const name = file.fileName.toLowerCase()
+  // 支持浏览器直接预览的类型：PDF, 文本, 图片(有些图片非image/开头), 代码文件
+  return mime.startsWith('text/') ||
+    mime === 'application/pdf' ||
+    /\.(pdf|txt|md|json|xml|html|js|css|ts)$/i.test(name)
+}
+
 // 获取文件下载链接
 const getFileDownloadUrl = (file: FileInfo) => {
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
@@ -451,6 +460,10 @@ const handleFileDoubleClick = (file: FileInfo) => {
       currentVideoTitle.value = file.fileName
       currentVideoFile.value = file
       videoPlayerVisible.value = true
+    } else if (isDocumentFile(file)) {
+      // 如果是文档，尝试新窗口预览 (PDF, text, etc)
+      const url = getFileViewUrl(file)
+      window.open(url, '_blank')
     } else {
       // 其他文件不进行默认操作，如需下载请点击下载按钮
       // downloadFile(file)
