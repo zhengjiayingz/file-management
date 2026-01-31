@@ -4,7 +4,6 @@ import fs from 'fs';
 import prisma from '../../lib/prisma.js';
 import { AuthRequest } from '../../types/index.js';
 import { calculateFileHash, ensureDirectoryExists } from '../../utils/file.utils.js';
-import { authService } from '../../services/auth.service.js';
 import { logOperation, LogOperationType, LogResourceType } from '../../services/logger.service.js';
 // @ts-ignore
 import jschardet from 'jschardet';

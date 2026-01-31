@@ -460,6 +460,20 @@ const handleFileDoubleClick = (file: FileInfo) => {
       currentVideoTitle.value = file.fileName
       currentVideoFile.value = file
       videoPlayerVisible.value = true
+    } else if (isOfficeFile(file)) {
+      // 检查是否为本地环境
+      const hostname = window.location.hostname;
+      const isLocal = hostname === 'localhost' || hostname === '127.0.0.1' || hostname.startsWith('192.168.') || hostname.startsWith('10.') || (hostname.startsWith('172.') && parseInt(hostname.split('.')[1]) >= 16 && parseInt(hostname.split('.')[1]) <= 31);
+
+      if (isLocal) {
+        ElMessage.warning('本地环境无法预览 Office 文件，请部署到公网或使用内网穿透');
+        return;
+      }
+
+      // Office 文件预览 (需要公网访问权限)
+      const url = getFileViewUrl(file)
+      const officeUrl = `https://view.officeapps.live.com/op/view.aspx?src=${encodeURIComponent(url)}`
+      window.open(officeUrl, '_blank')
     } else if (isDocumentFile(file)) {
       // 如果是文档，尝试新窗口预览 (PDF, text, etc)
       const url = getFileViewUrl(file)
@@ -469,6 +483,11 @@ const handleFileDoubleClick = (file: FileInfo) => {
       // downloadFile(file)
     }
   }
+}
+
+const isOfficeFile = (file: FileInfo) => {
+  const name = file.fileName.toLowerCase()
+  return /\.(doc|docx|xls|xlsx|ppt|pptx)$/i.test(name)
 }
 
 const handleRightClick = (event: MouseEvent, file: FileInfo) => {
