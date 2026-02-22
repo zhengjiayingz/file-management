@@ -94,11 +94,11 @@
                                     <span class="name">{{ req.senderUsername }}</span>
                                     <span class="email">请求加为好友</span>
                                 </div>
-                                <div class="action-btns">
-                                    <el-button size="small" type="success" icon="Check" circle
-                                        @click="handleRequest(req.requestId, true)" />
-                                    <el-button size="small" type="danger" icon="Close" circle
-                                        @click="handleRequest(req.requestId, false)" />
+                                <div class="action-btns" style="display: flex; gap: 8px;">
+                                    <el-button size="small" type="success"
+                                        @click="handleRequest(req.requestId, true)">同意</el-button>
+                                    <el-button size="small" type="danger" plain
+                                        @click="handleRequest(req.requestId, false)">拒绝</el-button>
                                 </div>
                             </div>
                         </div>
