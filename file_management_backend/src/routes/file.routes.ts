@@ -20,7 +20,8 @@ import {
   moveFile,
   deleteFile,
   restoreFile,
-  permanentDeleteFile
+  permanentDeleteFile,
+  saveSharedFile
 } from '../controllers/file/manage.controller.js';
 import {
   getFileVersions,
@@ -442,6 +443,34 @@ router.get('/:id/download', downloadFile);
  *         description: 重命名成功
  */
 router.put('/:id/rename', renameFile);
+
+// 保存他人分享的文件到自己的网盘
+/**
+ * @swagger
+ * /api/files/{id}/save-to-my-drive:
+ *   post:
+ *     summary: 保存分享文件到网盘
+ *     tags: [文件管理]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               parentId:
+ *                 type: integer
+ *     responses:
+ *       200:
+ *         description: 成功保存
+ */
+router.post('/:id/save-to-my-drive', saveSharedFile);
 
 // 移动文件/文件夹
 /**

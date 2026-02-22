@@ -1,5 +1,5 @@
 import express, { Router } from 'express';
-import { getProfile, updateProfile } from '../controllers/user.controller.js';
+import { getProfile, updateProfile, searchUsers } from '../controllers/user.controller.js';
 import { authenticate } from '../middleware/auth.middleware.js';
 
 const router: Router = express.Router();
@@ -55,5 +55,25 @@ router.get('/profile', getProfile);
  *               $ref: '#/components/schemas/User'
  */
 router.put('/profile', updateProfile);
+
+// 搜索用户
+/**
+ * @swagger
+ * /api/user/search:
+ *   get:
+ *     summary: 搜索用户
+ *     tags: [用户管理]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: keyword
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: 搜索结果
+ */
+router.get('/search', searchUsers);
 
 export default router;

@@ -73,6 +73,12 @@
                 </el-icon>
                 <span>管理员看板</span>
             </el-menu-item>
+            <el-menu-item index="chat" @click="openFriendPanel">
+                <el-icon>
+                    <ChatDotRound />
+                </el-icon>
+                <span>通讯录与消息</span>
+            </el-menu-item>
         </el-menu>
     </el-aside>
 </template>
@@ -80,7 +86,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { Folder, Clock, Star, Delete, List, Picture, VideoPlay, Headset, Document, Collection, Setting } from '@element-plus/icons-vue'
+import { Folder, Clock, Star, Delete, List, Picture, VideoPlay, Headset, Document, Collection, Setting, ChatDotRound } from '@element-plus/icons-vue'
 import { useI18n } from 'vue-i18n'
 import { useThemeStore } from '../../../stores/theme'
 import { useAuthStore } from '../../../stores/auth'
@@ -90,6 +96,10 @@ const route = useRoute()
 const { t } = useI18n()
 const themeStore = useThemeStore()
 const authStore = useAuthStore()
+
+const openFriendPanel = () => {
+    window.dispatchEvent(new CustomEvent('open-friend-panel'))
+}
 
 const activeMenu = computed(() => {
     const path = route.path

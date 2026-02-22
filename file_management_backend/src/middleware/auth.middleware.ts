@@ -90,7 +90,7 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
 /**
  * 可选的认证中间件（不强制要求登录）
  */
-export const optionalAuth = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+export const optionalAuth = async (req: AuthRequest, _res: Response, next: NextFunction): Promise<void> => {
   try {
     const authHeader = req.headers.authorization;
 

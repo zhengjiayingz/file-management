@@ -15,10 +15,10 @@ if (!fs.existsSync(uploadDir)) {
 
 // 配置存储
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
+  destination: (_req, _file, cb) => {
     cb(null, uploadDir);
   },
-  filename: (req, file, cb) => {
+  filename: (_req, file, cb) => {
     // 生成唯一文件名：时间戳-随机数-原始文件名
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
     const ext = path.extname(file.originalname);
@@ -46,8 +46,8 @@ const fileFilter = (req: Request, file: Express.Multer.File, cb: multer.FileFilt
   } else {
     // 特殊处理 rmvb mimeType 可能不标准的情况
     if (path.extname(file.originalname).toLowerCase() === '.rmvb') {
-        cb(null, true);
-        return;
+      cb(null, true);
+      return;
     }
     cb(new Error('不支持的文件类型'));
   }

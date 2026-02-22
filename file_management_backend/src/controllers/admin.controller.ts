@@ -2,7 +2,7 @@ import { Response } from 'express';
 import prisma from '../lib/prisma.js';
 import { AuthRequest } from '../types/index.js';
 
-export const getDashboardStats = async (req: AuthRequest, res: Response): Promise<void> => {
+export const getDashboardStats = async (_req: AuthRequest, res: Response): Promise<void> => {
     try {
         // 1. 用户统计
         const totalUsers = await prisma.user.count();
@@ -67,16 +67,8 @@ export const getDashboardStats = async (req: AuthRequest, res: Response): Promis
         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
         // 按天统计操作数量
-        const operationStats = await prisma.operationLog.groupBy({
-            by: ['createdAt', 'operationType'],
-            where: {
-                createdAt: {
-                    gte: sevenDaysAgo
-                }
-            },
-            // 注意：Prisma groupBy 对日期支持有限，通常需要 raw query 或者在应用层处理
-            // 这里为了简化，我们先取简单的总数，或者改用 distinct count
-        });
+        // 注意：Prisma groupBy 对日期支持有限，通常需要 raw query 或者在应用层处理
+        // 这里为了简化，我们先取简单的总数，或者改用 distinct count
 
         // 简单起见，我们仅返回最近的操作日志列表供前端展示趋势，或者只统计总量
         // 更好的方式是用 raw query 按天截断，这里先用 total count 替代

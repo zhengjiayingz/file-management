@@ -1,9 +1,9 @@
 import request from '../utils/request'
-import type { 
-  FileItem, 
-  CheckFileExistsResponse, 
-  CreateFolderParams, 
-  RenameFileParams, 
+import type {
+  FileItem,
+  CheckFileExistsResponse,
+  CreateFolderParams,
+  RenameFileParams,
   MoveFileParams,
   FileQueryParams
 } from '../types/file'
@@ -103,19 +103,19 @@ export const fileApiService = {
 
   // 检查文件名是否存在
   async checkFileName(fileName: string, parentId?: number): Promise<{ exists: boolean }> {
-      const res = await request.post<any>('/files/check-name', { fileName, parentId });
-      return res.data;
+    const res = await request.post<any>('/files/check-name', { fileName, parentId });
+    return res.data;
   },
 
   // 获取文件历史版本
   async getFileVersions(id: number): Promise<any[]> {
-      const res = await request.get<any>(`/files/${id}/versions`);
-      return res.data.data;
+    const res = await request.get<any>(`/files/${id}/versions`);
+    return res.data.data;
   },
 
   // 回滚版本
   async rollbackVersion(id: number, versionId: number): Promise<void> {
-      await request.post(`/files/${id}/versions/${versionId}/rollback`);
+    await request.post(`/files/${id}/versions/${versionId}/rollback`);
   },
 
   // 简单文件上传
@@ -198,6 +198,12 @@ export const fileApiService = {
   async moveFile(id: number, parentId?: number): Promise<void> {
     const data = { parentId: parentId || null }
     await request.put(`/files/${id}/move`, data)
+  },
+
+  // 保存他人分享的文件到我的网盘
+  async saveSharedFileToMyDrive(id: number, parentId?: number): Promise<FileItem> {
+    const res = await request.post<any>(`/files/${id}/save-to-my-drive`, { parentId: parentId || null })
+    return res.data.data
   }
 }
 

@@ -404,8 +404,8 @@ export const restoreFile = async (req: AuthRequest, res: Response): Promise<void
 
     res.json({
       success: true,
-      message: restoreToRoot 
-        ? '原文件夹不存在或已删除，文件已还原到根目录' 
+      message: restoreToRoot
+        ? '原文件夹不存在或已删除，文件已还原到根目录'
         : '文件已还原'
     });
   } catch (error) {
@@ -480,7 +480,7 @@ export const permanentDeleteFile = async (req: AuthRequest, res: Response): Prom
 
         // 3. 如果引用计数<=0，标记物理删除
         if (updatedStorage.referenceCount <= 0) {
-           await tx.fileStorage.update({
+          await tx.fileStorage.update({
             where: { id: storageId },
             data: {
               status: 'pending_delete',
@@ -512,5 +512,140 @@ export const permanentDeleteFile = async (req: AuthRequest, res: Response): Prom
   } catch (error) {
     console.error('Permanent delete file error:', error);
     res.status(500).json({ success: false, message: '彻底删除失败' });
+  }
+};
+
+/**
+ * 保存分享的文件到自己的网盘
+ */
+export const saveSharedFile = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ success: false, message: '未认证' });
+      return;
+    }
+
+    const sourceFileId = parseInt(req.params.id);
+    const { parentId } = req.body;
+
+    if (isNaN(sourceFileId)) {
+      res.status(400).json({ success: false, message: '无效的文件ID' });
+      return;
+    }
+
+    // 查找源文件资料
+    const sourceFile = await prisma.userFile.findFirst({
+      where: {
+        id: sourceFileId,
+        isDeleted: false,
+        fileType: 'file'
+      },
+      include: {
+        storage: true
+      }
+    });
+
+    if (!sourceFile || !sourceFile.storageId || !sourceFile.storage) {
+      res.status(404).json({ success: false, message: '共享的原文件不存在或已删除' });
+      return;
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id }
+    });
+
+    if (!user) {
+      res.status(404).json({ success: false, message: '当前用户不存在' });
+      return;
+    }
+
+    const fileSize = sourceFile.storage.fileSize;
+    if (user.storageUsed + fileSize > user.storageQuota) {
+      res.status(400).json({ success: false, message: '您的存储空间不足，无法保存' });
+      return;
+    }
+
+    if (parentId) {
+      const targetFolder = await prisma.userFile.findFirst({
+        where: {
+          id: parseInt(parentId),
+          userId: req.user.id,
+          fileType: 'folder',
+          isDeleted: false
+        }
+      });
+      if (!targetFolder) {
+        res.status(404).json({ success: false, message: '目标存放文件夹不存在' });
+        return;
+      }
+    }
+
+    let finalFileName = sourceFile.fileName;
+    let counter = 1;
+    let baseName = finalFileName;
+    let ext = '';
+    const lastDotIdx = finalFileName.lastIndexOf('.');
+    if (lastDotIdx !== -1) {
+      baseName = finalFileName.substring(0, lastDotIdx);
+      ext = finalFileName.substring(lastDotIdx);
+    }
+
+    // 检查是否有重名文件并加后缀
+    while (true) {
+      const exists = await prisma.userFile.findFirst({
+        where: {
+          userId: req.user.id,
+          parentId: parentId ? parseInt(parentId) : null,
+          fileName: finalFileName,
+          isDeleted: false
+        }
+      });
+      if (!exists) break;
+      finalFileName = `${baseName}(${counter})${ext}`;
+      counter++;
+    }
+
+    const newFile = await prisma.$transaction(async (tx) => {
+      // 更新用户容量
+      await tx.user.update({
+        where: { id: req.user!.id },
+        data: { storageUsed: { increment: fileSize } }
+      });
+
+      // 更新源文件存储引用
+      await tx.fileStorage.update({
+        where: { id: sourceFile.storageId! },
+        data: { referenceCount: { increment: 1 } }
+      });
+
+      // 创建新的UserFile指向同一个资源
+      return await tx.userFile.create({
+        data: {
+          userId: req.user!.id,
+          storageId: sourceFile.storageId,
+          parentId: parentId ? parseInt(parentId) : null,
+          fileName: finalFileName,
+          fileType: 'file'
+        }
+      });
+    });
+
+    await logOperation({
+      req,
+      userId: req.user.id,
+      operationType: LogOperationType.UPLOAD,
+      resourceType: LogResourceType.FILE,
+      resourceId: newFile.id,
+      description: `Saved shared file to personal drive: ${finalFileName}`
+    });
+
+    res.json({
+      success: true,
+      message: '成功存入您的网盘',
+      data: newFile
+    });
+  } catch (error) {
+    console.error('Save shared file error:', error);
+    res.status(500).json({ success: false, message: '保存文件时服务器发生错误' });
   }
 };

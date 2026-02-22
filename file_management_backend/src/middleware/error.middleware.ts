@@ -3,7 +3,7 @@ import { Request, Response, NextFunction } from 'express';
 /**
  * 全局错误处理中间件
  */
-export const errorHandler = (err: any, req: Request, res: Response, next: NextFunction): void => {
+export const errorHandler = (err: any, _req: Request, res: Response, _next: NextFunction): void => {
   console.error('Error:', err);
 
   // Multer 文件上传错误

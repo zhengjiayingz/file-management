@@ -2,6 +2,7 @@
   <el-config-provider :locale="elementPlusLocale">
     <div id="app">
       <router-view />
+      <FriendPanel />
     </div>
   </el-config-provider>
 </template>
@@ -12,9 +13,16 @@ import { useI18n } from 'vue-i18n'
 import { ElConfigProvider } from 'element-plus'
 import { elementPlusLocaleMap } from './locales'
 import { useThemeStore } from './stores/theme'
+import { useAuthStore } from './stores/auth'
+import { useRoute } from 'vue-router'
+import FriendPanel from './components/FriendPanel.vue'
 
 const { locale } = useI18n()
 const themeStore = useThemeStore()
+const authStore = useAuthStore()
+const route = useRoute()
+
+const isLoginPage = computed(() => route.path === '/login')
 
 // 根据当前语言动态获取 Element Plus 语言包
 const elementPlusLocale = computed(() => {
