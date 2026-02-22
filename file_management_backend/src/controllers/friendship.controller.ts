@@ -168,7 +168,7 @@ export const getFriendsList = async (req: AuthRequest, res: Response): Promise<a
             return res.status(401).json({ message: '未授权' });
         }
 
-        const friends = await prisma.friendship.findMany({
+        const friendships = await prisma.friendship.findMany({
             where: {
                 OR: [
                     { userId, status: FriendshipStatus.accepted },
@@ -187,17 +187,26 @@ export const getFriendsList = async (req: AuthRequest, res: Response): Promise<a
         });
 
         // 格式化输出，提取出真正的好友信息
-        const formattedFriends = friends.map((f) => {
+        const friendMap = new Map();
+
+        friendships.forEach((f) => {
             const isSender = f.userId === userId;
             const friendInfo = isSender ? f.friend : f.user;
-            return {
-                friendshipId: f.id,
-                friendId: friendInfo.id,
-                username: friendInfo.username,
-                email: friendInfo.email,
-                createdAt: f.createdAt,
-            };
+
+            // 使用 friendId 作为 Key 进行去重，防止同一对好友出现多条记录（如互相申请）
+            if (!friendMap.has(friendInfo.id)) {
+                friendMap.set(friendInfo.id, {
+                    friendshipId: f.id,
+                    friendId: friendInfo.id,
+                    username: friendInfo.username,
+                    email: friendInfo.email,
+                    createdAt: f.createdAt,
+                    updatedAt: f.updatedAt
+                });
+            }
         });
+
+        const formattedFriends = Array.from(friendMap.values());
 
         return res.json(formattedFriends);
     } catch (error: any) {

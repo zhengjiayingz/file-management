@@ -328,14 +328,16 @@ const loadData = async () => {
 const fetchFriends = async () => {
     try {
         const res = await friendshipApi.getFriends()
-        friends.value = res.data || res // 依赖具体的axios拦截器返回结构
+        const payload = res.data || res
+        friends.value = Array.isArray(payload) ? payload : (payload.data || [])
     } catch (error) { }
 }
 
 const fetchPendingRequests = async () => {
     try {
         const res = await friendshipApi.getPendingRequests()
-        pendingRequests.value = res.data || res
+        const payload = res.data || res
+        pendingRequests.value = Array.isArray(payload) ? payload : (payload.data || [])
     } catch (error) { }
 }
 
@@ -393,8 +395,8 @@ const handleRequest = async (requestId: number, accept: boolean) => {
             await friendshipApi.rejectRequest(requestId)
             ElMessage.success('已拒绝')
         }
-        fetchPendingRequests()
-        fetchFriends()
+        await fetchPendingRequests()
+        await fetchFriends()
     } catch (error: any) {
         ElMessage.error(error.response?.data?.message || '操作失败')
     }
