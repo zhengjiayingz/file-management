@@ -1,9 +1,9 @@
 
-import express from 'express';
+import express, { Router } from 'express';
 import { getOperationLogs } from '../controllers/log.controller.js';
 import { authenticate } from '../middleware/auth.middleware.js';
 
-const router = express.Router();
+const router: Router = express.Router();
 
 // 所有日志路由都需要认证
 router.use(authenticate);

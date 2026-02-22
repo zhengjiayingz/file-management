@@ -4,11 +4,12 @@ import { Request } from 'express';
 export interface JwtPayload {
   id: number;
   username: string;
+  role: string;
 }
 
 // 扩展 Express Request 类型
 export interface AuthRequest extends Request {
-  user?: JwtPayload;
+  user?: JwtPayload & { status?: string };
 }
 
 // 登录请求体

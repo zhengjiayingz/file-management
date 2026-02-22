@@ -1,8 +1,8 @@
-import express from 'express';
+import express, { Router } from 'express';
 import { getUserPreference, updateUserPreference } from '../controllers/user-preference.controller.js';
 import { authenticate } from '../middleware/auth.middleware.js';
 
-const router = express.Router();
+const router: Router = express.Router();
 
 // 所有路由都需要认证
 router.use(authenticate);

@@ -27,6 +27,12 @@ const router = createRouter({
       name: 'logs',
       component: () => import('../views/logs/index.vue'),
       meta: { requiresAuth: true }
+    },
+    {
+      path: '/admin',
+      name: 'admin',
+      component: () => import('../views/admin/index.vue'),
+      meta: { requiresAuth: true, requiresAdmin: true }
     }
   ]
 })
@@ -34,16 +40,15 @@ const router = createRouter({
 // 路由守卫
 router.beforeEach((to, from, next) => {
   const authStore = useAuthStore()
-  
+
   console.log('🟢 [路由守卫] 从', from.path, '到', to.path)
-  console.log('🟢 [路由守卫] requiresAuth:', to.meta.requiresAuth)
-  console.log('🟢 [路由守卫] isLoggedIn:', authStore.isLoggedIn)
-  console.log('🟢 [路由守卫] token:', authStore.token)
-  console.log('🟢 [路由守卫] user:', authStore.user)
-  
+
   if (to.meta.requiresAuth && !authStore.isLoggedIn) {
     console.log('🔴 [路由守卫] 未登录,重定向到登录页')
     next('/login')
+  } else if (to.meta.requiresAdmin && authStore.user?.role !== 'admin') {
+    console.log('🔴 [路由守卫] 非管理员, 拒绝访问')
+    next('/')
   } else {
     console.log('✅ [路由守卫] 允许访问')
     next()

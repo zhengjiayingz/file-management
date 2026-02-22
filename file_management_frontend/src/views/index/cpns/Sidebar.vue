@@ -67,6 +67,12 @@
                 </el-icon>
                 <span>{{ t('sidebar.logs') }}</span>
             </el-menu-item>
+            <el-menu-item index="admin" v-if="authStore.user?.role === 'admin'" @click="router.push('/admin')">
+                <el-icon>
+                    <Setting />
+                </el-icon>
+                <span>管理员看板</span>
+            </el-menu-item>
         </el-menu>
     </el-aside>
 </template>
@@ -74,18 +80,21 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { Folder, Clock, Star, Delete, List, Picture, VideoPlay, Headset, Document, Collection } from '@element-plus/icons-vue'
+import { Folder, Clock, Star, Delete, List, Picture, VideoPlay, Headset, Document, Collection, Setting } from '@element-plus/icons-vue'
 import { useI18n } from 'vue-i18n'
 import { useThemeStore } from '../../../stores/theme'
+import { useAuthStore } from '../../../stores/auth'
 
 const router = useRouter()
 const route = useRoute()
 const { t } = useI18n()
 const themeStore = useThemeStore()
+const authStore = useAuthStore()
 
 const activeMenu = computed(() => {
     const path = route.path
     const query = route.query
+    if (path.startsWith('/admin')) return 'admin'
     if (path.startsWith('/recycle-bin')) return '4'
     if (path.startsWith('/logs')) return '5'
     if (path === '/' && query.type) {

@@ -10,6 +10,7 @@ import fileRoutes from './routes/file.routes.js';
 import userRoutes from './routes/user.routes.js';
 import logRoutes from './routes/log.routes.js';
 import userPreferenceRoutes from './routes/user-preference.routes.js';
+import adminRoutes from './routes/admin.routes.js';
 
 // 导入中间件
 import { errorHandler } from './middleware/error.middleware.js';
@@ -62,9 +63,10 @@ setupSwagger(app);
 // API 路由
 app.use('/api/auth', authRoutes);
 app.use('/api/files', fileRoutes);
-app.use('/api/users', userRoutes);
-app.use('/api/logs', logRoutes);
+app.use('/api/user', userRoutes);
 app.use('/api/user-preferences', userPreferenceRoutes);
+app.use('/api/logs', logRoutes);
+app.use('/api/admin', adminRoutes);
 
 // 404 处理
 app.use(notFound);
@@ -79,7 +81,7 @@ import { initCleanupJob } from './jobs/cleanup.job.js';
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`🚀 Server is running on port ${PORT}`);
-  
+
   // 初始化定时任务
   initCleanupJob();
 

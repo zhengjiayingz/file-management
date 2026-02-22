@@ -602,6 +602,49 @@ router.get('/:id/versions', getFileVersions);
 router.post('/:id/versions/:versionId/rollback', rollbackVersion);
 
 // 下载/预览历史版本
+/**
+ * @swagger
+ * /api/files/{id}/versions/{versionId}/download:
+ *   get:
+ *     summary: 下载或预览历史版本文件
+ *     description: 获取指定历史版本的物理文件流。支持通过URL query参数传递token。
+ *     tags: [文件管理]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: 用户文件ID (UserFile ID)
+ *       - in: path
+ *         name: versionId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: 历史记录ID (FileHistory ID)
+ *       - in: query
+ *         name: preview
+ *         schema:
+ *           type: boolean
+ *         description: 是否为预览模式 (true则inline显示，false下载，默认为false)
+ *       - in: query
+ *         name: token
+ *         schema:
+ *           type: string
+ *         description: 访问令牌 (可选，当无法使用Header时使用，如直接在浏览器打开)
+ *     responses:
+ *       200:
+ *         description: 文件流
+ *         content:
+ *           application/octet-stream:
+ *             schema:
+ *               type: string
+ *               format: binary
+ *       404:
+ *         description: 文件或版本不存在
+ */
 router.get('/:id/versions/:versionId/download', downloadVersion);
 
 export default router;
