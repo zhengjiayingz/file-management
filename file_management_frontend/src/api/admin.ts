@@ -1,4 +1,4 @@
-import request from '../utils/request';
+import request from '@utils/request';
 
 // 仪表盘统计数据接口
 export interface DashboardStats {

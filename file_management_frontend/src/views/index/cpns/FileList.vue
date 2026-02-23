@@ -73,7 +73,7 @@
 
                     <div v-if="viewMode === 'list'" class="file-meta-row">
                         <div class="file-size">{{ file.fileType === 'folder' ? '-' : formatFileSize(file.fileSize || 0)
-                            }}
+                        }}
                         </div>
                         <div class="file-date">{{ formatDate(file.updatedAt) }}</div>
                         <div class="file-actions-col">
@@ -82,7 +82,7 @@
                             <el-button link type="primary" @click.stop="emit('rename', file)">{{
                                 t('fileList.action.rename') }}</el-button>
                             <el-button link type="primary" @click.stop="emit('move', file)">{{ t('fileList.action.move')
-                            }}</el-button>
+                                }}</el-button>
                             <el-button link type="primary" @click.stop="emit('history', file)">{{
                                 t('fileList.action.history') || '历史' }}</el-button>
                             <el-button link type="danger" @click.stop="emit('delete', file)">{{
@@ -105,13 +105,13 @@
                         <template #dropdown>
                             <el-dropdown-menu>
                                 <el-dropdown-item command="download">{{ t('fileList.action.download') || '下载'
-                                    }}</el-dropdown-item>
+                                }}</el-dropdown-item>
                                 <el-dropdown-item command="history">{{ t('fileList.action.history') || '历史版本'
-                                    }}</el-dropdown-item>
+                                }}</el-dropdown-item>
                                 <el-dropdown-item command="rename">{{ t('fileList.action.rename') }}</el-dropdown-item>
                                 <el-dropdown-item command="move">{{ t('fileList.action.move') }}</el-dropdown-item>
                                 <el-dropdown-item command="delete" style="color: red">{{ t('fileList.action.delete')
-                                    }}</el-dropdown-item>
+                                }}</el-dropdown-item>
                             </el-dropdown-menu>
                         </template>
                     </el-dropdown>
@@ -138,9 +138,9 @@ import {
     CaretTop, CaretBottom
 } from '@element-plus/icons-vue'
 import { useI18n } from 'vue-i18n'
-import { formatFileSize } from '../../../utils/fileUpload'
-import type { FileItem as FileInfo } from '../../../types/file'
-import { useAuthStore } from '../../../stores/auth'
+import { formatFileSize } from '@utils/fileUpload'
+import type { FileItem as FileInfo } from '@typing/file'
+import { useAuthStore } from '@stores/auth'
 import dayjs from 'dayjs'
 
 const { t } = useI18n()

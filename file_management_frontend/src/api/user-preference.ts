@@ -1,5 +1,5 @@
-import request from '../utils/request'
-import type { UserPreference, UpdatePreferenceParams } from '../types/user-preference'
+import request from '@utils/request'
+import type { UserPreference, UpdatePreferenceParams } from '@typing/user-preference'
 
 // 通用API响应接口
 interface ApiResponse<T> {

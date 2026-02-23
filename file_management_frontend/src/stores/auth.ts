@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { User, LoginResult } from '../types/user'
+import type { User, LoginResult } from '@typing/user'
 
 export const useAuthStore = defineStore('auth', () => {
   // 状态
@@ -16,7 +16,7 @@ export const useAuthStore = defineStore('auth', () => {
     const savedUser = localStorage.getItem('user')
     const savedToken = localStorage.getItem('token')
     const savedRefreshToken = localStorage.getItem('refreshToken')
-    
+
     if (savedUser && savedToken && savedRefreshToken) {
       try {
         user.value = JSON.parse(savedUser)
@@ -36,12 +36,12 @@ export const useAuthStore = defineStore('auth', () => {
     user.value = loginData.user
     token.value = loginData.token
     refreshToken.value = loginData.refreshToken
-    
+
     // 保存到 localStorage
     localStorage.setItem('user', JSON.stringify(loginData.user))
     localStorage.setItem('token', loginData.token)
     localStorage.setItem('refreshToken', loginData.refreshToken)
-    
+
     // 登录后加载用户配置
     await loadUserPreferences()
   }
@@ -52,11 +52,11 @@ export const useAuthStore = defineStore('auth', () => {
       const { userPreferenceApi } = await import('../api/user-preference')
       const { default: i18n } = await import('../locales')
       const { useThemeStore } = await import('./theme')
-      
+
       const preferences = await userPreferenceApi.getPreference()
-      
+
       const themeStore = useThemeStore()
-      
+
       // 应用语言设置
       if (preferences.locale && preferences.locale !== 'auto') {
         i18n.global.locale.value = preferences.locale as any
@@ -73,12 +73,12 @@ export const useAuthStore = defineStore('auth', () => {
         i18n.global.locale.value = defaultLocale as any
         localStorage.setItem('locale', defaultLocale)
       }
-      
+
       // 应用主题设置
       if (preferences.theme) {
         themeStore.setThemeMode(preferences.theme as any)
       }
-      
+
     } catch (error) {
       console.error('❌ 加载用户配置失败:', error)
       // 加载失败时使用默认设置（浏览器语言 + auto 主题）
@@ -87,18 +87,18 @@ export const useAuthStore = defineStore('auth', () => {
 
   // 退出登录
   const logout = () => {
-    
+
     user.value = null
     token.value = ''
     refreshToken.value = ''
-    
+
     // 清除 localStorage（包括语言和主题设置）
     localStorage.removeItem('user')
     localStorage.removeItem('token')
     localStorage.removeItem('refreshToken')
     localStorage.removeItem('locale')  // 清除语言设置
     localStorage.removeItem('themeMode')  // 清除主题设置
-    
+
     // 注意：不在这里刷新页面，由调用者处理路由跳转
     // 当跳转到登录页时，i18n 会自动检测到没有 token，使用浏览器语言
   }

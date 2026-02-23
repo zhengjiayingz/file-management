@@ -1,6 +1,6 @@
 
-import request from '../utils/request'
-import type { LogQueryParams, LogListResponse } from '../types/log'
+import request from '@utils/request'
+import type { LogQueryParams, LogListResponse } from '@typing/log'
 
 export const logApi = {
   async getLogs(params: LogQueryParams): Promise<LogListResponse> {

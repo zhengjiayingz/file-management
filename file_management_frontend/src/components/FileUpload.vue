@@ -97,7 +97,7 @@ import { ref, computed } from 'vue'
 import { ElMessage, ElMessageBox, type Action } from 'element-plus'
 import { Upload, Document, Loading } from '@element-plus/icons-vue'
 import { useI18n } from 'vue-i18n'
-import fileApiService from '../api/file'
+import fileApiService from '@api/file'
 import {
   validateFile,
   calculateFileHash,
@@ -106,7 +106,7 @@ import {
   formatFileSize,
   CHUNK_SIZE,
   SUPPORTED_FILE_TYPES
-} from '../utils/fileUpload'
+} from '@utils/fileUpload'
 
 const { t } = useI18n()
 

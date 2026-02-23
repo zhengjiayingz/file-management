@@ -76,7 +76,7 @@
                             <el-dropdown-item command="profile">{{ t('common.profile') || '个人信息' }}</el-dropdown-item>
                             <el-dropdown-item command="settings">{{ t('common.settings') || '设置' }}</el-dropdown-item>
                             <el-dropdown-item divided command="logout">{{ t('common.logout') || '退出登录'
-                                }}</el-dropdown-item>
+                            }}</el-dropdown-item>
                         </el-dropdown-menu>
                     </template>
                 </el-dropdown>
@@ -89,12 +89,12 @@
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { User, ArrowDown, Sunny, Moon, Monitor } from '@element-plus/icons-vue'
-import { useAuthStore } from '../stores/auth'
-import { useThemeStore } from '../stores/theme'
-import { authApi } from '../api/auth'
+import { useAuthStore } from '@stores/auth'
+import { useThemeStore } from '@stores/theme'
+import { authApi } from '@api/auth'
 import { useI18n } from 'vue-i18n'
-import type { ThemeMode } from '../stores/theme'
-import userPreferenceApi from '../api/user-preference'
+import type { ThemeMode } from '@stores/theme'
+import userPreferenceApi from '@api/user-preference'
 
 const router = useRouter()
 const authStore = useAuthStore()

@@ -118,8 +118,8 @@ import { ref, onMounted, onUnmounted, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import * as echarts from 'echarts';
-import { adminApi, type DashboardStats } from '../../api/admin';
-import { formatFileSize } from '../../utils/fileUpload'; // 假设有一个公共的文件大小格式化函数
+import { adminApi, type DashboardStats } from '@api/admin';
+import { formatFileSize } from '@utils/fileUpload'; // 假设有一个公共的文件大小格式化函数
 
 const router = useRouter();
 const loading = ref(false);

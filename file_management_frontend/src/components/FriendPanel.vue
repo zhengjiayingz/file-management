@@ -236,12 +236,12 @@
 import { ref, watch, onMounted, onUnmounted, nextTick, computed } from 'vue'
 import { Message, Bell, ArrowRight, Search, Check, Close, ArrowLeft, Document, Folder, FolderOpened } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import { friendshipApi } from '../api/friendship'
-import { messageApi } from '../api/message'
-import { userApi } from '../api/user'
-import { useAuthStore } from '../stores/auth'
-import fileApiService from '../api/file'
-import type { FileItem } from '../types/file'
+import { friendshipApi } from '@api/friendship'
+import { messageApi } from '@api/message'
+import { userApi } from '@api/user'
+import { useAuthStore } from '@stores/auth'
+import fileApiService from '@api/file'
+import type { FileItem } from '@typing/file'
 
 const authStore = useAuthStore()
 const myUserId = computed(() => authStore.user?.id)

@@ -32,8 +32,8 @@ import { ref, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Folder } from '@element-plus/icons-vue'
 import { useI18n } from 'vue-i18n'
-import fileApiService from '../api/file'
-import type { FileItem } from '../types/file'
+import fileApiService from '@api/file'
+import type { FileItem } from '@typing/file'
 
 const props = defineProps<{
     modelValue: boolean

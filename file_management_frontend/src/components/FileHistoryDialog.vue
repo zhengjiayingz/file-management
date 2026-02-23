@@ -48,10 +48,10 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import fileApiService from '../api/file'
-import { formatFileSize } from '../utils/fileUpload'
+import fileApiService from '@api/file'
+import { formatFileSize } from '@utils/fileUpload'
 import dayjs from 'dayjs'
-import { useAuthStore } from '../stores/auth'
+import { useAuthStore } from '@stores/auth'
 
 const authStore = useAuthStore()
 

@@ -93,13 +93,13 @@ import {
   User, ArrowDown, Folder, Search,
   Clock, Star, Delete, List, Grid, MoreFilled, Document
 } from '@element-plus/icons-vue'
-import { useAuthStore } from '../../stores/auth'
-import { authApi } from '../../api/auth'
-import fileApiService from '../../api/file'
-import type { FileItem as FileInfo } from '../../types/file'
-import { formatFileSize } from '../../utils/fileUpload'
-import Sidebar from '../index/cpns/Sidebar.vue'
-import GlobalHeader from '../../components/GlobalHeader.vue'
+import { useAuthStore } from '@stores/auth'
+import { authApi } from '@api/auth'
+import fileApiService from '@api/file'
+import type { FileItem as FileInfo } from '@typing/file'
+import { formatFileSize } from '@utils/fileUpload'
+import Sidebar from '@views/index/cpns/Sidebar.vue'
+import GlobalHeader from '@components/GlobalHeader.vue'
 import { useI18n } from 'vue-i18n'
 
 const router = useRouter()

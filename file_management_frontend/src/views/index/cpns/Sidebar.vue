@@ -88,8 +88,8 @@ import { computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { Folder, Clock, Star, Delete, List, Picture, VideoPlay, Headset, Document, Collection, Setting, ChatDotRound } from '@element-plus/icons-vue'
 import { useI18n } from 'vue-i18n'
-import { useThemeStore } from '../../../stores/theme'
-import { useAuthStore } from '../../../stores/auth'
+import { useThemeStore } from '@stores/theme'
+import { useAuthStore } from '@stores/auth'
 
 const router = useRouter()
 const route = useRoute()

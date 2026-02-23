@@ -36,8 +36,8 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { User, Lock, Message } from '@element-plus/icons-vue'
-import { useAuthStore } from '../../stores/auth'
-import { authApi } from '../../api/auth'
+import { useAuthStore } from '@stores/auth'
+import { authApi } from '@api/auth'
 import { useI18n } from 'vue-i18n'
 
 const router = useRouter()

@@ -1,4 +1,4 @@
-import request from '../utils/request'
+import request from '@utils/request'
 import type {
   FileItem,
   CheckFileExistsResponse,
@@ -6,7 +6,7 @@ import type {
   RenameFileParams,
   MoveFileParams,
   FileQueryParams
-} from '../types/file'
+} from '@typing/file'
 
 // 上传进度回调类型
 export interface UploadProgress {
