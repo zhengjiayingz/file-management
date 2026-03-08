@@ -12,7 +12,8 @@ import {
   getFileById,
   downloadFile,
   getFileThumbnail,
-  checkFileName
+  checkFileName,
+  previewFile
 } from '../controllers/file/query.controller.js';
 import {
   createFolder,
@@ -414,6 +415,45 @@ router.get('/:id/thumbnail', getFileThumbnail);
  *               format: binary
  */
 router.get('/:id/download', downloadFile);
+
+// Office 文档预览（转换为 PDF）
+/**
+ * @swagger
+ * /api/files/{id}/preview:
+ *   get:
+ *     summary: 预览 Office 文档（转换为 PDF）
+ *     description: 将 Office 文件（doc/docx/xls/xlsx/ppt/pptx）转换为 PDF 后返回。转换结果会被缓存。
+ *     tags: [文件管理]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: 文件ID
+ *       - in: query
+ *         name: token
+ *         schema:
+ *           type: string
+ *         description: 访问令牌（当无法使用 Header 时，如在 iframe 中使用）
+ *     responses:
+ *       200:
+ *         description: 返回 PDF 文件流
+ *         content:
+ *           application/pdf:
+ *             schema:
+ *               type: string
+ *               format: binary
+ *       400:
+ *         description: 不支持的文件类型
+ *       404:
+ *         description: 文件不存在
+ *       500:
+ *         description: 转换失败或 LibreOffice 未安装
+ */
+router.get('/:id/preview', previewFile);
 
 // 重命名文件/文件夹
 /**

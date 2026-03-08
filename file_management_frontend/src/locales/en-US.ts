@@ -165,5 +165,25 @@ export default {
       operationTime: 'Operation Time',
       unknown: 'Unknown'
     }
+  },
+  file: {
+    move: {
+      title: 'Move to',
+      selectFolderWarning: 'Please select a target folder',
+      success: 'Moved successfully',
+      failed: 'Move failed'
+    }
+  },
+  preview: {
+    title: 'Document Preview',
+    downloading: 'Loading document...',
+    converting: 'Converting document, please wait...',
+    convertingHint: 'First preview requires PDF conversion, cache will be used afterwards',
+    error: 'Document preview failed',
+    loadFailed: 'Unable to load preview content',
+    retry: 'Retry',
+    downloadOriginal: 'Download original file',
+    fullscreen: 'Fullscreen',
+    exitFullscreen: 'Exit fullscreen'
   }
 }

@@ -148,6 +148,10 @@
     <!-- 历史版本弹窗 -->
     <FileHistoryDialog v-model="showHistoryDialog" :file-id="historyFile?.id"
       @rollback-success="handleHistorySuccess" />
+
+    <!-- Office 文档预览弹窗 -->
+    <OfficePreviewDialog v-model="officePreviewVisible" :file-id="currentOfficeFile?.id"
+      :file-name="currentOfficeFile?.fileName" @download="currentOfficeFile && downloadFile(currentOfficeFile)" />
   </div>
 </template>
 
@@ -169,6 +173,7 @@ import ImageCropperDialog from '@components/ImageCropperDialog.vue'
 import VideoPlayerDialog from '@components/VideoPlayerDialog.vue'
 import MoveDialog from '@components/MoveDialog.vue'
 import FileHistoryDialog from '@components/FileHistoryDialog.vue'
+import OfficePreviewDialog from '@components/OfficePreviewDialog.vue'
 import CustomImageViewer from '@components/CustomImageViewer.vue'
 import Sidebar from './cpns/Sidebar.vue'
 import FileList from './cpns/FileList.vue'
@@ -205,6 +210,10 @@ const fileUploadRef = ref()
 
 const showHistoryDialog = ref(false)
 const historyFile = ref<FileInfo | null>(null)
+
+// Office 文档预览相关
+const officePreviewVisible = ref(false)
+const currentOfficeFile = ref<FileInfo | null>(null)
 
 // 视频播放相关
 const videoPlayerVisible = ref(false)
@@ -468,20 +477,13 @@ const handleFileDoubleClick = (file: FileInfo) => {
       currentVideoTitle.value = file.fileName
       currentVideoFile.value = file
       videoPlayerVisible.value = true
+    } else if (isExcelFile(file)) {
+      // Excel 文件直接下载（LibreOffice 转换效果不佳）
+      downloadFile(file)
     } else if (isOfficeFile(file)) {
-      // 检查是否为本地环境
-      const hostname = window.location.hostname;
-      const isLocal = hostname === 'localhost' || hostname === '127.0.0.1' || hostname.startsWith('192.168.') || hostname.startsWith('10.') || (hostname.startsWith('172.') && parseInt(hostname.split('.')[1] || '0') >= 16 && parseInt(hostname.split('.')[1] || '0') <= 31);
-
-      if (isLocal) {
-        ElMessage.warning('本地环境无法预览 Office 文件，请部署到公网或使用内网穿透');
-        return;
-      }
-
-      // Office 文件预览 (需要公网访问权限)
-      const url = getFileViewUrl(file)
-      const officeUrl = `https://view.officeapps.live.com/op/view.aspx?src=${encodeURIComponent(url)}`
-      window.open(officeUrl, '_blank')
+      // Word/PPT 文件预览（使用后端 LibreOffice 转换为 PDF）
+      currentOfficeFile.value = file
+      officePreviewVisible.value = true
     } else if (isDocumentFile(file)) {
       // 如果是文档，尝试新窗口预览 (PDF, text, etc)
       const url = getFileViewUrl(file)
@@ -493,9 +495,14 @@ const handleFileDoubleClick = (file: FileInfo) => {
   }
 }
 
+// 判断是否为 Excel 文件（双击直接下载）
+const isExcelFile = (file: FileInfo) => {
+  return /\.(xls|xlsx)$/i.test(file.fileName)
+}
+
+// 判断是否为 Office 文件（仅 Word 和 PPT，双击预览）
 const isOfficeFile = (file: FileInfo) => {
-  const name = file.fileName.toLowerCase()
-  return /\.(doc|docx|xls|xlsx|ppt|pptx)$/i.test(name)
+  return /\.(doc|docx|ppt|pptx)$/i.test(file.fileName)
 }
 
 const handleRightClick = (event: MouseEvent, file: FileInfo) => {

@@ -160,5 +160,25 @@ export default {
       operationTime: '操作時間',
       unknown: '未知'
     }
+  },
+  file: {
+    move: {
+      title: '移動到',
+      selectFolderWarning: '請選擇目標資料夾',
+      success: '移動成功',
+      failed: '移動失敗'
+    }
+  },
+  preview: {
+    title: '文件預覽',
+    downloading: '正在載入文件...',
+    converting: '正在轉換文件，請稍候...',
+    convertingHint: '首次預覽需要轉換為 PDF，之後將使用快取',
+    error: '文件預覽失敗',
+    loadFailed: '無法載入預覽內容',
+    retry: '重試',
+    downloadOriginal: '下載原始檔案',
+    fullscreen: '全螢幕',
+    exitFullscreen: '退出全螢幕'
   }
 }

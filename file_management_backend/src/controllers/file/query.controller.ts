@@ -122,36 +122,36 @@ export const getFiles = async (req: AuthRequest, res: Response): Promise<void> =
  */
 export const checkFileName = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-     const { parentId, fileName, type = 'file' } = req.body;
-     
-     if (!fileName) {
-         res.status(400).json({ success: false, message: '文件名不能为空' });
-         return;
-     }
+    const { parentId, fileName, type = 'file' } = req.body;
 
-     if (!req.user) {
-         res.status(401).json({ success: false, message: '未认证' });
-         return;
-     }
+    if (!fileName) {
+      res.status(400).json({ success: false, message: '文件名不能为空' });
+      return;
+    }
 
-     const exists = await prisma.userFile.findFirst({
-         where: {
-             userId: req.user.id,
-             parentId: parentId ? parseInt(parentId) : null,
-             fileName: fileName,
-             isDeleted: false,
-             fileType: type as any
-         }
-     });
+    if (!req.user) {
+      res.status(401).json({ success: false, message: '未认证' });
+      return;
+    }
 
-     res.json({
-         success: true,
-         exists: !!exists
-     });
+    const exists = await prisma.userFile.findFirst({
+      where: {
+        userId: req.user.id,
+        parentId: parentId ? parseInt(parentId) : null,
+        fileName: fileName,
+        isDeleted: false,
+        fileType: type as any
+      }
+    });
+
+    res.json({
+      success: true,
+      exists: !!exists
+    });
 
   } catch (error) {
-     console.error('Check filename error:', error);
-     res.status(500).json({ success: false, message: '检查文件名失败' });
+    console.error('Check filename error:', error);
+    res.status(500).json({ success: false, message: '检查文件名失败' });
   }
 };
 
@@ -169,7 +169,7 @@ export const getFileById = async (req: AuthRequest, res: Response): Promise<void
     }
 
     const fileId = parseInt(req.params.id);
-    
+
     if (isNaN(fileId)) {
       res.status(400).json({
         success: false,
@@ -238,7 +238,7 @@ export const downloadFile = async (req: AuthRequest, res: Response): Promise<voi
     }
 
     const fileId = parseInt(req.params.id);
-    
+
     if (isNaN(fileId)) {
       res.status(400).json({
         success: false,
@@ -283,7 +283,7 @@ export const downloadFile = async (req: AuthRequest, res: Response): Promise<voi
     // 设置响应头
     const isPreview = req.query.preview === 'true';
     const disposition = isPreview ? 'inline' : 'attachment';
-    
+
     // 根据后缀名修正 mimeType（有时数据库存的是 application/octet-stream）
     let contentType = userFile.storage.mimeType;
     const ext = path.extname(userFile.fileName).toLowerCase();
@@ -302,12 +302,12 @@ export const downloadFile = async (req: AuthRequest, res: Response): Promise<voi
     if (mimeMap[ext]) {
       contentType = mimeMap[ext];
     }
-    
+
     // 如果是文本文件预览，强制指定 utf-8 编码，防止中文乱码
     if (isPreview && (contentType.startsWith('text/') || ext === '.txt' || ext === '.md' || ext === '.json' || ext === '.js' || ext === '.css' || ext === '.html')) {
-        if (!contentType.includes('charset')) {
-            contentType += '; charset=utf-8';
-        }
+      if (!contentType.includes('charset')) {
+        contentType += '; charset=utf-8';
+      }
     }
 
     res.setHeader('Content-Disposition', `${disposition}; filename="${encodeURIComponent(userFile.fileName)}"`);
@@ -349,7 +349,7 @@ export const getFileThumbnail = async (req: AuthRequest, res: Response): Promise
     }
 
     const fileId = parseInt(req.params.id);
-    
+
     if (isNaN(fileId)) {
       res.status(400).json({
         success: false,
@@ -386,23 +386,23 @@ export const getFileThumbnail = async (req: AuthRequest, res: Response): Promise
     // 检查是否为图片或视频
     const mimeType = userFile.storage.mimeType.toLowerCase();
     const fileName = userFile.fileName.toLowerCase();
-    
+
     // 支持更多扩展名
-    const isImage = mimeType.startsWith('image/') || 
-                    /\.(jpg|jpeg|png|gif|webp|bmp|tif|tiff|svg)$/i.test(fileName);
-    
+    const isImage = mimeType.startsWith('image/') ||
+      /\.(jpg|jpeg|png|gif|webp|bmp|tif|tiff|svg)$/i.test(fileName);
+
     // 排除 audio 类型，并从列表中移除 ogg
-    const isVideo = (mimeType.startsWith('video/') || 
-                    /\.(mp4|webm|mov|wmv|flv|avi|rmvb|mkv|3gp|asf|m4v)$/i.test(fileName)) && 
-                    !mimeType.startsWith('audio/');
+    const isVideo = (mimeType.startsWith('video/') ||
+      /\.(mp4|webm|mov|wmv|flv|avi|rmvb|mkv|3gp|asf|m4v)$/i.test(fileName)) &&
+      !mimeType.startsWith('audio/');
 
     if (!isImage && !isVideo) {
-        // console.warn(`Thumbnail not supported for: ${fileName} (${mimeType})`);
-        res.status(400).json({
-            success: false,
-            message: '不支持该文件类型的缩略图'
-        });
-        return;
+      // console.warn(`Thumbnail not supported for: ${fileName} (${mimeType})`);
+      res.status(400).json({
+        success: false,
+        message: '不支持该文件类型的缩略图'
+      });
+      return;
     }
 
     // 检查物理文件是否存在
@@ -417,7 +417,7 @@ export const getFileThumbnail = async (req: AuthRequest, res: Response): Promise
     // 缩略图存放路径
     const thumbnailsDir = path.join(process.cwd(), 'thumbnails');
     ensureDirectoryExists(thumbnailsDir);
-    
+
     // 生成缩略图文件名：hash-thumbnail.jpg (固定转为jpg或保留原格式，这里转为 webp 或 jpg 以节省空间)
     const thumbnailName = `${userFile.storage.fileHash}-thumb.webp`;
     const thumbnailPath = path.join(thumbnailsDir, thumbnailName);
@@ -426,7 +426,7 @@ export const getFileThumbnail = async (req: AuthRequest, res: Response): Promise
     if (fs.existsSync(thumbnailPath)) {
       res.setHeader('Content-Type', 'image/webp');
       // 设置缓存控制，缩略图一般不变
-      res.setHeader('Cache-Control', 'public, max-age=31536000'); 
+      res.setHeader('Cache-Control', 'public, max-age=31536000');
       res.sendFile(thumbnailPath);
       return;
     }
@@ -462,26 +462,26 @@ export const getFileThumbnail = async (req: AuthRequest, res: Response): Promise
           // 尝试失败，回退到不Seek直接截取第一帧
           try {
             await new Promise((resolve, reject) => {
-               ffmpeg(userFile.storage!.filePath)
-                 .frames(1)
-                 .on('end', resolve)
-                 .on('error', reject)
-                 .save(tempThumbPath);
+              ffmpeg(userFile.storage!.filePath)
+                .frames(1)
+                .on('end', resolve)
+                .on('error', reject)
+                .save(tempThumbPath);
             });
           } catch (e) {
-             console.warn(`[Thumbnail] Failed to extract video frame for file ${userFile.id} (${userFile.fileName}). Is it a valid video?`);
+            console.warn(`[Thumbnail] Failed to extract video frame for file ${userFile.id} (${userFile.fileName}). Is it a valid video?`);
           }
         }
 
         // 检查生成的临时文件并转换为 webp
         if (fs.existsSync(tempThumbPath)) {
-           await sharp(tempThumbPath)
-             .resize(200, 200, { fit: 'cover' })
-             .webp({ quality: 80 })
-             .toFile(thumbnailPath);
-           fs.unlinkSync(tempThumbPath);
+          await sharp(tempThumbPath)
+            .resize(200, 200, { fit: 'cover' })
+            .webp({ quality: 80 })
+            .toFile(thumbnailPath);
+          fs.unlinkSync(tempThumbPath);
         } else {
-           throw new Error('无法生成视频预览图');
+          throw new Error('无法生成视频预览图');
         }
       }
 
@@ -497,9 +497,9 @@ export const getFileThumbnail = async (req: AuthRequest, res: Response): Promise
       // 优化错误日志，避免无效视频文件刷屏
       const msg = genError.message || '';
       if (msg.includes('ffmpeg') || msg === '无法生成视频预览图' || msg === '生成的缩略图文件不存在') {
-         console.warn(`[Thumbnail] Generation failed for file ${req.params.id}: ${msg.split('\n')[0]}`);
+        console.warn(`[Thumbnail] Generation failed for file ${req.params.id}: ${msg.split('\n')[0]}`);
       } else {
-         console.error('Thumbnail generation error:', genError);
+        console.error('Thumbnail generation error:', genError);
       }
       res.status(500).json({
         success: false,
@@ -512,6 +512,98 @@ export const getFileThumbnail = async (req: AuthRequest, res: Response): Promise
     res.status(500).json({
       success: false,
       message: '获取缩略图失败'
+    });
+  }
+};
+
+/**
+ * 预览 Office 文档
+ * 将 Office 文件（doc/docx/xls/xlsx/ppt/pptx）转换为 PDF 后返回
+ * 转换结果会被缓存，相同文件不会重复转换
+ */
+export const previewFile = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ success: false, message: '未认证' });
+      return;
+    }
+
+    const fileId = parseInt(req.params.id);
+    if (isNaN(fileId)) {
+      res.status(400).json({ success: false, message: '无效的文件ID' });
+      return;
+    }
+
+    // 查询文件信息
+    const userFile = await prisma.userFile.findFirst({
+      where: {
+        id: fileId,
+        userId: req.user.id,
+        isDeleted: false
+      },
+      include: {
+        storage: {
+          select: {
+            filePath: true,
+            mimeType: true,
+            fileHash: true
+          }
+        }
+      }
+    });
+
+    if (!userFile || !userFile.storage) {
+      res.status(404).json({ success: false, message: '文件不存在' });
+      return;
+    }
+
+    // 检查是否为支持的 Office 文件类型
+    const { isOfficeFile, convertToPdf, checkLibreOfficeInstallation } = await import('../../services/preview.service.js');
+
+    if (!isOfficeFile(userFile.fileName)) {
+      res.status(400).json({ success: false, message: '该文件类型不支持 Office 预览' });
+      return;
+    }
+
+    // 检查 LibreOffice 是否安装
+    const installation = checkLibreOfficeInstallation();
+    if (!installation.installed) {
+      res.status(500).json({
+        success: false,
+        message: 'LibreOffice 未安装，无法进行文档预览。请联系管理员安装 LibreOffice。'
+      });
+      return;
+    }
+
+    // 检查源文件是否存在
+    if (!fs.existsSync(userFile.storage.filePath)) {
+      res.status(404).json({ success: false, message: '文件源已丢失' });
+      return;
+    }
+
+    // 执行转换（如果已有缓存则直接使用）
+    const pdfPath = await convertToPdf(userFile.storage.filePath, userFile.storage.fileHash);
+
+    // 记录预览日志
+    await logOperation({
+      req,
+      userId: req.user!.id,
+      operationType: LogOperationType.DOWNLOAD,
+      resourceType: LogResourceType.FILE,
+      resourceId: userFile.id,
+      description: `Previewed office file: ${userFile.fileName}`
+    });
+
+    // 返回 PDF 文件流
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(userFile.fileName.replace(/\.\w+$/, '.pdf'))}"`);
+    res.setHeader('Cache-Control', 'public, max-age=86400'); // 缓存 24 小时
+    res.sendFile(path.resolve(pdfPath));
+  } catch (error: any) {
+    console.error('[Preview] Error:', error);
+    res.status(500).json({
+      success: false,
+      message: `文档预览失败: ${error.message || '未知错误'}`
     });
   }
 };

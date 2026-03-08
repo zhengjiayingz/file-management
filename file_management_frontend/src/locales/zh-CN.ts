@@ -174,5 +174,17 @@ export default {
       success: '移动成功',
       failed: '移动失败'
     }
+  },
+  preview: {
+    title: '文档预览',
+    downloading: '正在加载文档...',
+    converting: '正在转换文档，请稍候...',
+    convertingHint: '首次预览需要转换为 PDF，后续将使用缓存',
+    error: '文档预览失败',
+    loadFailed: '无法加载预览内容',
+    retry: '重试',
+    downloadOriginal: '下载原文件',
+    fullscreen: '全屏',
+    exitFullscreen: '退出全屏'
   }
 }
