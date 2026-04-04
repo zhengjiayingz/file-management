@@ -58,7 +58,7 @@ model UserPreference {
 model FileStorage {
   id              Int      @id @default(autoincrement())
   fileHash        String   @unique @map("file_hash") @db.VarChar(64)
-  filePath        String   @map("file_path") @db.VarChar(500)
+  filePath        String   @map("file_path") @db.VarChar(500) // 相对项目根，如 uploads/...
   fileSize        BigInt   @map("file_size")
   mimeType        String   @map("mime_type") @db.VarChar(100)
   referenceCount  Int      @default(0) @map("reference_count")
@@ -109,7 +109,7 @@ model UploadChunk {
   chunkIndex Int      @map("chunk_index")
   chunkHash  String   @map("chunk_hash") @db.VarChar(64)
   chunkSize  Int      @map("chunk_size")
-  chunkPath  String   @map("chunk_path") @db.VarChar(500)
+  chunkPath  String   @map("chunk_path") @db.VarChar(500) // 相对项目根 chunks/...
   status     ChunkStatus @default(uploading)
   createdAt  DateTime @default(now()) @map("created_at")
 

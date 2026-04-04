@@ -4,6 +4,11 @@ import fs from 'fs';
 import prisma from '../../lib/prisma.js';
 import { AuthRequest } from '../../types/index.js';
 import { calculateFileHash, ensureDirectoryExists } from '../../utils/file.utils.js';
+import {
+  getUploadRootDir,
+  resolveStorageFilePath,
+  toStoredRelativePath
+} from '../../utils/storagePath.utils.js';
 import { logOperation, LogOperationType, LogResourceType } from '../../services/logger.service.js';
 // @ts-ignore
 import jschardet from 'jschardet';
@@ -98,7 +103,7 @@ export const uploadChunk = async (req: AuthRequest, res: Response): Promise<void
       update: {
         chunkHash,
         chunkSize: req.file.size,
-        chunkPath,
+        chunkPath: toStoredRelativePath(chunkPath),
         status: 'completed'
       },
       create: {
@@ -107,7 +112,7 @@ export const uploadChunk = async (req: AuthRequest, res: Response): Promise<void
         chunkIndex: parseInt(chunkIndex),
         chunkHash,
         chunkSize: req.file.size,
-        chunkPath,
+        chunkPath: toStoredRelativePath(chunkPath),
         status: 'completed'
       }
     });
@@ -209,7 +214,7 @@ export const mergeChunks = async (req: AuthRequest, res: Response): Promise<void
       }
 
       // 创建最终文件存储目录
-      const uploadsDir = path.join(process.cwd(), 'uploads');
+      const uploadsDir = getUploadRootDir();
       ensureDirectoryExists(uploadsDir);
 
       finalFilePath = path.join(uploadsDir, `${fileHash}-${fileName}`);
@@ -217,7 +222,7 @@ export const mergeChunks = async (req: AuthRequest, res: Response): Promise<void
 
       // 按顺序合并分片
       for (const chunk of uploadedChunks) {
-        const chunkData = fs.readFileSync(chunk.chunkPath);
+        const chunkData = fs.readFileSync(resolveStorageFilePath(chunk.chunkPath));
         writeStream.write(chunkData);
       }
       writeStream.end();
@@ -241,7 +246,7 @@ export const mergeChunks = async (req: AuthRequest, res: Response): Promise<void
       }
     } else {
       // 空文件处理：直接创建空文件
-      const uploadsDir = path.join(process.cwd(), 'uploads');
+      const uploadsDir = getUploadRootDir();
       ensureDirectoryExists(uploadsDir);
       finalFilePath = path.join(uploadsDir, `${fileHash}-${fileName}`);
       fs.writeFileSync(finalFilePath, ''); // 创建空文件
@@ -278,7 +283,7 @@ export const mergeChunks = async (req: AuthRequest, res: Response): Promise<void
          fileStorage = await tx.fileStorage.create({
             data: {
               fileHash,
-              filePath: finalFilePath,
+              filePath: toStoredRelativePath(finalFilePath),
               fileSize: BigInt(fileSize),
               mimeType: finalMimeType,
               referenceCount: 1,
@@ -601,7 +606,7 @@ export const uploadFile = async (req: AuthRequest, res: Response): Promise<void>
         fileStorage = await tx.fileStorage.create({
           data: {
             fileHash,
-            filePath: req.file!.path,
+            filePath: toStoredRelativePath(req.file!.path),
             fileSize: BigInt(req.file!.size),
             mimeType: req.file!.mimetype,
             referenceCount: 1,

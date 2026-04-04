@@ -6,6 +6,7 @@ import ffmpeg from 'fluent-ffmpeg';
 import prisma from '../../lib/prisma.js';
 import { AuthRequest } from '../../types/index.js';
 import { ensureDirectoryExists } from '../../utils/file.utils.js';
+import { resolveStorageFilePath } from '../../utils/storagePath.utils.js';
 import { logOperation, LogOperationType, LogResourceType } from '../../services/logger.service.js';
 
 // 尝试配置本地 FFmpeg 路径（如果存在）
@@ -271,8 +272,10 @@ export const downloadFile = async (req: AuthRequest, res: Response): Promise<voi
       return;
     }
 
+    const physicalPath = resolveStorageFilePath(userFile.storage.filePath);
+
     // 检查物理文件是否存在
-    if (!fs.existsSync(userFile.storage.filePath)) {
+    if (!fs.existsSync(physicalPath)) {
       res.status(404).json({
         success: false,
         message: '文件已被删除'
@@ -325,7 +328,7 @@ export const downloadFile = async (req: AuthRequest, res: Response): Promise<voi
     });
 
     // 发送文件
-    res.sendFile(path.resolve(userFile.storage.filePath));
+    res.sendFile(physicalPath);
   } catch (error) {
     console.error('Download file error:', error);
     res.status(500).json({
@@ -383,6 +386,8 @@ export const getFileThumbnail = async (req: AuthRequest, res: Response): Promise
       return;
     }
 
+    const physicalPath = resolveStorageFilePath(userFile.storage.filePath);
+
     // 检查是否为图片或视频
     const mimeType = userFile.storage.mimeType.toLowerCase();
     const fileName = userFile.fileName.toLowerCase();
@@ -406,7 +411,7 @@ export const getFileThumbnail = async (req: AuthRequest, res: Response): Promise
     }
 
     // 检查物理文件是否存在
-    if (!fs.existsSync(userFile.storage.filePath)) {
+    if (!fs.existsSync(physicalPath)) {
       res.status(404).json({
         success: false,
         message: '文件源已丢失'
@@ -435,7 +440,7 @@ export const getFileThumbnail = async (req: AuthRequest, res: Response): Promise
     try {
       if (isImage) {
         // 图片处理
-        await sharp(userFile.storage.filePath)
+        await sharp(physicalPath)
           .resize(200, 200, {
             fit: 'cover',
             position: 'center'
@@ -449,7 +454,7 @@ export const getFileThumbnail = async (req: AuthRequest, res: Response): Promise
 
         try {
           await new Promise((resolve, reject) => {
-            ffmpeg(userFile.storage!.filePath)
+            ffmpeg(physicalPath)
               .seekInput('00:00:05')
               .frames(1)
               .on('end', () => resolve(true))
@@ -462,7 +467,7 @@ export const getFileThumbnail = async (req: AuthRequest, res: Response): Promise
           // 尝试失败，回退到不Seek直接截取第一帧
           try {
             await new Promise((resolve, reject) => {
-              ffmpeg(userFile.storage!.filePath)
+              ffmpeg(physicalPath)
                 .frames(1)
                 .on('end', resolve)
                 .on('error', reject)
@@ -557,6 +562,8 @@ export const previewFile = async (req: AuthRequest, res: Response): Promise<void
       return;
     }
 
+    const physicalPath = resolveStorageFilePath(userFile.storage.filePath);
+
     // 检查是否为支持的 Office 文件类型
     const { isOfficeFile, convertToPdf, checkLibreOfficeInstallation } = await import('../../services/preview.service.js');
 
@@ -576,13 +583,13 @@ export const previewFile = async (req: AuthRequest, res: Response): Promise<void
     }
 
     // 检查源文件是否存在
-    if (!fs.existsSync(userFile.storage.filePath)) {
+    if (!fs.existsSync(physicalPath)) {
       res.status(404).json({ success: false, message: '文件源已丢失' });
       return;
     }
 
     // 执行转换（如果已有缓存则直接使用）
-    const pdfPath = await convertToPdf(userFile.storage.filePath, userFile.storage.fileHash);
+    const pdfPath = await convertToPdf(physicalPath, userFile.storage.fileHash);
 
     // 记录预览日志
     await logOperation({

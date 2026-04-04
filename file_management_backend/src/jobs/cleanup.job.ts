@@ -3,6 +3,7 @@ import cron from 'node-cron';
 import fs from 'fs';
 
 import prisma from '../lib/prisma.js';
+import { resolveStorageFilePath } from '../utils/storagePath.utils.js';
 
 /**
  * 初始化物理文件清理定时任务
@@ -47,10 +48,11 @@ export const initCleanupJob = () => {
 
       for (const file of filesToDelete) {
         try {
+          const physicalPath = resolveStorageFilePath(file.filePath);
           // 1. 物理删除
-          if (fs.existsSync(file.filePath)) {
-            fs.unlinkSync(file.filePath);
-            console.log(`Deleted physical file: ${file.filePath}`);
+          if (fs.existsSync(physicalPath)) {
+            fs.unlinkSync(physicalPath);
+            console.log(`Deleted physical file: ${physicalPath}`);
           } else {
             console.warn(`Physical file not found (skipping unlink): ${file.filePath}`);
           }

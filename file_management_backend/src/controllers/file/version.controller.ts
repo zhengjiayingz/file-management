@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import fs from 'fs';
 import path from 'path';
+import { resolveStorageFilePath } from '../../utils/storagePath.utils.js';
 import prisma from '../../lib/prisma.js';
 import { AuthRequest } from '../../types/index.js';
 import { logOperation, LogOperationType, LogResourceType } from '../../services/logger.service.js';
@@ -207,8 +208,10 @@ export const downloadVersion = async (req: AuthRequest, res: Response): Promise<
         return;
     }
 
+    const physicalPath = resolveStorageFilePath(version.storage.filePath);
+
     // 3. 检查物理文件
-    if (!fs.existsSync(version.storage.filePath)) {
+    if (!fs.existsSync(physicalPath)) {
         res.status(404).json({ success: false, message: '物理文件已丢失' });
         return;
     }
@@ -246,7 +249,7 @@ export const downloadVersion = async (req: AuthRequest, res: Response): Promise<
     res.setHeader('Content-Type', contentType);
     res.setHeader('Accept-Ranges', 'bytes');
 
-    res.sendFile(path.resolve(version.storage.filePath));
+    res.sendFile(physicalPath);
 
   } catch (error) {
     console.error('Download version error:', error);

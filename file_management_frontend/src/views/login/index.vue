@@ -64,7 +64,6 @@ const handleAuth = async () => {
   }
 
   try {
-    console.log('rrrrrrrrrrrrrrttttt:', loginForm.value)
     loading.value = true
 
     if (isRegister.value) {
