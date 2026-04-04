@@ -21,7 +21,8 @@ export default {
     sync: '同步',
     favorites: '收藏',
     recycleBin: '回收筒',
-    logs: '操作紀錄'
+    logs: '操作紀錄',
+    contactsAndMessages: '通訊錄與訊息'
   },
   login: {
     title: '檔案管理系統',

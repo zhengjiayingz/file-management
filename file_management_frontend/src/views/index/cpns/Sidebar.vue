@@ -77,7 +77,7 @@
                 <el-icon>
                     <ChatDotRound />
                 </el-icon>
-                <span>通讯录与消息</span>
+                <span>{{ t('sidebar.contactsAndMessages') }}</span>
             </el-menu-item>
         </el-menu>
     </el-aside>

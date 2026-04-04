@@ -1,7 +1,7 @@
 <template>
     <div class="friend-panel-wrapper">
         <!-- 悬浮通讯按钮 -->
-        <div class="floating-chat-btn" @click="toggleDrawer" title="通讯录与消息">
+        <div class="floating-chat-btn" @click="toggleDrawer" :title="t('sidebar.contactsAndMessages')">
             <el-badge :value="totalUnread > 0 ? totalUnread : ''" :hidden="totalUnread === 0" class="chat-badge">
                 <el-button type="primary" circle size="large" class="shadow-btn">
                     <el-icon size="20">
@@ -242,7 +242,9 @@ import { userApi } from '@api/user'
 import { useAuthStore } from '@stores/auth'
 import fileApiService from '@api/file'
 import type { FileItem } from '@typing/file'
+import { useI18n } from 'vue-i18n'
 
+const { t } = useI18n()
 const authStore = useAuthStore()
 const myUserId = computed(() => authStore.user?.id)
 

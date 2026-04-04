@@ -26,7 +26,8 @@ export default {
     videos: '视频',
     audio: '音频',
     documents: '文档',
-    categories: '分类'
+    categories: '分类',
+    contactsAndMessages: '通讯录与消息'
   },
   login: {
     title: '文件管理系统',

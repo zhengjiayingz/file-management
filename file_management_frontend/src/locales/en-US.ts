@@ -26,7 +26,8 @@ export default {
     videos: 'Videos',
     audio: 'Audio',
     documents: 'Documents',
-    categories: 'Categories'
+    categories: 'Categories',
+    contactsAndMessages: 'Contacts & Messages'
   },
   login: {
     title: 'File Management',
