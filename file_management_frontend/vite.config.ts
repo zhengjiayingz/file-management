@@ -31,4 +31,7 @@ export default defineConfig({
       '@typing': fileURLToPath(new URL('./src/types', import.meta.url))
     },
   },
+  build: {
+    modulePreload: true
+  }
 })

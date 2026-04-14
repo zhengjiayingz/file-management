@@ -210,7 +210,7 @@ const addFilesToQueue = (files: File[]) => {
   const validFiles: File[] = []
 
   for (const file of files) {
-    // 验证文件
+    // 验证上传的文件是否支持上传
     const validation = validateFile(file)
     if (!validation.valid) {
       ElMessage.error(`${file.name}: ${validation.error}`)
@@ -235,10 +235,11 @@ const addFilesToQueue = (files: File[]) => {
   for (const file of validFiles) {
     // 拦截图片上传
     if (props.interceptImage && file.type.startsWith('image/')) {
+      // 把图片交给父组件处理
       emit('selectImage', file)
       continue
     }
-
+    // 构造队列项
     const queueItem: UploadQueueItem = {
       id: Date.now() + '-' + Math.random().toString(36).substr(2, 9),
       file,
@@ -246,16 +247,17 @@ const addFilesToQueue = (files: File[]) => {
       progress: 0
     }
 
-    // 生成图片预览
+    // 如果是图片，生成图片预览
     if (file.type.startsWith('image/')) {
       queueItem.previewUrl = URL.createObjectURL(file)
     }
-
+    // 添加到队列
     uploadQueue.value.push(queueItem)
   }
 
+  // 通知父组件队列变化
   emit('queueChange', uploadQueue.value.length)
-
+  // 提示与自动开始上传
   if (validFiles.length > 0) {
     // 过滤掉被拦截的图片，只显示添加到队列的文件的消息
     const addedCount = uploadQueue.value.length - initialQueueLength
@@ -298,14 +300,20 @@ const addFile = (file: File) => {
   uploadQueue.value.push(queueItem)
   emit('queueChange', uploadQueue.value.length)
   ElMessage.success('已添加裁剪后图片')
-
+  // 如果当前没有正在上传，则开始上传
   if (!isUploading.value) {
     startNextUpload()
   }
 }
 
+/** 供父组件拖拽投放：与选择文件入队逻辑一致 */
+function addDroppedFiles(files: File[]) {
+  if (files.length) addFilesToQueue(files)
+}
+
 defineExpose({
-  addFile
+  addFile,
+  addDroppedFiles
 })
 
 /* Old startNextUpload below... */

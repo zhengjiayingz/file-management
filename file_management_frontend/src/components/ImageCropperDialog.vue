@@ -17,7 +17,7 @@
                 <div class="preview-box">
                     <div :style="previewWrapperStyle">
                         <div :style="previewStyle">
-                            <div :style="preview.div">
+                            <div :style="preview.div"> 
                                 <img :src="preview.url" :style="preview.img">
                             </div>
                         </div>
@@ -208,13 +208,19 @@ const handleCancel = () => {
 
 const handleConfirmCrop = () => {
     loading.value = true
+    // getCropBlob 是库提供的方法：根据当前裁剪框从原图里裁出一块，异步得到 Blob（一般是 PNG，与 option.outputType 等有关）
     cropperRef.value.getCropBlob((blob: Blob) => {
+        // 若上一次裁剪已经生成过 blob URL，先 revokeObjectURL 释放内存，避免泄漏；本次确认会重新生成新 URL。
         if (croppedImageUrl.value) {
             URL.revokeObjectURL(croppedImageUrl.value)
         }
+        // 把裁好的 Blob 存起来，后面 「确认上传」 会用它构造 
         croppedBlob.value = blob
+        // 为这份 Blob 生成一个临时本地 URL（blob:http://...），给下面确认页的 <img :src="croppedImageUrl"> 用，让用户看到裁剪结果大图。
         croppedImageUrl.value = URL.createObjectURL(blob)
+        // 切换到确认页
         isCropped.value = true
+        // 关闭加载状态
         loading.value = false
     })
 }

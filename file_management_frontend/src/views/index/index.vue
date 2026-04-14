@@ -58,11 +58,16 @@
       </div>
 
 
-      <!-- 文件列表区域 -->
-      <el-main class="file-content">
-        <!-- 拖拽上传区域 -->
-        <div class="drop-zone-overlay" :class="{ 'show': isDragOver }" @drop="handleDrop" @dragover="handleDragOver"
-          @dragenter="handleDragEnter" @dragleave="handleDragLeave">
+      <!-- 文件列表区域：在此区域监听拖拽，避免未 preventDefault 时浏览器默认打开文件 -->
+      <el-main
+        class="file-content"
+        @dragover.prevent
+        @drop.prevent="handleDrop"
+        @dragenter="handleDragEnter"
+        @dragleave="handleDragLeave"
+      >
+        <!-- 拖拽提示层（仅展示；事件由父级 el-main 统一处理） -->
+        <div class="drop-zone-overlay" :class="{ show: isDragOver }">
           <div class="drop-zone-content">
             <el-icon class="drop-icon" size="64">
               <Upload />
@@ -381,31 +386,27 @@ const handleSearch = () => {
   }, 300)
 }
 
-// 拖拽处理
-const handleDragOver = (event: DragEvent) => {
-  event.preventDefault()
-}
-
+// 拖拽上传：必须在可接收拖放的容器上 dragover/drop 调用 preventDefault，否则会触发浏览器默认行为（打开文件等）
 const handleDragEnter = (event: DragEvent) => {
   event.preventDefault()
-  isDragOver.value = true
+  if (event.dataTransfer?.types?.includes('Files')) {
+    isDragOver.value = true
+  }
 }
 
 const handleDragLeave = (event: DragEvent) => {
-  event.preventDefault()
-  // 只有当离开整个区域时才隐藏
-  if (!event.relatedTarget || !(event.target as Element).contains(event.relatedTarget as Node)) {
+  const main = event.currentTarget as HTMLElement
+  const rel = event.relatedTarget as Node | null
+  if (!rel || !main.contains(rel)) {
     isDragOver.value = false
   }
 }
 
 const handleDrop = (event: DragEvent) => {
-  event.preventDefault()
   isDragOver.value = false
-
-  if (event.dataTransfer?.files) {
-    // 这里可以触发文件上传组件的拖拽上传
-    console.log('拖拽文件:', Array.from(event.dataTransfer.files))
+  const list = event.dataTransfer?.files
+  if (list?.length && fileUploadRef.value?.addDroppedFiles) {
+    fileUploadRef.value.addDroppedFiles(Array.from(list))
   }
 }
 

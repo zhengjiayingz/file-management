@@ -124,7 +124,9 @@ export const getFiles = async (req: AuthRequest, res: Response): Promise<void> =
 export const checkFileName = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { parentId, fileName, type = 'file' } = req.body;
-
+    console.log('parentId',parentId);
+    console.log('fileName',fileName);
+    console.log('type',type);
     if (!fileName) {
       res.status(400).json({ success: false, message: '文件名不能为空' });
       return;
@@ -135,14 +137,17 @@ export const checkFileName = async (req: AuthRequest, res: Response): Promise<vo
       return;
     }
 
+    let params={
+      userId: req.user.id,
+      parentId: parentId ? parseInt(parentId) : null,
+      fileName: fileName,
+      isDeleted: false,
+      fileType: type as any
+    }
+    console.log('params',params);
+
     const exists = await prisma.userFile.findFirst({
-      where: {
-        userId: req.user.id,
-        parentId: parentId ? parseInt(parentId) : null,
-        fileName: fileName,
-        isDeleted: false,
-        fileType: type as any
-      }
+      where: params
     });
 
     res.json({
