@@ -256,7 +256,7 @@ export const mergeChunks = async (req: AuthRequest, res: Response): Promise<void
     let finalMimeType = mimeType;
     if (mimeType.startsWith('text/') || /\.(txt|md|json|csv|html|css|js|ts)$/i.test(fileName)) {
         try {
-             // Read a chunk to detect encoding
+             // 读文件前 4096 字节 → jschardet → 可能得到 charset
              const buffer = Buffer.alloc(4096);
              const fd = fs.openSync(finalFilePath, 'r');
              const bytesRead = fs.readSync(fd, buffer, 0, buffer.length, 0);
@@ -273,11 +273,9 @@ export const mergeChunks = async (req: AuthRequest, res: Response): Promise<void
         }
     }
 
-    // 使用事务创建文件记录
+    // 使用事务创建文件记录,拿到事务的返回值 { userFile, fileStorage }
     const result = await prisma.$transaction(async (tx: any) => {
-      // 1. 创建物理文件记录 (如果 fileHash 已存在，这会失败，但这符合 mergeChunks 仅用于新文件的预期)
-      // 如果需要支持"重新上传已存在的文件"（例如之前上传失败残留？），应使用 upsert 或 findUnique
-      // 为了安全，先 try find
+      // 1.按 fileHash 查是否已有 FileStorage，没有则创建
       let fileStorage = await tx.fileStorage.findUnique({ where: { fileHash } });
       if (!fileStorage) {
          fileStorage = await tx.fileStorage.create({
@@ -294,6 +292,7 @@ export const mergeChunks = async (req: AuthRequest, res: Response): Promise<void
 
       // 2. 检查文件名冲突与版本管理
       const existingUserFile = await tx.userFile.findFirst({
+        // 查当前用户、当前目录下是否已有同名 UserFile
         where: {
           userId: req.user!.id,
           parentId: parentId ? parseInt(parentId) : null,
@@ -305,9 +304,10 @@ export const mergeChunks = async (req: AuthRequest, res: Response): Promise<void
       });
 
       let userFile;
+      // 若同名且 conflictAction === 'version'
       if (existingUserFile && conflictAction === 'version') {
          // --- 版本更新逻辑 ---
-         // 归档旧版本
+         // 有旧 storage 则往 file_history 插一条旧版快照（归档）
          if (existingUserFile.storage) {
              await tx.fileHistory.create({
                  data: {
@@ -336,7 +336,9 @@ export const mergeChunks = async (req: AuthRequest, res: Response): Promise<void
          // 我们的设计是 referenceCount 包含 history 引用吗？
          // 假如我们不减少旧 storage 的 count，那么它就不会被删除。正确。
       } else {
-         // --- 默认创建逻辑 ---
+        // 不存在同名（上传的是新文件），
+         // 或者存在同名但是 conflictAction 是 'rename'(用户点击'保存两者')
+         // --- 默认创建逻辑，新建一条用户文件记录，指向本次的 fileStorage ---
          // 允许重名文件并存
           userFile = await tx.userFile.create({
             data: {
@@ -349,24 +351,25 @@ export const mergeChunks = async (req: AuthRequest, res: Response): Promise<void
           });
       }
 
-      // 更新用户存储使用量
+      // 更新用户存储使用量，user.storageUsed 增加 fileSize
       await tx.user.update({
         where: { id: req.user!.id },
         data: {
           storageUsed: { increment: BigInt(fileSize) }
         }
       });
-
+      // 事务返回 { userFile, fileStorage }，供后面日志和 JSON 使用
       return { userFile, fileStorage };
     });
 
-    // 清理分片文件和记录（仅对非空文件）
+    // 清理磁盘上分片文件
     if (totalChunks > 0) {
+      // 清理分片文件
       const chunksDir = path.join(process.cwd(), 'chunks', fileHash);
       if (fs.existsSync(chunksDir)) {
         fs.rmSync(chunksDir, { recursive: true, force: true });
       }
-
+      // 清理数据库中分片记录
       await prisma.uploadChunk.deleteMany({
         where: {
           fileHash,
@@ -377,7 +380,7 @@ export const mergeChunks = async (req: AuthRequest, res: Response): Promise<void
 
 
 
-    // 记录操作日志
+    // 记录操作日志，记一条「合并上传成功」类日志，资源 id 用 result.userFile.id。
     await logOperation({
       req,
       userId: req.user!.id,
@@ -386,7 +389,7 @@ export const mergeChunks = async (req: AuthRequest, res: Response): Promise<void
       resourceId: result.userFile.id,
       description: `Uploaded file (merged): ${result.userFile.fileName}`
     });
-
+    // HTTP 响应,返回前端列表需要的：id、fileName、fileSize、mimeType、fileType、createdAt。
     res.status(201).json({
       success: true,
       message: '文件上传成功',
@@ -482,6 +485,7 @@ export const instantUpload = async (req: AuthRequest, res: Response): Promise<vo
            // --- 版本更新逻辑 ---
            // 1. Archive
            if (existingUserFile.storage) {
+              // 历史记录表中新增一条旧记录
               await tx.fileHistory.create({
                   data: {
                       userFileId: existingUserFile.id,
@@ -492,7 +496,7 @@ export const instantUpload = async (req: AuthRequest, res: Response): Promise<vo
                   }
               });
            }
-           // 2. Update Master
+           // 2. Update Master，文件版本号加1
            userFile = await tx.userFile.update({
                where: { id: existingUserFile.id },
                data: {
@@ -502,7 +506,7 @@ export const instantUpload = async (req: AuthRequest, res: Response): Promise<vo
                }
            });
       } else {
-          // 创建用户文件记录
+          // 不存在文件记录 则创建用户文件记录
           userFile = await tx.userFile.create({
             data: {
               userId: req.user!.id,

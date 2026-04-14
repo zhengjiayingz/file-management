@@ -47,11 +47,12 @@ export const fileApiService = {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
+      // 这个是axios的配置，底层对应 XHR 的 upload.onprogress，用于监听上传进度，不是后端接口回传
       onUploadProgress: (progressEvent) => {
         if (onProgress && progressEvent.total) {
           onProgress({
-            loaded: progressEvent.loaded,
-            total: progressEvent.total,
+            loaded: progressEvent.loaded, // 当前这个请求里，已经发送出去的字节数
+            total: progressEvent.total, // 当前这个请求里，整个 body 的总字节数
             percentage: Math.round((progressEvent.loaded / progressEvent.total) * 100)
           })
         }

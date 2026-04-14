@@ -461,13 +461,15 @@ const uploadWithChunks = async (item: UploadQueueItem) => {
   }
 
   const totalChunks = item.chunks.length
+  // 服务端记录的已上传的分片数
   let uploadedCount = item.uploadedChunks.length
 
+  // 本次进入 uploadWithChunks、开始跑分片循环时的时间戳
   item.startTime = Date.now()
-  // 记录本此会话开始时的已上传量，用于计算瞬时速度
+  // 记录此会话开始时的已上传量(字节)
   const startUploadedBytes = (uploadedCount / totalChunks) * item.file.size
 
-  // 上传分片
+  // 循环上传分片
   for (let i = 0; i < totalChunks; i++) {
     // 检查是否已暂停或取消
     if (item.status !== 'uploading') {
@@ -493,29 +495,32 @@ const uploadWithChunks = async (item: UploadQueueItem) => {
         chunkHash,
         (progress) => {
           // 计算总进度
-          const chunkProgress = progress.percentage / 100
-          const totalProgress = ((uploadedCount + chunkProgress) / totalChunks) * 100
+          const chunkProgress = progress.percentage / 100 // 当前这个分片，已经上传的进度
+          const totalProgress = ((uploadedCount + chunkProgress) / totalChunks) * 100 // 当前所有分片，已经上传的进度
           item.progress = totalProgress
 
           // 计算剩余时间
           if (item.startTime) {
             const now = Date.now()
+            //已经经过了多少秒
             const elapsedTime = (now - item.startTime) / 1000 // s
 
             // 为了防止初始波动，至少等待1秒或有一定进度后再计算
             if (elapsedTime > 1) {
               const totalBytes = item.file.size
+              // 当前文件已上传多少字节
               const currentUploadedBytes = (totalProgress / 100) * totalBytes
 
-              // 计算本此会话产生的上传量
+              // 计算本此会话新上传了多少字节
               const sessionUploadedBytes = currentUploadedBytes - startUploadedBytes
 
               if (sessionUploadedBytes > 0) {
+                // 速度应基于「本会话新传的字节 / 本会话开始到现在经过了多少秒」计算，得出多少字节每秒
                 const speed = sessionUploadedBytes / elapsedTime // bytes/sec
-                const remainingBytes = totalBytes - currentUploadedBytes
+                const remainingBytes = totalBytes - currentUploadedBytes // 剩余多少字节
                 if (speed > 0) {
-                  const remainingSeconds = Math.ceil(remainingBytes / speed)
-                  item.remainingTimeStr = formatRemainingTime(remainingSeconds)
+                  const remainingSeconds = Math.ceil(remainingBytes / speed) // 剩余多少秒
+                  item.remainingTimeStr = formatRemainingTime(remainingSeconds) // 展示剩余时间
                 }
               }
             }
