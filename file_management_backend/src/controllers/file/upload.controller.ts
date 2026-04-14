@@ -4,14 +4,18 @@ import fs from 'fs';
 import prisma from '../../lib/prisma.js';
 import { AuthRequest } from '../../types/index.js';
 import { calculateFileHash, ensureDirectoryExists } from '../../utils/file.utils.js';
-import {
-  getUploadRootDir,
-  resolveStorageFilePath,
-  toStoredRelativePath
-} from '../../utils/storagePath.utils.js';
+import { toStoredRelativePath } from '../../utils/storagePath.utils.js';
 import { logOperation, LogOperationType, LogResourceType } from '../../services/logger.service.js';
-// @ts-ignore
-import jschardet from 'jschardet';
+import {
+  assertValidMergeChunksBody,
+  mergeChunkFilesToDisk,
+  createEmptyMergedFileOnDisk,
+  refineMimeTypeForMergedFile,
+  persistMergedFileRecords,
+  cleanupChunksAfterMerge,
+  MergeUploadError,
+  type MergeChunksBody
+} from '../../services/mergeUpload.service.js';
 
 /**
  * 检查文件是否存在（秒传检测）
@@ -169,7 +173,13 @@ export const getUploadedChunks = async (req: AuthRequest, res: Response): Promis
 };
 
 /**
- * 合并分片
+ * 合并分片上传：将已上传的分片写成最终文件并落库。
+ *
+ * 流程概要：校验 body → 磁盘合并（或空文件占位）→ 文本类 MIME 可带 charset →
+ * 事务内 FileStorage / UserFile（含同名 version）与用量 → 清理临时分片与 DB 记录 → 审计日志 → 201 响应。
+ *
+ * 业务异常由 {@link MergeUploadError} 表示（多为 400）；其余落入500。
+ * 具体实现见 `mergeUpload.service.ts`。
  */
 export const mergeChunks = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -181,206 +191,50 @@ export const mergeChunks = async (req: AuthRequest, res: Response): Promise<void
       return;
     }
 
-    const { fileHash, fileName, fileSize, mimeType, totalChunks, parentId, conflictAction } = req.body;
-
-    if (!fileHash || !fileName || fileSize === undefined || fileSize === null || !mimeType || totalChunks === undefined || totalChunks === null) {
-      res.status(400).json({
-        success: false,
-        message: '合并参数不完整'
-      });
-      return;
-    }
-
-    // 使用事务创建文件记录
-    let finalFilePath: string;
-    
-    // 检查所有分片是否都已上传（空文件跳过此检查）
-    if (totalChunks > 0) {
-      const uploadedChunks = await prisma.uploadChunk.findMany({
-        where: {
-          fileHash,
-          userId: req.user.id,
-          status: 'completed'
-        },
-        orderBy: { chunkIndex: 'asc' }
-      });
-
-      if (uploadedChunks.length !== totalChunks) {
-        res.status(400).json({
-          success: false,
-          message: '分片不完整，无法合并'
-        });
+    // 解析并校验 fileHash、fileName、fileSize、mimeType、totalChunks 等必填项
+    let body: MergeChunksBody;
+    try {
+      body = assertValidMergeChunksBody(req.body as Record<string, unknown>);
+    } catch (e) {
+      if (e instanceof MergeUploadError) {
+        res.status(e.statusCode).json({ success: false, message: e.message });
         return;
       }
-
-      // 创建最终文件存储目录
-      const uploadsDir = getUploadRootDir();
-      ensureDirectoryExists(uploadsDir);
-
-      finalFilePath = path.join(uploadsDir, `${fileHash}-${fileName}`);
-      const writeStream = fs.createWriteStream(finalFilePath);
-
-      // 按顺序合并分片
-      for (const chunk of uploadedChunks) {
-        const chunkData = fs.readFileSync(resolveStorageFilePath(chunk.chunkPath));
-        writeStream.write(chunkData);
-      }
-      writeStream.end();
-
-      // 等待写入完成
-      await new Promise<void>((resolve, reject) => {
-        writeStream.on('finish', () => resolve());
-        writeStream.on('error', reject);
-      });
-
-      // 验证合并后的文件哈希
-      const mergedFileHash = calculateFileHash(finalFilePath);
-      if (mergedFileHash !== fileHash) {
-        // 删除错误的文件
-        fs.unlinkSync(finalFilePath);
-        res.status(400).json({
-          success: false,
-          message: '文件合并失败，哈希值不匹配'
-        });
-        return;
-      }
-    } else {
-      // 空文件处理：直接创建空文件
-      const uploadsDir = getUploadRootDir();
-      ensureDirectoryExists(uploadsDir);
-      finalFilePath = path.join(uploadsDir, `${fileHash}-${fileName}`);
-      fs.writeFileSync(finalFilePath, ''); // 创建空文件
+      throw e;
     }
 
-    // Detect encoding for text files
-    let finalMimeType = mimeType;
-    if (mimeType.startsWith('text/') || /\.(txt|md|json|csv|html|css|js|ts)$/i.test(fileName)) {
-        try {
-             // 读文件前 4096 字节 → jschardet → 可能得到 charset
-             const buffer = Buffer.alloc(4096);
-             const fd = fs.openSync(finalFilePath, 'r');
-             const bytesRead = fs.readSync(fd, buffer, 0, buffer.length, 0);
-             fs.closeSync(fd);
-             
-             const slice = buffer.slice(0, bytesRead);
-             const detected = jschardet.detect(slice);
-             
-             if (detected && detected.encoding && detected.confidence > 0.8) {
-                 finalMimeType = `${mimeType}; charset=${detected.encoding.toLowerCase()}`;
-             }
-        } catch (e) {
-            console.warn('Encoding detection failed:', e);
-        }
-    }
+    const { fileHash, fileName, fileSize, mimeType, totalChunks, parentId, conflictAction } = body;
 
-    // 使用事务创建文件记录,拿到事务的返回值 { userFile, fileStorage }
-    const result = await prisma.$transaction(async (tx: any) => {
-      // 1.按 fileHash 查是否已有 FileStorage，没有则创建
-      let fileStorage = await tx.fileStorage.findUnique({ where: { fileHash } });
-      if (!fileStorage) {
-         fileStorage = await tx.fileStorage.create({
-            data: {
-              fileHash,
-              filePath: toStoredRelativePath(finalFilePath),
-              fileSize: BigInt(fileSize),
-              mimeType: finalMimeType,
-              referenceCount: 1,
-              status: 'active'
-            }
-          });
-      }
+    // totalChunks > 0：按序合并分片并校验整文件哈希；= 0：仅创建空文件
+    const finalFilePath =
+      totalChunks > 0
+        ? await mergeChunkFilesToDisk({
+            fileHash,
+            fileName,
+            userId: req.user.id,
+            totalChunks
+          })
+        : createEmptyMergedFileOnDisk(fileHash, fileName);
 
-      // 2. 检查文件名冲突与版本管理
-      const existingUserFile = await tx.userFile.findFirst({
-        // 查当前用户、当前目录下是否已有同名 UserFile
-        where: {
-          userId: req.user!.id,
-          parentId: parentId ? parseInt(parentId) : null,
-          fileName,
-          isDeleted: false,
-          fileType: 'file'
-        },
-        include: { storage: true }
-      });
+    // 文本类可探测编码，写入库的 mimeType 可能追加 charset
+    const finalMimeType = refineMimeTypeForMergedFile(finalFilePath, mimeType, fileName);
 
-      let userFile;
-      // 若同名且 conflictAction === 'version'
-      if (existingUserFile && conflictAction === 'version') {
-         // --- 版本更新逻辑 ---
-         // 有旧 storage 则往 file_history 插一条旧版快照（归档）
-         if (existingUserFile.storage) {
-             await tx.fileHistory.create({
-                 data: {
-                     userFileId: existingUserFile.id,
-                     storageId: existingUserFile.storageId!,
-                     fileName: existingUserFile.fileName,
-                     version: existingUserFile.version,
-                     fileSize: existingUserFile.storage.fileSize
-                 }
-             });
-         }
-         
-         // 更新主文件指向新 storage
-         userFile = await tx.userFile.update({
-             where: { id: existingUserFile.id },
-             data: {
-                 storageId: fileStorage.id,
-                 version: { increment: 1 },
-                 updatedAt: new Date()
-             }
-         });
-         
-         // 注意：FileStorage 的 referenceCount
-         // fileStorage (新) 是刚刚创建的，count=1。 userFile 现在指向它。正确。
-         // existingUserFile.storage (旧) 现在的 userFile 不指向它了，但 fileHistory 指向它。
-         // 我们的设计是 referenceCount 包含 history 引用吗？
-         // 假如我们不减少旧 storage 的 count，那么它就不会被删除。正确。
-      } else {
-        // 不存在同名（上传的是新文件），
-         // 或者存在同名但是 conflictAction 是 'rename'(用户点击'保存两者')
-         // --- 默认创建逻辑，新建一条用户文件记录，指向本次的 fileStorage ---
-         // 允许重名文件并存
-          userFile = await tx.userFile.create({
-            data: {
-              userId: req.user!.id,
-              storageId: fileStorage.id,
-              parentId: parentId ? parseInt(parentId) : null,
-              fileName,
-              fileType: 'file'
-            }
-          });
-      }
-
-      // 更新用户存储使用量，user.storageUsed 增加 fileSize
-      await tx.user.update({
-        where: { id: req.user!.id },
-        data: {
-          storageUsed: { increment: BigInt(fileSize) }
-        }
-      });
-      // 事务返回 { userFile, fileStorage }，供后面日志和 JSON 使用
-      return { userFile, fileStorage };
+    // 事务：FileStorage 去重、UserFile 新建或版本更新、递增用户已用空间
+    const result = await persistMergedFileRecords({
+      finalFilePath,
+      fileHash,
+      fileSize,
+      finalMimeType,
+      userId: req.user.id,
+      parentId,
+      fileName,
+      conflictAction
     });
 
-    // 清理磁盘上分片文件
-    if (totalChunks > 0) {
-      // 清理分片文件
-      const chunksDir = path.join(process.cwd(), 'chunks', fileHash);
-      if (fs.existsSync(chunksDir)) {
-        fs.rmSync(chunksDir, { recursive: true, force: true });
-      }
-      // 清理数据库中分片记录
-      await prisma.uploadChunk.deleteMany({
-        where: {
-          fileHash,
-          userId: req.user.id
-        }
-      });
-    }
+    // 仅在非空文件合并后删除 chunks目录与 upload_chunk 行（须在落库成功之后）
+    await cleanupChunksAfterMerge(fileHash, req.user.id, totalChunks);
 
-
-
-    // 记录操作日志，记一条「合并上传成功」类日志，资源 id 用 result.userFile.id。
+    // 记录一条上传成功的操作日志
     await logOperation({
       req,
       userId: req.user!.id,
@@ -389,7 +243,8 @@ export const mergeChunks = async (req: AuthRequest, res: Response): Promise<void
       resourceId: result.userFile.id,
       description: `Uploaded file (merged): ${result.userFile.fileName}`
     });
-    // HTTP 响应,返回前端列表需要的：id、fileName、fileSize、mimeType、fileType、createdAt。
+
+    // 返回列表刷新所需字段
     res.status(201).json({
       success: true,
       message: '文件上传成功',
@@ -403,6 +258,14 @@ export const mergeChunks = async (req: AuthRequest, res: Response): Promise<void
       }
     });
   } catch (error) {
+    // 合并/校验等业务错误已在 service 中归类为 MergeUploadError
+    if (error instanceof MergeUploadError) {
+      res.status(error.statusCode).json({
+        success: false,
+        message: error.message
+      });
+      return;
+    }
     console.error('Merge chunks error:', error);
     res.status(500).json({
       success: false,
