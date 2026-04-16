@@ -67,7 +67,14 @@
 
                 <!-- 文件信息 -->
                 <div class="file-info-content">
-                    <div class="file-name" :title="file.fileName">
+                    <el-tooltip v-if="viewMode === 'grid'" placement="top" :show-after="300"
+                        popper-class="file-name-tooltip">
+                        <template #content>
+                            <span class="file-name-tooltip-text">{{ file.fileName }}</span>
+                        </template>
+                        <div class="file-name">{{ file.fileName }}</div>
+                    </el-tooltip>
+                    <div v-else class="file-name" :title="file.fileName">
                         {{ file.fileName }}
                     </div>
 
@@ -536,6 +543,19 @@ const handleFileDrop = (event: DragEvent, targetFile: FileInfo) => {
         font-size: 12px;
         color: #c0c4cc;
         margin-top: 5px;
+    }
+}
+</style>
+
+<!-- el-tooltip 的 popper 挂在 body，需单独写样式 -->
+<style lang="scss">
+.file-name-tooltip {
+    max-width: min(90vw, 360px);
+
+    .file-name-tooltip-text {
+        display: inline-block;
+        word-break: break-all;
+        line-height: 1.5;
     }
 }
 </style>
