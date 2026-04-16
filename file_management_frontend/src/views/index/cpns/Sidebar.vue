@@ -73,11 +73,18 @@
                 </el-icon>
                 <span>管理员看板</span>
             </el-menu-item>
-            <el-menu-item index="chat" @click="openFriendPanel">
+            <el-menu-item index="chat" class="menu-item-chat" @click="openFriendPanel">
                 <el-icon>
                     <ChatDotRound />
                 </el-icon>
-                <span>{{ t('sidebar.contactsAndMessages') }}</span>
+                <el-badge
+                    :value="messageUnreadStore.totalUnread"
+                    :max="99"
+                    :hidden="messageUnreadStore.totalUnread === 0"
+                    class="chat-menu-badge"
+                >
+                    <span class="chat-menu-label">{{ t('sidebar.contactsAndMessages') }}</span>
+                </el-badge>
             </el-menu-item>
         </el-menu>
     </el-aside>
@@ -90,12 +97,14 @@ import { Folder, Clock, Star, Delete, List, Picture, VideoPlay, Headset, Documen
 import { useI18n } from 'vue-i18n'
 import { useThemeStore } from '@stores/theme'
 import { useAuthStore } from '@stores/auth'
+import { useMessageUnreadStore } from '@stores/messageUnread'
 
 const router = useRouter()
 const route = useRoute()
 const { t } = useI18n()
 const themeStore = useThemeStore()
 const authStore = useAuthStore()
+const messageUnreadStore = useMessageUnreadStore()
 
 const openFriendPanel = () => {
     window.dispatchEvent(new CustomEvent('open-friend-panel'))
@@ -158,6 +167,26 @@ const menuColors = computed(() => {
     &-menu {
         border-right: none;
         flex: 1;
+
+        .menu-item-chat {
+            :deep(.chat-menu-badge) {
+                flex: 1;
+                min-width: 0;
+                display: inline-flex;
+                align-items: center;
+
+                .chat-menu-label {
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    white-space: nowrap;
+                }
+
+                .el-badge__content {
+                    top: 2px;
+                    right: 10px;
+                }
+            }
+        }
 
         :deep(.el-menu-item) {
             &.is-active {

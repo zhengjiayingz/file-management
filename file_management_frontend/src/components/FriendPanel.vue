@@ -240,12 +240,14 @@ import { friendshipApi } from '@api/friendship'
 import { messageApi } from '@api/message'
 import { userApi } from '@api/user'
 import { useAuthStore } from '@stores/auth'
+import { useMessageUnreadStore } from '@stores/messageUnread'
 import fileApiService from '@api/file'
 import type { FileItem } from '@typing/file'
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
 const authStore = useAuthStore()
+const messageUnreadStore = useMessageUnreadStore()
 const myUserId = computed(() => authStore.user?.id)
 
 // 面板状态
@@ -281,6 +283,19 @@ const currentPickFolderId = ref<number | undefined>(undefined)
 const totalUnread = computed(() => {
     return unreadSummary.value.reduce((acc, curr) => acc + curr._count.id, 0)
 })
+
+watch(
+    totalUnread,
+    (n) => messageUnreadStore.setTotalUnread(n),
+    { immediate: true },
+)
+
+watch(
+    () => authStore.isLoggedIn,
+    (loggedIn) => {
+        if (!loggedIn) messageUnreadStore.reset()
+    },
+)
 
 const getUnreadCount = (friendId: number) => {
     const target = unreadSummary.value.find(u => u.senderId === friendId)
@@ -554,6 +569,9 @@ const confirmSaveFileHere = async () => {
 }
 
 onMounted(() => {
+    if (authStore.isLoggedIn) {
+        fetchUnreadSummary()
+    }
     startGlobalPolling()
     window.addEventListener('open-friend-panel', openDrawerPanel)
 })
