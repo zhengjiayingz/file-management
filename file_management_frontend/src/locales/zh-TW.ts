@@ -122,7 +122,21 @@ export default {
     permanentDelete: '徹底刪除',
     confirmEmpty: '確定要清空回收筒嗎？所有檔案將無法找回！',
     confirmDelete: '確定要徹底刪除 "{name}" 嗎？此操作無法撤銷！',
-    all: '全部'
+    all: '全部',
+    selectedCount: '已選中 {count} 項',
+    cancelSelection: '取消選擇',
+    batchRestore: '批次還原',
+    batchPermanentDelete: '批次徹底刪除',
+    confirmBatchRestore: '確定將選中的 {count} 項還原嗎？',
+    confirmBatchPermanent: '確定將選中的 {count} 項徹底刪除嗎？此操作無法復原！',
+    restoredCountMsg: '已還原 {count} 項',
+    permanentlyDeletedCountMsg: '已徹底刪除 {count} 項',
+    header: {
+      fileName: '檔名',
+      size: '檔案大小',
+      deletedAt: '刪除時間',
+      action: '操作'
+    }
   },
   logs: {
     title: '操作紀錄',

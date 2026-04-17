@@ -41,7 +41,9 @@ app.use(cors({
       callback(new Error('Not allowed by CORS'));
     }
   },
-  credentials: true
+  credentials: true,
+  // 前端 axios 需读取 Content-Disposition 作为下载文件名（跨域默认不可见）
+  exposedHeaders: ['Content-Disposition']
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));

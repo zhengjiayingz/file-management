@@ -16,12 +16,19 @@ import {
   previewFile
 } from '../controllers/file/query.controller.js';
 import {
+  listArchiveEntries,
+  checkArchiveExtractConflicts,
+  extractArchiveToDrive
+} from '../controllers/file/archiveExtract.controller.js';
+import {
   createFolder,
   renameFile,
   moveFile,
   deleteFile,
   restoreFile,
   permanentDeleteFile,
+  permanentDeleteFilesBatch,
+  restoreFilesBatch,
   saveSharedFile
 } from '../controllers/file/manage.controller.js';
 import {
@@ -340,6 +347,127 @@ router.post('/folder', createFolder);
  *                 $ref: '#/components/schemas/File'
  */
 router.get('/', getFiles);
+
+/**
+ * @swagger
+ * /api/files/batch/permanent-delete:
+ *   post:
+ *     summary: 批量彻底删除（回收站）
+ *     description: |
+ *       请求体传入待删除的 userFile id 列表。服务端会自动纳入回收站内属于这些节点的所有子孙项，
+ *       并按「子先于父」顺序删除，保证存储引用与配额正确。
+ *     tags: [回收站]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [ids]
+ *             properties:
+ *               ids:
+ *                 type: array
+ *                 items:
+ *                   type: integer
+ *                 description: 回收站中的文件/文件夹 id（非空）
+ *     responses:
+ *       200:
+ *         description: 批量删除成功
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     deletedCount:
+ *                       type: integer
+ *                       description: 实际删除的记录条数（含自动展开的子项）
+ */
+router.post('/batch/permanent-delete', permanentDeleteFilesBatch);
+
+/**
+ * @swagger
+ * /api/files/batch/restore:
+ *   post:
+ *     summary: 批量还原（回收站）
+ *     description: |
+ *       请求体传入待还原的 userFile id 列表。服务端会自动纳入回收站内属于这些节点的所有子孙项，
+ *       并按「父先于子」顺序还原。
+ *     tags: [回收站]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [ids]
+ *             properties:
+ *               ids:
+ *                 type: array
+ *                 items:
+ *                   type: integer
+ *     responses:
+ *       200:
+ *         description: 批量还原成功
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     restoredCount:
+ *                       type: integer
+ */
+router.post('/batch/restore', restoreFilesBatch);
+
+/**
+ * @swagger
+ * /api/files/{id}/archive/entries:
+ *   get:
+ *     summary: 列出 ZIP 内条目（在线解压）
+ *     tags: [文件管理]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.get('/:id/archive/entries', listArchiveEntries);
+
+/**
+ * @swagger
+ * /api/files/{id}/archive/conflicts:
+ *   post:
+ *     summary: 解压前检测是否与网盘已有文件重名
+ *     tags: [文件管理]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.post('/:id/archive/conflicts', checkArchiveExtractConflicts);
+
+/**
+ * @swagger
+ * /api/files/{id}/archive/extract:
+ *   post:
+ *     summary: 将 ZIP 内选中文件解压到网盘当前目录
+ *     tags: [文件管理]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.post('/:id/archive/extract', extractArchiveToDrive);
 
 // 获取单个文件信息
 /**

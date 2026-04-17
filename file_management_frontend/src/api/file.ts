@@ -166,6 +166,52 @@ export const fileApiService = {
     return res.data as Blob
   },
 
+  /** VIP/管理员：列出 ZIP 内条目（用于在线解压到网盘） */
+  async listArchiveEntries(id: number): Promise<{
+    archiveName: string
+    entries: { path: string; isDirectory: boolean; size: number }[]
+    truncated: boolean
+  }> {
+    const res = await request.get<any>(`/files/${id}/archive/entries`, { timeout: 120000 })
+    return res.data.data
+  },
+
+  /** VIP/管理员：解压前检测选中路径是否与当前网盘目录下已有文件重名（不解压） */
+  async checkArchiveExtractConflicts(
+    id: number,
+    parentId: number | undefined,
+    paths: string[]
+  ): Promise<{ hasConflict: boolean; conflictingPaths: string[] }> {
+    const res = await request.post<any>(`/files/${id}/archive/conflicts`, {
+      parentId: parentId === undefined ? null : parentId,
+      paths
+    })
+    return res.data.data
+  },
+
+  /**
+   * VIP/管理员：将 ZIP 内选中文件解压到网盘指定目录
+   * @param paths 压缩包内文件路径（非目录），不含尾部 /
+   * @param conflictAction 同名策略：suffix 自动改名 version 新版本 duplicate 同名并存
+   */
+  async extractArchiveToDrive(
+    id: number,
+    parentId: number | undefined,
+    paths: string[],
+    conflictAction: 'version' | 'duplicate' | 'suffix' = 'suffix'
+  ): Promise<{ fileCount: number; folderCount: number }> {
+    const res = await request.post<any>(
+      `/files/${id}/archive/extract`,
+      {
+        parentId: parentId === undefined ? null : parentId,
+        paths,
+        conflictAction
+      },
+      { timeout: 600000 }
+    )
+    return res.data.data
+  },
+
   // 删除文件（移入回收站）
   async deleteFile(id: number): Promise<void> {
     await request.delete(`/files/${id}`)
@@ -180,6 +226,18 @@ export const fileApiService = {
   // 彻底删除文件
   async permanentDeleteFile(id: number): Promise<void> {
     await request.delete(`/files/${id}/permanent`)
+  },
+
+  /** 回收站：批量彻底删除（后端会展开子项并按正确顺序删除） */
+  async permanentDeleteFilesBatch(ids: number[]): Promise<{ deletedCount: number }> {
+    const res = await request.post<any>('/files/batch/permanent-delete', { ids })
+    return res.data.data
+  },
+
+  /** 回收站：批量还原（后端会展开子项并按父先于子顺序还原） */
+  async restoreFilesBatch(ids: number[]): Promise<{ restoredCount: number }> {
+    const res = await request.post<any>('/files/batch/restore', { ids })
+    return res.data.data
   },
 
   // 创建文件夹

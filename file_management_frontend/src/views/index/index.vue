@@ -157,6 +157,16 @@
     <!-- Office 文档预览弹窗 -->
     <OfficePreviewDialog v-model="officePreviewVisible" :file-id="currentOfficeFile?.id"
       :file-name="currentOfficeFile?.fileName" @download="currentOfficeFile && downloadFile(currentOfficeFile)" />
+
+    <!-- 压缩包在线解压到当前网盘目录 -->
+    <ArchiveExtractDialog
+      v-if="archiveExtractTarget"
+      v-model="archiveExtractVisible"
+      :file-id="archiveExtractTarget.id"
+      :parent-id="currentFolderId"
+      :current-dir-name="archiveExtractCurrentDirLabel"
+      @success="loadFiles"
+    />
   </div>
 </template>
 
@@ -173,17 +183,23 @@ import { useAuthStore } from '@stores/auth'
 import { authApi } from '@api/auth'
 import fileApiService from '@api/file'
 import type { FileItem as FileInfo } from '@typing/file'
-import FileUpload from '@components/FileUpload.vue'
-import ImageCropperDialog from '@components/ImageCropperDialog.vue'
-import VideoPlayerDialog from '@components/VideoPlayerDialog.vue'
-import MoveDialog from '@components/MoveDialog.vue'
-import FileHistoryDialog from '@components/FileHistoryDialog.vue'
-import OfficePreviewDialog from '@components/OfficePreviewDialog.vue'
-import CustomImageViewer from '@components/CustomImageViewer.vue'
+import FileUpload from '@components/FileUpload/index.vue'
+import ImageCropperDialog from '@components/ImageCropperDialog/index.vue'
+import VideoPlayerDialog from '@components/VideoPlayerDialog/index.vue'
+import MoveDialog from '@components/MoveDialog/index.vue'
+import FileHistoryDialog from '@components/FileHistoryDialog/index.vue'
+import OfficePreviewDialog from '@components/OfficePreviewDialog/index.vue'
+import ArchiveExtractDialog from '@components/ArchiveExtractDialog/index.vue'
+import CustomImageViewer from '@components/CustomImageViewer/index.vue'
 import Sidebar from './cpns/Sidebar.vue'
 import FileList from './cpns/FileList.vue'
-import GlobalHeader from '@components/GlobalHeader.vue'
+import GlobalHeader from '@components/GlobalHeader/index.vue'
 import { formatFileSize } from '@utils/fileUpload'
+import {
+  isArchiveFile,
+  isZipExtractableOnline,
+  canUseOnlineArchiveExtract
+} from '@utils/archive'
 
 const router = useRouter()
 const route = useRoute()
@@ -456,7 +472,7 @@ const getFileDownloadUrl = (file: FileInfo) => {
 }
 
 // 文件双击处理
-const handleFileDoubleClick = (file: FileInfo) => {
+const handleFileDoubleClick = async (file: FileInfo) => {
   console.log('Double clicked file:', file)
   if (file.fileType === 'folder') {
     navigateToFolder(file.id, file.fileName)
@@ -478,6 +494,8 @@ const handleFileDoubleClick = (file: FileInfo) => {
       currentVideoTitle.value = file.fileName
       currentVideoFile.value = file
       videoPlayerVisible.value = true
+    } else if (isArchiveFile(file.fileName)) {
+      await handleArchiveDoubleClick(file)
     } else if (isExcelFile(file)) {
       // Excel 文件直接下载（LibreOffice 转换效果不佳）
       downloadFile(file)
@@ -703,6 +721,33 @@ const downloadFile = async (file: FileInfo) => {
     ElMessage.error('文件下载失败: ' + (error.message || '未知错误'))
   }
 }
+
+const archiveExtractVisible = ref(false)
+const archiveExtractTarget = ref<FileInfo | null>(null)
+
+const archiveExtractCurrentDirLabel = computed(() => {
+  if (!breadcrumbs.value.length) return String(t('index.toolbar.all'))
+  return breadcrumbs.value.map((b) => b.name).join(' / ')
+})
+
+/** 压缩包：普通用户直接下载；VIP/管理员打开在线解压到当前目录 */
+const handleArchiveDoubleClick = async (file: FileInfo) => {
+  if (!canUseOnlineArchiveExtract(authStore.user)) {
+    await downloadFile(file)
+    return
+  }
+  if (!isZipExtractableOnline(file)) {
+    ElMessage.warning('当前在线解压仅支持 ZIP 格式，已改为直接下载原文件')
+    await downloadFile(file)
+    return
+  }
+  archiveExtractTarget.value = file
+  archiveExtractVisible.value = true
+}
+
+watch(archiveExtractVisible, (v) => {
+  if (!v) archiveExtractTarget.value = null
+})
 
 // 显示创建文件夹对话框
 const showCreateFolderDialog = () => {

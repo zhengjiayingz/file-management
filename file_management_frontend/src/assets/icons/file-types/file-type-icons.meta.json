@@ -1,0 +1,12 @@
+{
+  "font_family": "file-type-icons",
+  "css_prefix_text": "icon-",
+  "note": "彩色图标走 file-type-icons.js 的 SVG Symbol + FileTypeColoredIcon.vue；不再使用 TTF 单色字体",
+  "glyphs": [
+    { "name": "excel", "font_class": "excel", "unicode": "e605" },
+    { "name": "pdf", "font_class": "pdf", "unicode": "e64d" },
+    { "name": "word", "font_class": "word", "unicode": "e802" },
+    { "name": "ppt", "font_class": "ppt", "unicode": "e64f" },
+    { "name": "archive", "font_class": "archive", "unicode": "e6cf" }
+  ]
+}

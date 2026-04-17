@@ -127,7 +127,21 @@ export default {
     permanentDelete: 'Delete Permanently',
     confirmEmpty: 'Are you sure you want to empty the recycle bin? This action cannot be undone!',
     confirmDelete: 'Are you sure you want to permanently delete this file? This action cannot be undone!',
-    all: 'All'
+    all: 'All',
+    selectedCount: '{count} selected',
+    cancelSelection: 'Clear selection',
+    batchRestore: 'Restore selected',
+    batchPermanentDelete: 'Delete permanently',
+    confirmBatchRestore: 'Restore {count} selected item(s)?',
+    confirmBatchPermanent: 'Permanently delete {count} selected item(s)? This cannot be undone.',
+    restoredCountMsg: 'Restored {count} item(s)',
+    permanentlyDeletedCountMsg: 'Permanently deleted {count} item(s)',
+    header: {
+      fileName: 'Name',
+      size: 'Size',
+      deletedAt: 'Deleted at',
+      action: 'Actions'
+    }
   },
   logs: {
     title: 'Operation Logs',

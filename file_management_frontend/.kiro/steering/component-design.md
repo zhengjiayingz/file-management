@@ -1,5 +1,15 @@
 # 组件设计规范
 
+## `src/components` 目录约定
+
+全局组件使用 **`components/<组件名>/index.vue`**（每组件一目录），例如 `components/FileUpload/index.vue`。
+
+```typescript
+import FileUpload from '@components/FileUpload/index.vue'
+```
+
+在 Vite 中需显式写出 **`/index.vue`**；若只写 `@components/FileUpload`（指向目录），可能触发 `EISDIR` 构建错误。
+
 ## 组件设计原则
 
 ### 单一职责原则
@@ -422,7 +432,7 @@ const AsyncComponent = defineAsyncComponent(() =>
 #### 单元测试
 ```typescript
 import { mount } from '@vue/test-utils'
-import UserCard from '@/components/UserCard.vue'
+import UserCard from '@/components/UserCard'
 
 describe('UserCard', () => {
   it('renders user name', () => {

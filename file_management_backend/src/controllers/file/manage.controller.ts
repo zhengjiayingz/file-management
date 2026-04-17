@@ -515,6 +515,421 @@ export const permanentDeleteFile = async (req: AuthRequest, res: Response): Prom
   }
 };
 
+const MAX_BATCH_PERMANENT_DELETE = 2000;
+const MAX_BATCH_PERMANENT_DELETE_EXPANDED = 10000;
+
+/** 在同一批删除集合内，子项先于父项（避免删文件夹时级联删掉子行导致存储未扣减） */
+function postOrderDeletionIds(nodes: { id: number; parentId: number | null }[]): number[] {
+  const idSet = new Set(nodes.map((n) => n.id));
+  const children = new Map<number, number[]>();
+  const roots: number[] = [];
+  for (const n of nodes) {
+    const p = n.parentId;
+    if (p !== null && idSet.has(p)) {
+      const arr = children.get(p) ?? [];
+      arr.push(n.id);
+      children.set(p, arr);
+    } else {
+      roots.push(n.id);
+    }
+  }
+  const out: number[] = [];
+  const visit = (id: number): void => {
+    for (const c of children.get(id) ?? []) {
+      visit(c);
+    }
+    out.push(id);
+  };
+  for (const r of roots) {
+    visit(r);
+  }
+  return out;
+}
+
+/** 同一批还原集合内：父先于子，保证父目录先恢复后再恢复子项 */
+function preOrderRestoreIds(nodes: { id: number; parentId: number | null }[]): number[] {
+  const idSet = new Set(nodes.map((n) => n.id));
+  const children = new Map<number, number[]>();
+  const roots: number[] = [];
+  for (const n of nodes) {
+    const p = n.parentId;
+    if (p !== null && idSet.has(p)) {
+      const arr = children.get(p) ?? [];
+      arr.push(n.id);
+      children.set(p, arr);
+    } else {
+      roots.push(n.id);
+    }
+  }
+  const out: number[] = [];
+  const visit = (id: number): void => {
+    out.push(id);
+    for (const c of children.get(id) ?? []) {
+      visit(c);
+    }
+  };
+  for (const r of roots) {
+    visit(r);
+  }
+  return out;
+}
+
+/**
+ * 批量还原（回收站）
+ * 自动纳入回收站内所选节点的所有子孙项，并按父→子顺序还原（与单条 restore 逻辑一致）。
+ */
+export const restoreFilesBatch = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ success: false, message: '未认证' });
+      return;
+    }
+
+    const raw = req.body?.ids;
+    if (!Array.isArray(raw) || raw.length === 0) {
+      res.status(400).json({ success: false, message: '请提供非空的 ids 数组' });
+      return;
+    }
+
+    const uniqueIds = [...new Set(raw.map((x: unknown) => parseInt(String(x), 10)).filter((n) => !isNaN(n)))];
+    if (uniqueIds.length === 0) {
+      res.status(400).json({ success: false, message: '无效的文件 ID' });
+      return;
+    }
+    if (uniqueIds.length > MAX_BATCH_PERMANENT_DELETE) {
+      res.status(400).json({
+        success: false,
+        message: `单次最多还原 ${MAX_BATCH_PERMANENT_DELETE} 项`
+      });
+      return;
+    }
+
+    const userId = req.user.id;
+
+    const initialRows = await prisma.userFile.findMany({
+      where: {
+        id: { in: uniqueIds },
+        userId,
+        isDeleted: true
+      },
+      select: { id: true }
+    });
+    if (initialRows.length !== uniqueIds.length) {
+      res.status(400).json({ success: false, message: '部分文件不存在或不在回收站' });
+      return;
+    }
+
+    let expanded = new Set<number>(uniqueIds);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      const more = await prisma.userFile.findMany({
+        where: {
+          userId,
+          isDeleted: true,
+          parentId: { in: [...expanded] }
+        },
+        select: { id: true }
+      });
+      for (const row of more) {
+        if (!expanded.has(row.id)) {
+          expanded.add(row.id);
+          changed = true;
+        }
+      }
+    }
+
+    if (expanded.size > MAX_BATCH_PERMANENT_DELETE_EXPANDED) {
+      res.status(400).json({
+        success: false,
+        message: `展开子项后数量超过上限（${MAX_BATCH_PERMANENT_DELETE_EXPANDED}）`
+      });
+      return;
+    }
+
+    const allNodes = await prisma.userFile.findMany({
+      where: {
+        id: { in: [...expanded] },
+        userId,
+        isDeleted: true
+      },
+      select: {
+        id: true,
+        parentId: true,
+        fileName: true,
+        fileType: true
+      }
+    });
+
+    if (allNodes.length !== expanded.size) {
+      res.status(400).json({ success: false, message: '批量还原数据不一致，请重试' });
+      return;
+    }
+
+    const snapshot = new Map<number, { fileName: string; fileType: string }>(
+      allNodes.map((uf) => [uf.id, { fileName: uf.fileName, fileType: uf.fileType }])
+    );
+
+    const order = preOrderRestoreIds(allNodes.map((n) => ({ id: n.id, parentId: n.parentId })));
+
+    const restoredIds: number[] = [];
+
+    await prisma.$transaction(async (tx) => {
+      for (const fileId of order) {
+        const userFile = await tx.userFile.findFirst({
+          where: {
+            id: fileId,
+            userId,
+            isDeleted: true
+          }
+        });
+
+        if (!userFile) {
+          continue;
+        }
+
+        let newParentId = userFile.parentId;
+
+        if (newParentId) {
+          const parentFolder = await tx.userFile.findFirst({
+            where: {
+              id: newParentId,
+              userId
+            }
+          });
+
+          if (!parentFolder || parentFolder.isDeleted) {
+            newParentId = null;
+          }
+        }
+
+        await tx.userFile.update({
+          where: { id: fileId },
+          data: {
+            isDeleted: false,
+            deletedAt: null,
+            parentId: newParentId
+          }
+        });
+        restoredIds.push(fileId);
+      }
+    });
+
+    const restoredCount = restoredIds.length;
+
+    for (const fileId of restoredIds) {
+      const meta = snapshot.get(fileId);
+      if (!meta) continue;
+      await logOperation({
+        req,
+        userId,
+        operationType: LogOperationType.RESTORE,
+        resourceType: meta.fileType === 'folder' ? LogResourceType.FOLDER : LogResourceType.FILE,
+        resourceId: fileId,
+        description: `Restored file (batch): ${meta.fileName}`
+      });
+    }
+
+    res.json({
+      success: true,
+      message: `已还原 ${restoredCount} 项`,
+      data: { restoredCount }
+    });
+  } catch (error) {
+    console.error('Restore batch error:', error);
+    res.status(500).json({ success: false, message: '批量还原失败' });
+  }
+};
+
+/**
+ * 批量彻底删除（回收站）
+ * 会自动包含所选节点在回收站内的所有子孙项，并按子→父顺序删除。
+ */
+export const permanentDeleteFilesBatch = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ success: false, message: '未认证' });
+      return;
+    }
+
+    const raw = req.body?.ids;
+    if (!Array.isArray(raw) || raw.length === 0) {
+      res.status(400).json({ success: false, message: '请提供非空的 ids 数组' });
+      return;
+    }
+
+    const uniqueIds = [...new Set(raw.map((x: unknown) => parseInt(String(x), 10)).filter((n) => !isNaN(n)))];
+    if (uniqueIds.length === 0) {
+      res.status(400).json({ success: false, message: '无效的文件 ID' });
+      return;
+    }
+    if (uniqueIds.length > MAX_BATCH_PERMANENT_DELETE) {
+      res.status(400).json({
+        success: false,
+        message: `单次最多删除 ${MAX_BATCH_PERMANENT_DELETE} 项`
+      });
+      return;
+    }
+
+    const userId = req.user.id;
+
+    const initialRows = await prisma.userFile.findMany({
+      where: {
+        id: { in: uniqueIds },
+        userId,
+        isDeleted: true
+      },
+      select: { id: true }
+    });
+    if (initialRows.length !== uniqueIds.length) {
+      res.status(400).json({ success: false, message: '部分文件不存在或不在回收站' });
+      return;
+    }
+
+    let expanded = new Set<number>(uniqueIds);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      const more = await prisma.userFile.findMany({
+        where: {
+          userId,
+          isDeleted: true,
+          parentId: { in: [...expanded] }
+        },
+        select: { id: true }
+      });
+      for (const row of more) {
+        if (!expanded.has(row.id)) {
+          expanded.add(row.id);
+          changed = true;
+        }
+      }
+    }
+
+    if (expanded.size > MAX_BATCH_PERMANENT_DELETE_EXPANDED) {
+      res.status(400).json({
+        success: false,
+        message: `展开子项后数量超过上限（${MAX_BATCH_PERMANENT_DELETE_EXPANDED}）`
+      });
+      return;
+    }
+
+    const allNodes = await prisma.userFile.findMany({
+      where: {
+        id: { in: [...expanded] },
+        userId,
+        isDeleted: true
+      },
+      include: {
+        storage: {
+          select: {
+            id: true,
+            fileSize: true,
+            filePath: true
+          }
+        }
+      }
+    });
+
+    if (allNodes.length !== expanded.size) {
+      res.status(400).json({ success: false, message: '批量删除数据不一致，请重试' });
+      return;
+    }
+
+    const snapshot = new Map<
+      number,
+      { fileName: string; fileType: string }
+    >(allNodes.map((uf) => [uf.id, { fileName: uf.fileName, fileType: uf.fileType }]));
+
+    const order = postOrderDeletionIds(
+      allNodes.map((n) => ({ id: n.id, parentId: n.parentId }))
+    );
+
+    const deletedIds: number[] = [];
+
+    await prisma.$transaction(async (tx) => {
+      for (const fileId of order) {
+        const userFile = await tx.userFile.findFirst({
+          where: {
+            id: fileId,
+            userId,
+            isDeleted: true
+          },
+          include: {
+            storage: {
+              select: {
+                id: true,
+                fileSize: true,
+                filePath: true
+              }
+            }
+          }
+        });
+
+        if (!userFile) {
+          continue;
+        }
+
+        const fileSize = userFile.storage ? userFile.storage.fileSize : BigInt(0);
+        const storageId = userFile.storageId;
+
+        await tx.userFile.delete({
+          where: { id: fileId }
+        });
+        deletedIds.push(fileId);
+
+        if (storageId && userFile.storage) {
+          await tx.user.update({
+            where: { id: userId },
+            data: {
+              storageUsed: { decrement: fileSize }
+            }
+          });
+
+          const updatedStorage = await tx.fileStorage.update({
+            where: { id: storageId },
+            data: { referenceCount: { decrement: 1 } }
+          });
+
+          if (updatedStorage.referenceCount <= 0) {
+            await tx.fileStorage.update({
+              where: { id: storageId },
+              data: {
+                status: 'pending_delete',
+                markedDeleteAt: new Date()
+              }
+            });
+          }
+        }
+      }
+    });
+
+    const deletedCount = deletedIds.length;
+
+    for (const fileId of deletedIds) {
+      const meta = snapshot.get(fileId);
+      if (!meta) continue;
+      await logOperation({
+        req,
+        userId,
+        operationType: LogOperationType.PERMANENT_DELETE,
+        resourceType: meta.fileType === 'folder' ? LogResourceType.FOLDER : LogResourceType.FILE,
+        resourceId: fileId,
+        description: `Permanently deleted (batch): ${meta.fileName}`
+      });
+    }
+
+    res.json({
+      success: true,
+      message: `已彻底删除 ${deletedCount} 项`,
+      data: { deletedCount }
+    });
+  } catch (error) {
+    console.error('Permanent delete batch error:', error);
+    res.status(500).json({ success: false, message: '批量彻底删除失败' });
+  }
+};
+
 /**
  * 保存分享的文件到自己的网盘
  */

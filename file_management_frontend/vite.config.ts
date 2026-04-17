@@ -28,7 +28,8 @@ export default defineConfig({
       '@api': fileURLToPath(new URL('./src/api', import.meta.url)),
       '@stores': fileURLToPath(new URL('./src/stores', import.meta.url)),
       '@utils': fileURLToPath(new URL('./src/utils', import.meta.url)),
-      '@typing': fileURLToPath(new URL('./src/types', import.meta.url))
+      '@typing': fileURLToPath(new URL('./src/types', import.meta.url)),
+      '@icons': fileURLToPath(new URL('./src/assets/icons', import.meta.url))
     },
   },
   build: {

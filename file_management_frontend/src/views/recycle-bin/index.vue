@@ -36,39 +36,122 @@
         </div>
       </div>
 
+      <!-- 批量操作 -->
+      <div class="batch-toolbar" v-if="selectedFiles.size > 0">
+        <div class="batch-info">
+          {{ t('recycleBin.selectedCount', { count: selectedFiles.size }) }}
+          <el-button link type="primary" @click="clearSelection">{{ t('recycleBin.cancelSelection') }}</el-button>
+        </div>
+        <div class="batch-actions">
+          <el-button type="primary" :icon="RefreshRight" @click="batchRestore">{{ t('recycleBin.batchRestore')
+          }}</el-button>
+          <el-button type="danger" :icon="Delete" @click="batchPermanentDelete">{{ t('recycleBin.batchPermanentDelete')
+          }}</el-button>
+        </div>
+      </div>
+
       <!-- 文件列表区域 -->
-      <el-main class="file-content">
+      <el-main class="file-content" v-loading="loading">
         <!-- 文件列表 -->
         <div v-if="files.length > 0" class="file-list" :class="viewMode">
-          <div v-for="file in filteredFiles" :key="file.id" class="file-item" @click="handleFileClick(file)"
-            @dblclick="handleFileDoubleClick(file)">
-            <div class="file-icon">
-              <el-icon size="48" :color="getFileIconColor(file)">
-                <Folder v-if="file.fileType === 'folder'" />
-                <Document v-else />
-              </el-icon>
+          <!-- 列表模式表头（与首页 FileList 对齐：勾选 + 图标占位 + 列标题） -->
+          <div v-if="viewMode === 'list' && filteredFiles.length > 0" class="file-list-header">
+            <div class="header-check">
+              <el-checkbox :model-value="isAllSelected" :indeterminate="isIndeterminate"
+                @change="(v: string | number | boolean) => selectAll(!!v)" />
             </div>
-            <div class="file-info">
-              <div class="file-name" :title="file.fileName">{{ file.fileName }}</div>
-              <div class="file-meta">
-                <span v-if="file.fileType === 'file'">{{ formatFileSize(file.fileSize || 0) }}</span>
-                <span>删除时间: {{ formatDate(file.updatedAt) }}</span>
+            <div class="header-icon-spacer" aria-hidden="true" />
+            <div class="header-item name">{{ t('recycleBin.header.fileName') }}</div>
+            <div class="header-item size">{{ t('recycleBin.header.size') }}</div>
+            <div class="header-item date">{{ t('recycleBin.header.deletedAt') }}</div>
+            <div class="header-item actions">{{ t('recycleBin.header.action') }}</div>
+          </div>
+
+          <div v-for="file in filteredFiles" :key="file.id" class="file-item"
+            :class="{ 'is-selected': selectedFiles.has(file.id) }" @click="handleFileClick(file, $event)"
+            @dblclick="handleFileDoubleClick(file)" @mouseenter="onGridFileItemMouseEnter(file, $event)"
+            @mouseleave="onGridFileItemMouseLeave(file, $event)">
+            <!-- 列表模式：与首页同行布局 -->
+            <template v-if="viewMode === 'list'">
+              <div class="file-check">
+                <el-checkbox :model-value="selectedFiles.has(file.id)" @click.stop
+                  @change="() => toggleSelection(file, true)" />
               </div>
-            </div>
-            <div class="file-actions">
-              <el-dropdown trigger="click" @command="(cmd) => handleFileAction(cmd, file)">
-                <el-icon>
-                  <MoreFilled />
-                </el-icon>
-                <template #dropdown>
-                  <el-dropdown-menu>
-                    <el-dropdown-item command="restore">{{ t('recycleBin.restore') }}</el-dropdown-item>
-                    <el-dropdown-item divided command="permanentDelete" style="color: #f56c6c;">{{
-                      t('recycleBin.permanentDelete') }}</el-dropdown-item>
-                  </el-dropdown-menu>
-                </template>
-              </el-dropdown>
-            </div>
+              <div class="file-icon-wrapper">
+                <div class="icon-box">
+                  <img v-if="file.fileType !== 'folder' && (isImageFile(file) || isVideoFile(file)) && !imageErrorMap[file.id]"
+                    :src="getFilePreviewUrl(file)" class="list-thumbnail" loading="lazy"
+                    @error="handleImageError(file.id)" />
+                  <FileTypeColoredIcon v-else-if="getFileTypeSymbolId(file)"
+                    :name="getFileTypeSymbolId(file)!"
+                    size="list" />
+                  <el-icon v-else class="file-icon-el" :size="24" :color="getFileIconColor(file)">
+                    <component :is="getFileIcon(file)" />
+                  </el-icon>
+                </div>
+              </div>
+              <div class="file-info-content">
+                <div class="file-name" :title="file.fileName">{{ file.fileName }}</div>
+                <div class="file-meta-row">
+                  <div class="file-size">{{ file.fileType === 'folder' ? '-' : formatFileSize(file.fileSize || 0) }}
+                  </div>
+                  <div class="file-date">{{ formatDate(file.updatedAt) }}</div>
+                  <div class="file-actions-col">
+                    <el-button link type="primary" @click.stop="restoreFile(file)">{{ t('recycleBin.restore')
+                    }}</el-button>
+                    <el-button link type="danger" @click.stop="permanentDeleteFile(file)">{{
+                      t('recycleBin.permanentDelete') }}</el-button>
+                  </div>
+                </div>
+              </div>
+            </template>
+
+            <!-- 网格模式 -->
+            <template v-else>
+              <div class="file-check-grid">
+                <el-checkbox :model-value="selectedFiles.has(file.id)" @click.stop
+                  @change="() => toggleSelection(file, true)" />
+              </div>
+              <div class="file-icon">
+                <div class="image-thumbnail">
+                  <video v-if="file.fileType !== 'folder' && isVideoFile(file) && !videoErrorMap[file.id]"
+                    class="file-thumbnail-img file-thumbnail-video" muted playsinline
+                    :poster="getFilePreviewUrl(file)" :src="getFileVideoPreviewUrl(file)" preload="none"
+                    @timeupdate="onGridVideoTimeUpdate" @ended="onGridVideoEnded"
+                    @error="handleVideoError(file.id)" />
+                  <img v-else-if="file.fileType !== 'folder' && (isImageFile(file) || isVideoFile(file)) && !imageErrorMap[file.id]"
+                    :src="getFilePreviewUrl(file)" class="file-thumbnail-img" loading="lazy"
+                    @error="handleImageError(file.id)" />
+                  <FileTypeColoredIcon v-else-if="getFileTypeSymbolId(file)"
+                    :name="getFileTypeSymbolId(file)!"
+                    size="grid" />
+                  <el-icon v-else class="file-icon-el" :size="64" :color="getFileIconColor(file)">
+                    <component :is="getFileIcon(file)" />
+                  </el-icon>
+                </div>
+              </div>
+              <div class="file-info">
+                <div class="file-name" :title="file.fileName">{{ file.fileName }}</div>
+                <div class="file-meta">
+                  <span v-if="file.fileType === 'file'">{{ formatFileSize(file.fileSize || 0) }}</span>
+                  <span>{{ t('recycleBin.header.deletedAt') }}: {{ formatDate(file.updatedAt) }}</span>
+                </div>
+              </div>
+              <div class="file-actions" @click.stop>
+                <el-dropdown trigger="click" @command="(cmd) => handleFileAction(cmd, file)">
+                  <el-icon>
+                    <MoreFilled />
+                  </el-icon>
+                  <template #dropdown>
+                    <el-dropdown-menu>
+                      <el-dropdown-item command="restore">{{ t('recycleBin.restore') }}</el-dropdown-item>
+                      <el-dropdown-item divided command="permanentDelete" style="color: #f56c6c;">{{
+                        t('recycleBin.permanentDelete') }}</el-dropdown-item>
+                    </el-dropdown-menu>
+                  </template>
+                </el-dropdown>
+              </div>
+            </template>
           </div>
         </div>
 
@@ -87,30 +170,127 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
-  User, ArrowDown, Folder, Search,
-  Clock, Star, Delete, List, Grid, MoreFilled, Document
+  Folder, Search,
+  Delete, List, Grid, MoreFilled, Document,
+  Picture, VideoPlay, Headset, RefreshRight
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '@stores/auth'
-import { authApi } from '@api/auth'
 import fileApiService from '@api/file'
 import type { FileItem as FileInfo } from '@typing/file'
 import { formatFileSize } from '@utils/fileUpload'
+import { getFileTypeSymbolId } from '@utils/fileTypeIcons'
+import FileTypeColoredIcon from '@components/FileTypeColoredIcon/index.vue'
 import Sidebar from '@views/index/cpns/Sidebar.vue'
-import GlobalHeader from '@components/GlobalHeader.vue'
+import GlobalHeader from '@components/GlobalHeader/index.vue'
 import { useI18n } from 'vue-i18n'
 
-const router = useRouter()
 const authStore = useAuthStore()
 const { t } = useI18n()
 
-// 响应式数据
 const searchText = ref('')
 const viewMode = ref<'list' | 'grid'>('list')
 const files = ref<FileInfo[]>([])
 const loading = ref(false)
+const selectedFiles = ref<Set<number>>(new Set())
+
+const isImageFile = (file: FileInfo) => {
+  return (file.mimeType && file.mimeType.startsWith('image/')) ||
+    /\.(jpg|jpeg|png|gif|webp|bmp)$/i.test(file.fileName)
+}
+
+const isVideoFile = (file: FileInfo) => {
+  return (file.mimeType && file.mimeType.startsWith('video/')) ||
+    /\.(mp4|webm|ogg|mov|wmv|flv|avi|rmvb|mkv)$/i.test(file.fileName)
+}
+
+const isAudioFile = (file: FileInfo) => {
+  return (file.mimeType && file.mimeType.startsWith('audio/')) ||
+    /\.(mp3|wav|ogg|flac|aac)$/i.test(file.fileName)
+}
+
+const getFileIcon = (file: FileInfo) => {
+  if (file.fileType === 'folder') return Folder
+  if (isImageFile(file)) return Picture
+  if (isVideoFile(file)) return VideoPlay
+  if (isAudioFile(file)) return Headset
+  return Document
+}
+
+const getFileIconColor = (file: FileInfo): string => {
+  if (file.fileType === 'folder') return '#ffd04b'
+  if (isImageFile(file)) return '#67c23a'
+  if (isVideoFile(file)) return '#f56c6c'
+  if (isAudioFile(file)) return '#e6a23c'
+  return '#909399'
+}
+
+const getFilePreviewUrl = (file: FileInfo) => {
+  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
+  const token = authStore.token || ''
+  return `${API_BASE_URL}/api/files/${file.id}/thumbnail?token=${encodeURIComponent(token)}`
+}
+
+const getFileVideoPreviewUrl = (file: FileInfo) => {
+  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
+  const token = authStore.token || ''
+  return `${API_BASE_URL}/api/files/${file.id}/download?preview=true&token=${encodeURIComponent(token)}`
+}
+
+const imageErrorMap = ref<Record<number, boolean>>({})
+const videoErrorMap = ref<Record<number, boolean>>({})
+
+/** 网格内视频悬停预览：仅循环播放前 10 秒 */
+const GRID_VIDEO_PREVIEW_SECONDS = 10
+
+const handleImageError = (fileId: number) => {
+  imageErrorMap.value[fileId] = true
+}
+
+const handleVideoError = (fileId: number) => {
+  videoErrorMap.value[fileId] = true
+}
+
+const getGridCardVideo = (e: MouseEvent): HTMLVideoElement | null => {
+  const card = e.currentTarget as HTMLElement | null
+  if (!card) return null
+  const v = card.querySelector('video.file-thumbnail-video')
+  return v instanceof HTMLVideoElement ? v : null
+}
+
+const onGridFileItemMouseEnter = (file: FileInfo, e: MouseEvent) => {
+  if (viewMode.value !== 'grid' || file.fileType === 'folder' || !isVideoFile(file) || videoErrorMap.value[file.id]) {
+    return
+  }
+  const video = getGridCardVideo(e)
+  if (!video) return
+  video.currentTime = 0
+  void video.play().catch(() => {})
+}
+
+const onGridFileItemMouseLeave = (file: FileInfo, e: MouseEvent) => {
+  if (viewMode.value !== 'grid' || file.fileType === 'folder' || !isVideoFile(file) || videoErrorMap.value[file.id]) {
+    return
+  }
+  const video = getGridCardVideo(e)
+  if (!video) return
+  video.pause()
+  video.currentTime = 0
+}
+
+const onGridVideoTimeUpdate = (e: Event) => {
+  const v = e.target as HTMLVideoElement
+  if (v.currentTime >= GRID_VIDEO_PREVIEW_SECONDS) {
+    v.currentTime = 0
+  }
+}
+
+const onGridVideoEnded = (e: Event) => {
+  const v = e.target as HTMLVideoElement
+  v.currentTime = 0
+  void v.play().catch(() => {})
+}
 
 // 计算属性
 const filteredFiles = computed(() => {
@@ -130,6 +310,42 @@ const filteredFiles = computed(() => {
   })
 })
 
+const isAllSelected = computed(() => {
+  const list = filteredFiles.value
+  return list.length > 0 && list.every((f) => selectedFiles.value.has(f.id))
+})
+
+const isIndeterminate = computed(() => {
+  const list = filteredFiles.value
+  const n = list.filter((f) => selectedFiles.value.has(f.id)).length
+  return n > 0 && n < list.length
+})
+
+const toggleSelection = (file: FileInfo, multiSelect = false) => {
+  if (multiSelect) {
+    if (selectedFiles.value.has(file.id)) {
+      selectedFiles.value.delete(file.id)
+    } else {
+      selectedFiles.value.add(file.id)
+    }
+  } else {
+    selectedFiles.value.clear()
+    selectedFiles.value.add(file.id)
+  }
+}
+
+const clearSelection = () => {
+  selectedFiles.value.clear()
+}
+
+const selectAll = (checked: boolean) => {
+  if (checked) {
+    filteredFiles.value.forEach((f) => selectedFiles.value.add(f.id))
+  } else {
+    filteredFiles.value.forEach((f) => selectedFiles.value.delete(f.id))
+  }
+}
+
 // 生命周期
 onMounted(() => {
   loadFiles()
@@ -139,7 +355,9 @@ onMounted(() => {
 const loadFiles = async () => {
   try {
     loading.value = true
-    files.value = await fileApiService.getRecycleBinFiles()
+    const data = await fileApiService.getRecycleBinFiles()
+    files.value = data
+    clearSelection()
   } catch (error: any) {
     ElMessage.error('加载回收站失败: ' + (error.message || '未知错误'))
   } finally {
@@ -151,27 +369,13 @@ const handleSearch = () => {
   // 搜索逻辑已在计算属性中处理
 }
 
-const handleFileClick = (file: FileInfo) => {
-  console.log('选中文件:', file)
+const handleFileClick = (file: FileInfo, event?: MouseEvent) => {
+  const multi = !!(event && (event.ctrlKey || event.metaKey))
+  toggleSelection(file, multi)
 }
 
 const handleFileDoubleClick = (file: FileInfo) => {
   // 回收站内双击暂无操作，或者提示还原
-}
-
-const getFileIconColor = (file: FileInfo): string => {
-  if (file.fileType === 'folder') {
-    return '#ffd04b'
-  }
-  if (file.mimeType && file.mimeType.startsWith('image/')) {
-    return '#67c23a'
-  } else if (file.mimeType && file.mimeType.startsWith('video/')) {
-    return '#e6a23c'
-  } else if (file.mimeType && file.mimeType.includes('pdf')) {
-    return '#f56c6c'
-  } else {
-    return '#909399'
-  }
 }
 
 const formatDate = (dateString: string): string => {
@@ -195,6 +399,7 @@ const restoreFile = async (file: FileInfo) => {
   try {
     const message = await fileApiService.restoreFile(file.id)
     ElMessage.success(message || '还原成功')
+    selectedFiles.value.delete(file.id)
 
     // 从列表中移除
     const index = files.value.findIndex((f: FileInfo) => f.id === file.id)
@@ -221,6 +426,7 @@ const permanentDeleteFile = async (file: FileInfo) => {
     )
 
     await fileApiService.permanentDeleteFile(file.id)
+    selectedFiles.value.delete(file.id)
 
     // 从列表中移除
     const index = files.value.findIndex(f => f.id === file.id)
@@ -235,6 +441,70 @@ const permanentDeleteFile = async (file: FileInfo) => {
     if (error !== 'cancel') {
       ElMessage.error('删除失败: ' + (error.message || '未知错误'))
     }
+  }
+}
+
+const batchRestore = async () => {
+  if (selectedFiles.value.size === 0) return
+  try {
+    await ElMessageBox.confirm(
+      t('recycleBin.confirmBatchRestore', { count: selectedFiles.value.size }),
+      t('recycleBin.batchRestore'),
+      {
+        confirmButtonText: t('recycleBin.restore'),
+        cancelButtonText: t('common.cancel'),
+        type: 'info'
+      }
+    )
+    loading.value = true
+    const ids = Array.from(selectedFiles.value)
+    const { restoredCount } = await fileApiService.restoreFilesBatch(ids)
+    clearSelection()
+    await loadFiles()
+    ElMessage.success(t('recycleBin.restoredCountMsg', { count: restoredCount }))
+  } catch (error: any) {
+    if (error !== 'cancel') {
+      const msg =
+        error?.response?.data?.message ||
+        error?.message ||
+        '未知错误'
+      ElMessage.error(msg)
+    }
+  } finally {
+    loading.value = false
+  }
+}
+
+const batchPermanentDelete = async () => {
+  if (selectedFiles.value.size === 0) return
+  try {
+    await ElMessageBox.confirm(
+      t('recycleBin.confirmBatchPermanent', { count: selectedFiles.value.size }),
+      t('recycleBin.batchPermanentDelete'),
+      {
+        confirmButtonText: t('recycleBin.permanentDelete'),
+        cancelButtonText: t('common.cancel'),
+        type: 'warning',
+        icon: Delete
+      }
+    )
+    loading.value = true
+    const ids = Array.from(selectedFiles.value)
+    const { deletedCount } = await fileApiService.permanentDeleteFilesBatch(ids)
+    clearSelection()
+    await loadFiles()
+    ElMessage.success(t('recycleBin.permanentlyDeletedCountMsg', { count: deletedCount }))
+    authStore.refreshUserInfo()
+  } catch (error: any) {
+    if (error !== 'cancel') {
+      const msg =
+        error?.response?.data?.message ||
+        error?.message ||
+        '未知错误'
+      ElMessage.error(msg)
+    }
+  } finally {
+    loading.value = false
   }
 }
 
@@ -253,13 +523,9 @@ const handleEmptyRecycleBin = async () => {
       }
     )
 
-    // 由于没有批量删除API，这里只能循环调用或者让后端增加批量API。
-    // 为了安全和简单，暂时循环调用（注意文件多时性能问题，但暂无批量API）
-    // 或者提示用户只能一个个删？
-    // 作为一个完善的功能，应该支持。这里先进行并发删除。
     loading.value = true
-    const deletePromises = files.value.map(file => fileApiService.permanentDeleteFile(file.id))
-    await Promise.allSettled(deletePromises)
+    const ids = files.value.map((file) => file.id)
+    await fileApiService.permanentDeleteFilesBatch(ids)
 
     // 重新加载
     await loadFiles()
@@ -270,6 +536,11 @@ const handleEmptyRecycleBin = async () => {
   } catch (error: any) {
     if (error !== 'cancel') {
       console.error(error)
+      const msg =
+        error?.response?.data?.message ||
+        error?.message ||
+        '未知错误'
+      ElMessage.error('清空失败: ' + msg)
     }
   } finally {
     loading.value = false
@@ -385,6 +656,33 @@ const handleEmptyRecycleBin = async () => {
   }
 }
 
+.batch-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 20px;
+  background-color: #ecf5ff;
+  border-bottom: 1px solid #d9ecff;
+
+  @at-root html.dark & {
+    background-color: #2b2b2b;
+    border-bottom-color: #4c4d4f;
+  }
+
+  .batch-info {
+    font-size: 14px;
+    color: #409eff;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .batch-actions {
+    display: flex;
+    gap: 8px;
+  }
+}
+
 // 文件内容
 .file-content {
   background: white;
@@ -393,79 +691,149 @@ const handleEmptyRecycleBin = async () => {
   position: relative;
 }
 
-// 文件列表
+// 文件列表（列表模式与首页 FileList 列表布局一致）
 .file-list {
   &.list {
+    .file-list-header {
+      display: flex;
+      align-items: center;
+      padding: 0 10px;
+      border-bottom: 1px solid #ebeef5;
+      color: #909399;
+      font-size: 13px;
+      line-height: 40px;
+
+      .header-check {
+        width: 40px;
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .header-icon-spacer {
+        width: 44px;
+        flex-shrink: 0;
+      }
+
+      .header-item {
+        &.name {
+          flex: 1;
+          min-width: 0;
+        }
+
+        &.size {
+          width: 100px;
+          flex-shrink: 0;
+        }
+
+        &.date {
+          width: 160px;
+          flex-shrink: 0;
+        }
+
+        &.actions {
+          width: 220px;
+          flex-shrink: 0;
+          text-align: right;
+        }
+      }
+    }
+
     .file-item {
       display: flex;
       align-items: center;
-      padding: 12px 0;
+      padding: 10px;
       border-bottom: 1px solid #f0f0f0;
       cursor: pointer;
-      transition: background-color 0.3s;
+      transition: background-color 0.2s;
+
+      &.is-selected {
+        background-color: #ecf5ff;
+
+        @at-root html.dark & {
+          background-color: #2b2b2b;
+        }
+      }
 
       &:hover {
-        background-color: #f8f9fa;
+        background-color: #f5f7fa;
 
         @at-root html.dark & {
           background-color: #1d1e1f;
         }
       }
 
-      .file-icon {
-        margin-right: 16px;
+      .file-check {
+        width: 40px;
         flex-shrink: 0;
-        width: 48px;
-        height: 48px;
         display: flex;
         align-items: center;
         justify-content: center;
+        margin-right: 4px;
       }
 
-      .file-info {
+      .file-icon-wrapper {
+        margin-right: 12px;
+        width: 32px;
+        flex-shrink: 0;
+
+        .icon-box {
+          display: flex;
+          justify-content: center;
+          align-items: center;
+
+          .list-thumbnail {
+            width: 32px;
+            height: 32px;
+            object-fit: cover;
+            border-radius: 4px;
+          }
+        }
+      }
+
+      .file-info-content {
         flex: 1;
         min-width: 0;
+        display: flex;
+        align-items: center;
 
         .file-name {
+          flex: 1;
+          min-width: 0;
           font-size: 14px;
-          color: #333;
-
-          @at-root html.dark & {
-            color: #CFD3DC;
-          }
-
-          margin-bottom: 4px;
+          color: #606266;
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
-        }
 
-        .file-meta {
-          font-size: 12px;
-          color: #909399;
-          display: flex;
-          gap: 12px;
-        }
-      }
-
-      .file-actions {
-        margin-left: 16px;
-        opacity: 0;
-        transition: opacity 0.2s;
-
-        .el-icon {
-          font-size: 20px;
-          color: #909399;
-          cursor: pointer;
-
-          &:hover {
-            color: #409eff;
+          @at-root html.dark & {
+            color: #cfd3dc;
           }
         }
-      }
 
-      &:hover .file-actions {
-        opacity: 1;
+        .file-meta-row {
+          display: flex;
+          align-items: center;
+          flex-shrink: 0;
+
+          .file-size {
+            width: 100px;
+            font-size: 13px;
+            color: #909399;
+          }
+
+          .file-date {
+            width: 160px;
+            font-size: 13px;
+            color: #909399;
+          }
+
+          .file-actions-col {
+            width: 220px;
+            text-align: right;
+          }
+        }
       }
     }
   }
@@ -485,6 +853,16 @@ const handleEmptyRecycleBin = async () => {
       transition: all 0.3s;
       position: relative;
 
+      &.is-selected {
+        background-color: #ecf5ff;
+        outline: 1px solid #d9ecff;
+
+        @at-root html.dark & {
+          background-color: #2b2b2b;
+          outline-color: #4c4d4f;
+        }
+      }
+
       &:hover {
         background-color: #f5f7fa;
 
@@ -497,6 +875,13 @@ const handleEmptyRecycleBin = async () => {
         }
       }
 
+      .file-check-grid {
+        position: absolute;
+        top: 8px;
+        left: 8px;
+        z-index: 3;
+      }
+
       .file-icon {
         width: 64px;
         height: 64px;
@@ -504,6 +889,27 @@ const handleEmptyRecycleBin = async () => {
         display: flex;
         align-items: center;
         justify-content: center;
+
+        .image-thumbnail {
+          width: 64px;
+          height: 64px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+
+          .file-thumbnail-img,
+          .file-thumbnail-video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 6px;
+          }
+
+          .file-thumbnail-video {
+            pointer-events: none;
+            background: #000;
+          }
+        }
       }
 
       .file-info {

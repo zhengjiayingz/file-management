@@ -254,6 +254,209 @@ export async function persistMergedFileRecords(
   });
 }
 
+const EXT_MIME: Record<string, string> = {
+  '.txt': 'text/plain',
+  '.html': 'text/html',
+  '.htm': 'text/html',
+  '.css': 'text/css',
+  '.js': 'text/javascript',
+  '.mjs': 'text/javascript',
+  '.json': 'application/json',
+  '.md': 'text/markdown',
+  '.xml': 'application/xml',
+  '.pdf': 'application/pdf',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.svg': 'image/svg+xml',
+  '.zip': 'application/zip',
+  '.rar': 'application/x-rar-compressed',
+  '.7z': 'application/x-7z-compressed',
+  '.mp4': 'video/mp4',
+  '.webm': 'video/webm',
+  '.mp3': 'audio/mpeg',
+  '.wav': 'audio/wav',
+  '.ppt': 'application/vnd.ms-powerpoint',
+  '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  '.doc': 'application/msword',
+  '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  '.xls': 'application/vnd.ms-excel',
+  '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+};
+
+/** 由扩展名推断 MIME（解压落盘等场景无客户端类型时使用） */
+export function guessMimeFromFileName(fileName: string): string {
+  const ext = path.extname(fileName).toLowerCase();
+  return EXT_MIME[ext] || 'application/octet-stream';
+}
+
+/**
+ * 与同目录「保存分享文件到网盘」一致：若已存在同名未删除条目，则依次尝试 base(1).ext、base(2).ext …
+ */
+export async function resolveUniqueNameInFolder(
+  tx: { userFile: { findFirst: (args: unknown) => Promise<unknown> } },
+  userId: number,
+  parentId: number | null | undefined,
+  desiredName: string
+): Promise<string> {
+  const pid = parentId !== undefined && parentId !== null ? parentId : null;
+  let finalFileName = desiredName;
+  let counter = 1;
+  let basePart = finalFileName;
+  let extPart = '';
+  const lastDotIdx = finalFileName.lastIndexOf('.');
+  if (lastDotIdx !== -1) {
+    basePart = finalFileName.substring(0, lastDotIdx);
+    extPart = finalFileName.substring(lastDotIdx);
+  }
+
+  while (true) {
+    const exists = await tx.userFile.findFirst({
+      where: {
+        userId,
+        parentId: pid,
+        fileName: finalFileName,
+        isDeleted: false
+      }
+    });
+    if (!exists) break;
+    finalFileName = `${basePart}(${counter})${extPart}`;
+    counter++;
+  }
+  return finalFileName;
+}
+
+/** 在线解压等：与分片合并同名策略对齐 */
+export type RegisterLocalConflictAction = 'version' | 'duplicate' | 'suffix';
+
+/**
+ * 将已存在于磁盘上的文件注册为当前用户网盘中的文件（复用 FileStorage 去重与引用计数逻辑，行为对齐传统上传）
+ *
+ * - `suffix`（默认）：同目录已有同名则自动改为 base(1).ext
+ * - `duplicate`：与 merge「保留两者」一致，允许第二条同名 UserFile 并存
+ * - `version`：与 merge「保存为新版本」一致，写 file_history 后更新原记录
+ */
+export async function registerLocalFileInDrive(params: {
+  absolutePath: string;
+  userId: number;
+  parentId: number | null;
+  logicalFileName: string;
+  conflictAction?: RegisterLocalConflictAction;
+}): Promise<UserFile> {
+  const { absolutePath, userId, parentId, logicalFileName } = params;
+  const conflictAction: RegisterLocalConflictAction = params.conflictAction ?? 'suffix';
+  const baseName = path.basename(logicalFileName.replace(/\\/g, '/'));
+  if (!baseName || baseName === '.' || baseName === '..') {
+    throw new Error('无效的文件名');
+  }
+
+  const fileHash = calculateFileHash(absolutePath);
+  const fileSize = fs.statSync(absolutePath).size;
+
+  return prisma.$transaction(async (tx: any) => {
+    const pid = parentId !== undefined && parentId !== null ? parentId : null;
+    const existingUserFile = await tx.userFile.findFirst({
+      where: {
+        userId,
+        parentId: pid,
+        fileName: baseName,
+        isDeleted: false,
+        fileType: 'file'
+      },
+      include: { storage: true }
+    });
+
+    let targetFileName = baseName;
+    if (existingUserFile) {
+      if (conflictAction === 'suffix') {
+        targetFileName = await resolveUniqueNameInFolder(tx, userId, parentId, baseName);
+      }
+      // duplicate / version：展示名均为 baseName
+    }
+
+    const baseMime = guessMimeFromFileName(targetFileName);
+    const finalMime = refineMimeTypeForMergedFile(absolutePath, baseMime, targetFileName);
+    const finalFilePath = buildFinalFilePath(fileHash, targetFileName);
+
+    let fileStorage = await tx.fileStorage.findUnique({ where: { fileHash } });
+    if (!fileStorage) {
+      try {
+        fs.renameSync(absolutePath, finalFilePath);
+      } catch {
+        fs.copyFileSync(absolutePath, finalFilePath);
+        fs.unlinkSync(absolutePath);
+      }
+      fileStorage = await tx.fileStorage.create({
+        data: {
+          fileHash,
+          filePath: toStoredRelativePath(finalFilePath),
+          fileSize: BigInt(fileSize),
+          mimeType: finalMime,
+          referenceCount: 1,
+          status: 'active'
+        }
+      });
+    } else {
+      if (fileStorage.status === 'pending_delete') {
+        fileStorage = await tx.fileStorage.update({
+          where: { id: fileStorage.id },
+          data: { status: 'active', markedDeleteAt: null }
+        });
+      }
+      await tx.fileStorage.update({
+        where: { id: fileStorage.id },
+        data: { referenceCount: { increment: 1 } }
+      });
+      if (fs.existsSync(absolutePath)) {
+        fs.unlinkSync(absolutePath);
+      }
+    }
+
+    let userFile: UserFile;
+
+    if (existingUserFile && conflictAction === 'version') {
+      if (existingUserFile.storage) {
+        await tx.fileHistory.create({
+          data: {
+            userFileId: existingUserFile.id,
+            storageId: existingUserFile.storageId!,
+            fileName: existingUserFile.fileName,
+            version: existingUserFile.version,
+            fileSize: existingUserFile.storage.fileSize
+          }
+        });
+      }
+      userFile = await tx.userFile.update({
+        where: { id: existingUserFile.id },
+        data: {
+          storageId: fileStorage.id,
+          version: { increment: 1 },
+          updatedAt: new Date()
+        }
+      });
+    } else {
+      userFile = await tx.userFile.create({
+        data: {
+          userId,
+          storageId: fileStorage.id,
+          parentId: pid,
+          fileName: targetFileName,
+          fileType: 'file'
+        }
+      });
+    }
+
+    await tx.user.update({
+      where: { id: userId },
+      data: { storageUsed: { increment: BigInt(fileSize) } }
+    });
+
+    return userFile;
+  });
+}
+
 /** 合并成功后删除临时分片目录与 upload_chunk 记录 */
 export async function cleanupChunksAfterMerge(
   fileHash: string,

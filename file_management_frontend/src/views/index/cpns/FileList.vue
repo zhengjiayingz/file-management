@@ -35,7 +35,8 @@
                 :class="{ 'is-selected': selectedFiles?.has(file.id) }" :draggable="true"
                 @click.stop="handleFileClick(file, $event)" @dblclick="handleFileDoubleClick(file)"
                 @contextmenu.prevent="handleRightClick($event, file)" @dragstart="handleDragStart($event, file)"
-                @drop="handleFileDrop($event, file)" @dragover="handleFileDragOver($event)">
+                @drop="handleFileDrop($event, file)" @dragover="handleFileDragOver($event)"
+                @mouseenter="onGridFileItemMouseEnter(file, $event)" @mouseleave="onGridFileItemMouseLeave(file, $event)">
 
                 <div class="file-check" v-if="viewMode === 'list'"
                     style="width: 40px; display: flex; justify-content: center;">
@@ -50,15 +51,26 @@
                         <img v-if="file.fileType !== 'folder' && (isImageFile(file) || isVideoFile(file)) && !imageErrorMap[file.id]"
                             :src="getFilePreviewUrl(file)" class="list-thumbnail" loading="lazy"
                             @error="handleImageError(file.id)" />
+                        <FileTypeColoredIcon v-else-if="getFileTypeSymbolId(file)"
+                            :name="getFileTypeSymbolId(file)!"
+                            size="list" />
                         <el-icon v-else class="file-icon" :size="24" :color="getFileIconColor(file)">
                             <component :is="getFileIcon(file)" />
                         </el-icon>
                     </div>
                     <div v-else class="image-thumbnail">
-                        <!-- 网格模式大图标 或 图片缩略图 -->
-                        <img v-if="file.fileType !== 'folder' && (isImageFile(file) || isVideoFile(file)) && !imageErrorMap[file.id]"
+                        <!-- 网格模式：视频悬停时静音循环播放前 10 秒；图片用缩略图 -->
+                        <video v-if="file.fileType !== 'folder' && isVideoFile(file) && !videoErrorMap[file.id]"
+                            class="file-thumbnail-img file-thumbnail-video" muted playsinline
+                            :poster="getFilePreviewUrl(file)" :src="getFileVideoPreviewUrl(file)" preload="none"
+                            @timeupdate="onGridVideoTimeUpdate" @ended="onGridVideoEnded"
+                            @error="handleVideoError(file.id)" />
+                        <img v-else-if="file.fileType !== 'folder' && (isImageFile(file) || isVideoFile(file)) && !imageErrorMap[file.id]"
                             :src="getFilePreviewUrl(file)" class="file-thumbnail-img" loading="lazy"
                             @error="handleImageError(file.id)" />
+                        <FileTypeColoredIcon v-else-if="getFileTypeSymbolId(file)"
+                            :name="getFileTypeSymbolId(file)!"
+                            size="grid" />
                         <el-icon v-else class="file-icon" :size="64" :color="getFileIconColor(file)">
                             <component :is="getFileIcon(file)" />
                         </el-icon>
@@ -146,6 +158,8 @@ import {
 } from '@element-plus/icons-vue'
 import { useI18n } from 'vue-i18n'
 import { formatFileSize } from '@utils/fileUpload'
+import { getFileTypeSymbolId } from '@utils/fileTypeIcons'
+import FileTypeColoredIcon from '@components/FileTypeColoredIcon/index.vue'
 import type { FileItem as FileInfo } from '@typing/file'
 import { useAuthStore } from '@stores/auth'
 import dayjs from 'dayjs'
@@ -179,9 +193,59 @@ const emit = defineEmits<{
 const authStore = useAuthStore()
 const draggedFile = ref<FileInfo | null>(null)
 const imageErrorMap = ref<Record<number, boolean>>({})
+const videoErrorMap = ref<Record<number, boolean>>({})
+
+/** 网格内视频悬停预览：仅循环播放前 10 秒（秒），用于控制流量 */
+const GRID_VIDEO_PREVIEW_SECONDS = 10
 
 const handleImageError = (fileId: number) => {
     imageErrorMap.value[fileId] = true
+}
+
+const handleVideoError = (fileId: number) => {
+    videoErrorMap.value[fileId] = true
+}
+
+const getGridCardVideo = (e: MouseEvent): HTMLVideoElement | null => {
+    const card = e.currentTarget as HTMLElement | null
+    if (!card) return null
+    const v = card.querySelector('video.file-thumbnail-video')
+    return v instanceof HTMLVideoElement ? v : null
+}
+
+/** 网格 + 视频：悬停整张卡片时播放预览 */
+const onGridFileItemMouseEnter = (file: FileInfo, e: MouseEvent) => {
+    if (props.viewMode !== 'grid' || file.fileType === 'folder' || !isVideoFile(file) || videoErrorMap.value[file.id]) {
+        return
+    }
+    const video = getGridCardVideo(e)
+    if (!video) return
+    video.currentTime = 0
+    void video.play().catch(() => {})
+}
+
+const onGridFileItemMouseLeave = (file: FileInfo, e: MouseEvent) => {
+    if (props.viewMode !== 'grid' || file.fileType === 'folder' || !isVideoFile(file) || videoErrorMap.value[file.id]) {
+        return
+    }
+    const video = getGridCardVideo(e)
+    if (!video) return
+    video.pause()
+    video.currentTime = 0
+}
+
+const onGridVideoTimeUpdate = (e: Event) => {
+    const v = e.target as HTMLVideoElement
+    if (v.currentTime >= GRID_VIDEO_PREVIEW_SECONDS) {
+        v.currentTime = 0
+    }
+}
+
+/** 时长不足 10 秒时由 ended 循环，悬停期间保持播放 */
+const onGridVideoEnded = (e: Event) => {
+    const v = e.target as HTMLVideoElement
+    v.currentTime = 0
+    void v.play().catch(() => {})
 }
 
 // Computed for Checkbox state
@@ -237,7 +301,14 @@ const getFileIconColor = (file: FileInfo): string => {
 const getFilePreviewUrl = (file: FileInfo) => {
     const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
     const token = authStore.token || ''
-    return `${API_BASE_URL}/api/files/${file.id}/thumbnail?token=${token}`
+    return `${API_BASE_URL}/api/files/${file.id}/thumbnail?token=${encodeURIComponent(token)}`
+}
+
+/** 网格视频预览：走下载流（inline + Range），供 video 标签播放 */
+const getFileVideoPreviewUrl = (file: FileInfo) => {
+    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
+    const token = authStore.token || ''
+    return `${API_BASE_URL}/api/files/${file.id}/download?preview=true&token=${encodeURIComponent(token)}`
 }
 
 // 事件处理
@@ -485,6 +556,11 @@ const handleFileDrop = (event: DragEvent, targetFile: FileInfo) => {
                         height: 100%;
                         object-fit: cover;
                         border-radius: 6px;
+                    }
+
+                    .file-thumbnail-video {
+                        pointer-events: none;
+                        background: #000;
                     }
                 }
             }

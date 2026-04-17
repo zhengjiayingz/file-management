@@ -15,7 +15,7 @@ import { elementPlusLocaleMap } from './locales'
 import { useThemeStore } from './stores/theme'
 import { useAuthStore } from './stores/auth'
 import { useRoute } from 'vue-router'
-import FriendPanel from './components/FriendPanel.vue'
+import FriendPanel from '@/components/FriendPanel/index.vue'
 
 const { locale } = useI18n()
 const themeStore = useThemeStore()

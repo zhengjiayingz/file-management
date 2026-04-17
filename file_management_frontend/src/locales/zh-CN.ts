@@ -127,7 +127,21 @@ export default {
     permanentDelete: '彻底删除',
     confirmEmpty: '确定要清空回收站吗？此操作不可恢复！',
     confirmDelete: '确定要彻底删除此文件吗？此操作不可恢复！',
-    all: '全部'
+    all: '全部',
+    selectedCount: '已选中 {count} 项',
+    cancelSelection: '取消选择',
+    batchRestore: '批量还原',
+    batchPermanentDelete: '批量彻底删除',
+    confirmBatchRestore: '确定将选中的 {count} 项还原到原位置吗？',
+    confirmBatchPermanent: '确定将选中的 {count} 项彻底删除吗？此操作无法撤销！',
+    restoredCountMsg: '已还原 {count} 项',
+    permanentlyDeletedCountMsg: '已彻底删除 {count} 项',
+    header: {
+      fileName: '文件名',
+      size: '文件大小',
+      deletedAt: '删除时间',
+      action: '操作'
+    }
   },
   logs: {
     title: '操作日志',
