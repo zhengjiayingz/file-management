@@ -103,6 +103,27 @@
                             </div>
                         </div>
                     </el-tab-pane>
+
+                    <el-tab-pane v-if="isAdmin" :label="`VIP申请 (${vipPending.length})`" name="vip">
+                        <div class="list-container">
+                            <el-empty v-if="vipPending.length === 0" description="暂无 VIP 升级申请" :image-size="60" />
+                            <div v-for="row in vipPending" :key="row.id" class="friend-item result-item vip-req-row">
+                                <el-avatar :size="40" style="background:#F56C6C">
+                                    {{ row.username.charAt(0).toUpperCase() }}
+                                </el-avatar>
+                                <div class="friend-info">
+                                    <span class="name">{{ row.username }}</span>
+                                    <span class="email">申请升级 VIP · ID {{ row.applicantId }}</span>
+                                </div>
+                                <div class="action-btns" style="display: flex; gap: 8px; flex-shrink: 0;">
+                                    <el-button size="small" type="success" :loading="vipActionId === row.id"
+                                        @click="handleVipApprove(row.id)">同意</el-button>
+                                    <el-button size="small" type="danger" plain :loading="vipActionId === -row.id"
+                                        @click="handleVipReject(row.id)">拒绝</el-button>
+                                </div>
+                            </div>
+                        </div>
+                    </el-tab-pane>
                 </el-tabs>
             </div>
 
@@ -117,7 +138,29 @@
                         <div class="message-bubble">
                             <!-- 文本消息 -->
                             <div v-if="msg.messageType === 'text'" class="text-content">
-                                {{ msg.content }}
+                                <div class="text-lines">{{ msg.content }}</div>
+                                <div
+                                    v-if="isAdmin && isIncomingVipApplyMessage(msg)"
+                                    class="vip-inline-actions"
+                                >
+                                    <el-button
+                                        size="small"
+                                        type="success"
+                                        :loading="vipChatActionId === msg.senderId"
+                                        @click="handleVipChatApprove(msg.senderId)"
+                                    >
+                                        同意
+                                    </el-button>
+                                    <el-button
+                                        size="small"
+                                        type="danger"
+                                        plain
+                                        :loading="vipChatActionId === -msg.senderId"
+                                        @click="handleVipChatReject(msg.senderId)"
+                                    >
+                                        拒绝
+                                    </el-button>
+                                </div>
                             </div>
                             <!-- 文件消息 -->
                             <div v-else-if="msg.messageType === 'file' && msg.file" class="file-content"
@@ -244,9 +287,12 @@ import { useMessageUnreadStore } from '@stores/messageUnread'
 import fileApiService from '@api/file'
 import type { FileItem } from '@typing/file'
 import { useI18n } from 'vue-i18n'
+import { vipApi } from '@api/vip'
+import type { VipPendingItem } from '@api/vip'
 
 const { t } = useI18n()
 const authStore = useAuthStore()
+const isAdmin = computed(() => authStore.user?.role === 'admin')
 const messageUnreadStore = useMessageUnreadStore()
 const myUserId = computed(() => authStore.user?.id)
 
@@ -257,6 +303,10 @@ const activeTab = ref('friends')
 // 数据
 const friends = ref<any[]>([])
 const pendingRequests = ref<any[]>([])
+const vipPending = ref<VipPendingItem[]>([])
+const vipActionId = ref(0)
+/** 聊天内快捷处理：正数为同意 loading 的 applicantId，负数为拒绝 */
+const vipChatActionId = ref(0)
 const unreadSummary = ref<any[]>([])
 
 // 搜索
@@ -327,6 +377,7 @@ const startGlobalPolling = () => {
         if (authStore.isLoggedIn) {
             fetchUnreadSummary()
             fetchPendingRequests()
+            fetchVipPending()
         }
     }, 10000)
 }
@@ -340,6 +391,84 @@ const loadData = async () => {
     fetchFriends()
     fetchPendingRequests()
     fetchUnreadSummary()
+    fetchVipPending()
+}
+
+const fetchVipPending = async () => {
+    if (!isAdmin.value) {
+        vipPending.value = []
+        return
+    }
+    try {
+        vipPending.value = await vipApi.listPending()
+    } catch {
+        vipPending.value = []
+    }
+}
+
+const handleVipApprove = async (id: number) => {
+    vipActionId.value = id
+    try {
+        await vipApi.approve(id)
+        ElMessage.success('已同意该用户升级为 VIP')
+        await fetchVipPending()
+    } catch (e: unknown) {
+        const ax = e as { response?: { data?: { message?: string } } }
+        ElMessage.error(ax.response?.data?.message || '操作失败')
+    } finally {
+        vipActionId.value = 0
+    }
+}
+
+const handleVipReject = async (id: number) => {
+    vipActionId.value = -id
+    try {
+        await vipApi.reject(id)
+        ElMessage.success('已拒绝该申请')
+        await fetchVipPending()
+    } catch (e: unknown) {
+        const ax = e as { response?: { data?: { message?: string } } }
+        ElMessage.error(ax.response?.data?.message || '操作失败')
+    } finally {
+        vipActionId.value = 0
+    }
+}
+
+/** 对方发来的、内容为 VIP 申请模板的文本消息 */
+function isIncomingVipApplyMessage(msg: { messageType: string; content: string; senderId: number }): boolean {
+    if (msg.messageType !== 'text' || !msg.content) return false
+    if (msg.senderId === myUserId.value) return false
+    return msg.content.trimStart().startsWith('[VIP升级申请]')
+}
+
+async function handleVipChatApprove(applicantId: number) {
+    vipChatActionId.value = applicantId
+    try {
+        await vipApi.approveByApplicant(applicantId)
+        ElMessage.success('已同意该用户的 VIP 升级')
+        await fetchVipPending()
+        await loadChatHistory()
+    } catch (e: unknown) {
+        const ax = e as { response?: { data?: { message?: string } } }
+        ElMessage.error(ax.response?.data?.message || '操作失败')
+    } finally {
+        vipChatActionId.value = 0
+    }
+}
+
+async function handleVipChatReject(applicantId: number) {
+    vipChatActionId.value = -applicantId
+    try {
+        await vipApi.rejectByApplicant(applicantId)
+        ElMessage.success('已拒绝该申请')
+        await fetchVipPending()
+        await loadChatHistory()
+    } catch (e: unknown) {
+        const ax = e as { response?: { data?: { message?: string } } }
+        ElMessage.error(ax.response?.data?.message || '操作失败')
+    } finally {
+        vipChatActionId.value = 0
+    }
 }
 
 const fetchFriends = async () => {
@@ -637,6 +766,19 @@ onUnmounted(() => {
 
 .pending-alert:hover {
     background: #faecd8;
+}
+
+.text-lines {
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.vip-inline-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px dashed #e4e7ed;
 }
 
 .friend-item {

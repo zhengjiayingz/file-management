@@ -18,13 +18,22 @@ export interface LogItem {
 export interface LogQueryParams {
   page?: number;
   limit?: number;
-  type?: string; // 后端 API 参数
+  /** 普通日志：与后端一致，表示操作类型；transferOnly 时表示文件类型大类（与首页 FileFilter 一致） */
+  type?: string;
   operationType?: string; // 前端组件绑定值
   startDate?: string;
   endDate?: string;
   keyword?: string;
+  /** transferOnly 时与文件列表一致 */
+  q?: string;
+  createdFrom?: string;
+  createdTo?: string;
+  entryKind?: string;
+  tagId?: number;
   targetUserId?: number;
   sortOrder?: 'asc' | 'desc';
+  /** 仅当前用户的上传/下载记录，筛选字段与首页 FileFilterBar 一致 */
+  transferOnly?: boolean;
 }
 
 // 日志列表响应

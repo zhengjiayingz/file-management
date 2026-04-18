@@ -11,10 +11,7 @@
             {{ t('recycleBin.empty') }}
           </el-button>
         </template>
-        <template #right>
-          <el-input v-model="searchText" :placeholder="t('recycleBin.searchPlaceholder')" :prefix-icon="Search"
-            style="width: 300px; margin-right: 20px;" @input="handleSearch" />
-        </template>
+        <template #right />
       </GlobalHeader>
 
       <!-- 文件操作工具栏 -->
@@ -36,6 +33,14 @@
         </div>
       </div>
 
+      <FileFilterBar
+        :model-value="fileFilters"
+        :features="recycleFilterFeatures"
+        :tag-options="tagOptions"
+        @update:model-value="onFileFiltersUpdate"
+        @apply="loadFiles"
+      />
+
       <!-- 批量操作 -->
       <div class="batch-toolbar" v-if="selectedFiles.size > 0">
         <div class="batch-info">
@@ -45,6 +50,7 @@
         <div class="batch-actions">
           <el-button type="primary" :icon="RefreshRight" @click="batchRestore">{{ t('recycleBin.batchRestore')
           }}</el-button>
+          <el-button type="warning" plain @click="openBatchTagDialog">打标签</el-button>
           <el-button type="danger" :icon="Delete" @click="batchPermanentDelete">{{ t('recycleBin.batchPermanentDelete')
           }}</el-button>
         </div>
@@ -61,9 +67,31 @@
                 @change="(v: string | number | boolean) => selectAll(!!v)" />
             </div>
             <div class="header-icon-spacer" aria-hidden="true" />
-            <div class="header-item name">{{ t('recycleBin.header.fileName') }}</div>
-            <div class="header-item size">{{ t('recycleBin.header.size') }}</div>
-            <div class="header-item date">{{ t('recycleBin.header.deletedAt') }}</div>
+            <div class="header-item name clickable" @click="handleSortChange('name')">
+              {{ t('recycleBin.header.fileName') }}
+              <el-icon v-if="sortBy === 'name'" class="sort-icon">
+                <component :is="sortOrder === 'asc' ? CaretTop : CaretBottom" />
+              </el-icon>
+            </div>
+            <div class="header-item tags">{{ t('recycleBin.header.tags') }}</div>
+            <div class="header-item type clickable" @click="handleSortChange('type')">
+              {{ t('fileList.header.type') }}
+              <el-icon v-if="sortBy === 'type'" class="sort-icon">
+                <component :is="sortOrder === 'asc' ? CaretTop : CaretBottom" />
+              </el-icon>
+            </div>
+            <div class="header-item size clickable" @click="handleSortChange('size')">
+              {{ t('recycleBin.header.size') }}
+              <el-icon v-if="sortBy === 'size'" class="sort-icon">
+                <component :is="sortOrder === 'asc' ? CaretTop : CaretBottom" />
+              </el-icon>
+            </div>
+            <div class="header-item date clickable" @click="handleSortChange('time')">
+              {{ t('recycleBin.header.deletedAt') }}
+              <el-icon v-if="sortBy === 'time'" class="sort-icon">
+                <component :is="sortOrder === 'asc' ? CaretTop : CaretBottom" />
+              </el-icon>
+            </div>
             <div class="header-item actions">{{ t('recycleBin.header.action') }}</div>
           </div>
 
@@ -91,17 +119,31 @@
                 </div>
               </div>
               <div class="file-info-content">
-                <div class="file-name" :title="file.fileName">{{ file.fileName }}</div>
-                <div class="file-meta-row">
-                  <div class="file-size">{{ file.fileType === 'folder' ? '-' : formatFileSize(file.fileSize || 0) }}
+                <div class="file-name-col">
+                  <div class="file-name" :title="file.fileName">{{ file.fileName }}</div>
+                </div>
+                <div class="file-tags-col">
+                  <div v-if="(file.tags?.length || 0) > 0" class="recycle-tags-row">
+                    <span
+                      v-for="tg in (file.tags || []).slice(0, 6)"
+                      :key="tg.id"
+                      class="recycle-tag-chip"
+                      :style="tagChipStyle(tg)"
+                    >{{ tg.tagName }}</span>
+                    <span v-if="(file.tags?.length || 0) > 6" class="recycle-tag-more">+{{ (file.tags?.length || 0) - 6 }}</span>
                   </div>
-                  <div class="file-date">{{ formatDate(file.updatedAt) }}</div>
-                  <div class="file-actions-col">
-                    <el-button link type="primary" @click.stop="restoreFile(file)">{{ t('recycleBin.restore')
-                    }}</el-button>
-                    <el-button link type="danger" @click.stop="permanentDeleteFile(file)">{{
-                      t('recycleBin.permanentDelete') }}</el-button>
-                  </div>
+                  <span v-else class="file-tags-empty">—</span>
+                </div>
+                <div class="file-type-col">{{ typeCategoryLabel(file) }}</div>
+                <div class="file-size">{{ file.fileType === 'folder' ? '-' : formatFileSize(file.fileSize || 0) }}
+                </div>
+                <div class="file-date">{{ formatDate(file.updatedAt) }}</div>
+                <div class="file-actions-col">
+                  <el-button link type="primary" @click.stop="restoreFile(file)">{{ t('recycleBin.restore')
+                  }}</el-button>
+                  <el-button link type="primary" @click.stop="openTagDialog(file)">标签</el-button>
+                  <el-button link type="danger" @click.stop="permanentDeleteFile(file)">{{
+                    t('recycleBin.permanentDelete') }}</el-button>
                 </div>
               </div>
             </template>
@@ -132,6 +174,14 @@
               </div>
               <div class="file-info">
                 <div class="file-name" :title="file.fileName">{{ file.fileName }}</div>
+                <div v-if="(file.tags?.length || 0) > 0" class="recycle-tags-row grid">
+                  <span
+                    v-for="tg in (file.tags || []).slice(0, 3)"
+                    :key="tg.id"
+                    class="recycle-tag-chip"
+                    :style="tagChipStyle(tg)"
+                  >{{ tg.tagName }}</span>
+                </div>
                 <div class="file-meta">
                   <span v-if="file.fileType === 'file'">{{ formatFileSize(file.fileSize || 0) }}</span>
                   <span>{{ t('recycleBin.header.deletedAt') }}: {{ formatDate(file.updatedAt) }}</span>
@@ -145,6 +195,7 @@
                   <template #dropdown>
                     <el-dropdown-menu>
                       <el-dropdown-item command="restore">{{ t('recycleBin.restore') }}</el-dropdown-item>
+                      <el-dropdown-item command="tag">标签</el-dropdown-item>
                       <el-dropdown-item divided command="permanentDelete" style="color: #f56c6c;">{{
                         t('recycleBin.permanentDelete') }}</el-dropdown-item>
                     </el-dropdown-menu>
@@ -165,21 +216,32 @@
 
       </el-main>
     </el-container>
+
+    <FileTagDialog
+      v-model="tagDialogVisible"
+      :files="filesForTagDialog"
+      @success="onTagDialogSuccess"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
-  Folder, Search,
+  Folder,
   Delete, List, Grid, MoreFilled, Document,
-  Picture, VideoPlay, Headset, RefreshRight
+  Picture, VideoPlay, Headset, RefreshRight, CaretTop, CaretBottom
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '@stores/auth'
 import fileApiService from '@api/file'
-import type { FileItem as FileInfo } from '@typing/file'
+import type { FileItem as FileInfo, FileTagItem, FileQueryParams } from '@typing/file'
+import type { FileFilterState, FileFilterFeatures } from '@typing/fileFilter'
+import { defaultFileFilterState } from '@typing/fileFilter'
+import FileTagDialog from '@components/FileTagDialog/index.vue'
+import FileFilterBar from '@components/FileFilterBar/index.vue'
 import { formatFileSize } from '@utils/fileUpload'
+import { compareFileEntryCategory, getFileEntryCategory } from '@utils/fileCategory'
 import { getFileTypeSymbolId } from '@utils/fileTypeIcons'
 import FileTypeColoredIcon from '@components/FileTypeColoredIcon/index.vue'
 import Sidebar from '@views/index/cpns/Sidebar.vue'
@@ -189,11 +251,59 @@ import { useI18n } from 'vue-i18n'
 const authStore = useAuthStore()
 const { t } = useI18n()
 
-const searchText = ref('')
 const viewMode = ref<'list' | 'grid'>('list')
 const files = ref<FileInfo[]>([])
 const loading = ref(false)
 const selectedFiles = ref<Set<number>>(new Set())
+const sortBy = ref<'name' | 'size' | 'time' | 'type'>('time')
+const sortOrder = ref<'asc' | 'desc'>('desc')
+
+const fileFilters = reactive<FileFilterState>(defaultFileFilterState())
+
+/** 回收站筛选字段，可按需关闭某项，例如 { fileTypeCategory: false } */
+const recycleFilterFeatures = {} as Partial<FileFilterFeatures>
+
+function onFileFiltersUpdate(v: FileFilterState) {
+  Object.assign(fileFilters, v)
+}
+
+const tagOptions = ref<FileTagItem[]>([])
+const tagDialogVisible = ref(false)
+const filesForTagDialog = ref<FileInfo[]>([])
+
+const loadTagOptions = async () => {
+  try {
+    tagOptions.value = await fileApiService.listFileTags()
+  } catch {
+    /* ignore */
+  }
+}
+
+const tagChipStyle = (t: FileTagItem) => {
+  const c = t.color || '#909399'
+  return {
+    borderColor: c,
+    color: c,
+    backgroundColor: `${c}1a`
+  }
+}
+
+const openTagDialog = (file: FileInfo) => {
+  filesForTagDialog.value = [file]
+  tagDialogVisible.value = true
+}
+
+const openBatchTagDialog = () => {
+  const list = files.value.filter((f) => selectedFiles.value.has(f.id))
+  if (list.length === 0) return
+  filesForTagDialog.value = list
+  tagDialogVisible.value = true
+}
+
+const onTagDialogSuccess = () => {
+  void loadFiles()
+  void loadTagOptions()
+}
 
 const isImageFile = (file: FileInfo) => {
   return (file.mimeType && file.mimeType.startsWith('image/')) ||
@@ -292,21 +402,50 @@ const onGridVideoEnded = (e: Event) => {
   void v.play().catch(() => {})
 }
 
+const typeCategoryLabel = (file: FileInfo) => {
+  const c = getFileEntryCategory(file)
+  return t(`fileList.typeCategory.${c}`)
+}
+
+const handleSortChange = (column: 'name' | 'size' | 'time' | 'type') => {
+  if (sortBy.value === column) {
+    sortOrder.value = sortOrder.value === 'asc' ? 'desc' : 'asc'
+  } else {
+    sortBy.value = column
+    sortOrder.value = 'desc'
+  }
+}
+
 // 计算属性
 const filteredFiles = computed(() => {
-  let result = files.value
-
-  // 搜索过滤
-  if (searchText.value) {
-    const keyword = searchText.value.toLowerCase()
-    result = result.filter((file: FileInfo) =>
-      file.fileName.toLowerCase().includes(keyword)
-    )
-  }
-
-  // 排序：按更新时间(删除时间)倒序
+  const result = [...files.value]
   return result.sort((a: FileInfo, b: FileInfo) => {
-    return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+    if (sortBy.value !== 'type') {
+      if (a.fileType === 'folder' && b.fileType !== 'folder') return -1
+      if (a.fileType !== 'folder' && b.fileType === 'folder') return 1
+    }
+
+    let compareResult = 0
+    switch (sortBy.value) {
+      case 'name':
+        compareResult = a.fileName.localeCompare(b.fileName, 'zh-CN')
+        break
+      case 'size':
+        compareResult = (a.fileSize || 0) - (b.fileSize || 0)
+        break
+      case 'type':
+        compareResult = compareFileEntryCategory(getFileEntryCategory(a), getFileEntryCategory(b))
+        if (compareResult === 0) {
+          compareResult = a.fileName.localeCompare(b.fileName, 'zh-CN')
+        }
+        break
+      case 'time':
+      default:
+        compareResult = new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime()
+        break
+    }
+
+    return sortOrder.value === 'asc' ? compareResult : -compareResult
   })
 })
 
@@ -349,13 +488,24 @@ const selectAll = (checked: boolean) => {
 // 生命周期
 onMounted(() => {
   loadFiles()
+  loadTagOptions()
 })
 
 // 加载文件列表
 const loadFiles = async () => {
   try {
     loading.value = true
-    const data = await fileApiService.getRecycleBinFiles()
+    const params: FileQueryParams = {}
+    if (fileFilters.q?.trim()) params.q = fileFilters.q.trim()
+    if (fileFilters.createdFrom) params.createdFrom = fileFilters.createdFrom
+    if (fileFilters.createdTo) params.createdTo = fileFilters.createdTo
+    if (fileFilters.type && fileFilters.type !== 'all') params.type = fileFilters.type
+    if (fileFilters.entryKind && fileFilters.entryKind !== 'all') {
+      params.entryKind = fileFilters.entryKind
+    }
+    if (fileFilters.tagId != null) params.tagId = fileFilters.tagId
+
+    const data = await fileApiService.getRecycleBinFiles(params)
     files.value = data
     clearSelection()
   } catch (error: any) {
@@ -363,10 +513,6 @@ const loadFiles = async () => {
   } finally {
     loading.value = false
   }
-}
-
-const handleSearch = () => {
-  // 搜索逻辑已在计算属性中处理
 }
 
 const handleFileClick = (file: FileInfo, event?: MouseEvent) => {
@@ -387,6 +533,9 @@ const handleFileAction = async (command: string, file: FileInfo) => {
   switch (command) {
     case 'restore':
       await restoreFile(file)
+      break
+    case 'tag':
+      openTagDialog(file)
       break
     case 'permanentDelete':
       await permanentDeleteFile(file)
@@ -717,9 +866,33 @@ const handleEmptyRecycleBin = async () => {
       }
 
       .header-item {
+        &.clickable {
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+
+          &:hover {
+            color: #409eff;
+          }
+
+          .sort-icon {
+            margin-left: 4px;
+          }
+        }
+
         &.name {
           flex: 1;
           min-width: 0;
+        }
+
+        &.tags {
+          width: 200px;
+          flex-shrink: 0;
+        }
+
+        &.type {
+          width: 96px;
+          flex-shrink: 0;
         }
 
         &.size {
@@ -733,7 +906,7 @@ const handleEmptyRecycleBin = async () => {
         }
 
         &.actions {
-          width: 220px;
+          width: 300px;
           flex-shrink: 0;
           text-align: right;
         }
@@ -798,9 +971,12 @@ const handleEmptyRecycleBin = async () => {
         display: flex;
         align-items: center;
 
-        .file-name {
+        .file-name-col {
           flex: 1;
           min-width: 0;
+        }
+
+        .file-name {
           font-size: 14px;
           color: #606266;
           white-space: nowrap;
@@ -812,27 +988,71 @@ const handleEmptyRecycleBin = async () => {
           }
         }
 
-        .file-meta-row {
-          display: flex;
-          align-items: center;
+        .file-tags-col {
+          width: 200px;
           flex-shrink: 0;
+          align-self: center;
+          min-width: 0;
+          padding-right: 8px;
+        }
 
-          .file-size {
-            width: 100px;
-            font-size: 13px;
-            color: #909399;
-          }
+        .file-type-col {
+          width: 96px;
+          flex-shrink: 0;
+          font-size: 13px;
+          color: #909399;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
 
-          .file-date {
-            width: 160px;
-            font-size: 13px;
-            color: #909399;
-          }
+        .file-tags-empty {
+          font-size: 13px;
+          color: #c0c4cc;
+        }
 
-          .file-actions-col {
-            width: 220px;
-            text-align: right;
-          }
+        .recycle-tags-row {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 4px;
+          align-items: center;
+        }
+
+        .recycle-tag-chip {
+          font-size: 11px;
+          line-height: 1.2;
+          padding: 1px 6px;
+          border-radius: 3px;
+          border: 1px solid;
+          max-width: 92px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .recycle-tag-more {
+          font-size: 11px;
+          color: #909399;
+        }
+
+        .file-size {
+          width: 100px;
+          flex-shrink: 0;
+          font-size: 13px;
+          color: #909399;
+        }
+
+        .file-date {
+          width: 160px;
+          flex-shrink: 0;
+          font-size: 13px;
+          color: #909399;
+        }
+
+        .file-actions-col {
+          width: 300px;
+          flex-shrink: 0;
+          text-align: right;
         }
       }
     }
@@ -931,6 +1151,26 @@ const handleEmptyRecycleBin = async () => {
           width: 100%;
         }
 
+        .recycle-tags-row {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 3px;
+          justify-content: center;
+          margin-bottom: 4px;
+        }
+
+        .recycle-tag-chip {
+          font-size: 10px;
+          line-height: 1.2;
+          padding: 1px 5px;
+          border-radius: 3px;
+          border: 1px solid;
+          max-width: 72px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
         .file-meta {
           display: none; // 网格模式下隐藏详细信息
         }
@@ -969,5 +1209,18 @@ const handleEmptyRecycleBin = async () => {
     font-size: 16px;
     margin: 0;
   }
+}
+
+.tag-opt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tag-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex-shrink: 0;
 }
 </style>

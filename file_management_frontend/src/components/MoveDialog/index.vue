@@ -129,20 +129,19 @@ const confirmMove = async () => {
     try {
         moving.value = true
 
-        // 并行执行移动
-        const promises = props.filesToMove.map(file => {
-            // 检查是否原位置
-            const currentParentId = file.parentId || undefined
-            // targetId is undefined for root (0)
-            // currentParentId is undefined for root
-            // So if equal, skip
-            if (currentParentId === targetId) {
-                return Promise.resolve()
-            }
-            return fileApiService.moveFile(file.id, targetId)
+        const ids = props.filesToMove.map(f => f.id)
+        const allAlreadyAtTarget = props.filesToMove.every((file) => {
+            const cur = file.parentId ?? undefined
+            return cur === targetId
         })
+        if (allAlreadyAtTarget) {
+            ElMessage.success(t('file.move.success'))
+            emit('success')
+            handleClose()
+            return
+        }
 
-        await Promise.all(promises)
+        await fileApiService.moveFilesBatch(ids, targetId)
 
         ElMessage.success(t('file.move.success'))
         emit('success')

@@ -129,13 +129,13 @@ html.dark .user-dropdown:hover {
   background-color: #3a3a3a !important;
 }
 
-html.dark .storage-info {
-  background-color: #242424 !important;
+html.dark .member-storage-block {
+  background-color: #2a2a2a !important;
   border-color: #3a3a3a !important;
 }
 
-html.dark .storage-text {
-  color: #e5e5e5 !important;
+html.dark .quota-text {
+  color: #c0c4cc !important;
 }
 
 /* 登录页始终保持浅色模式 */

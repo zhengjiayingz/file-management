@@ -1,6 +1,26 @@
+import crypto from 'crypto';
 import { Response } from 'express';
 import prisma from '../lib/prisma.js';
 import { AuthRequest } from '../types/index.js';
+import { ensureFriendshipWithAdmin, getPrimaryAdminId } from '../services/adminFriend.service.js';
+
+const hashPassword = (password: string): string =>
+  crypto.createHash('sha256').update(password).digest('hex');
+
+function validatePasswordStrength(password: string): string | null {
+  if (password.length < 8) {
+    return '密码长度至少8位';
+  }
+  const hasNumber = /\d/.test(password);
+  const hasLower = /[a-z]/.test(password);
+  const hasUpper = /[A-Z]/.test(password);
+  const hasSpecial = /[!@#$%^&*(),.?":{}|<>]/.test(password);
+  const strengthCount = [hasNumber, hasLower, hasUpper, hasSpecial].filter(Boolean).length;
+  if (strengthCount < 3) {
+    return '密码必须包含数字、字母、大小写、特殊字符中至少3种';
+  }
+  return null;
+}
 
 export const getDashboardStats = async (_req: AuthRequest, res: Response): Promise<void> => {
     try {
@@ -117,5 +137,191 @@ export const getDashboardStats = async (_req: AuthRequest, res: Response): Promi
             success: false,
             message: '获取仪表盘数据失败'
         });
+    }
+};
+
+/**
+ * 为所有非管理员用户与主管理员（id 最小的 admin）补全 accepted 好友关系（与 npm run backfill-friends 一致）
+ */
+export const syncFriendshipsWithAdmin = async (_req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const adminId = await getPrimaryAdminId();
+        if (!adminId) {
+            res.status(500).json({ success: false, message: '系统中没有管理员账号' });
+            return;
+        }
+
+        const users = await prisma.user.findMany({
+            where: {
+                NOT: { id: adminId },
+                role: { not: 'admin' }
+            },
+            select: { id: true, username: true }
+        });
+
+        let succeeded = 0;
+        const failures: string[] = [];
+
+        for (const u of users) {
+            try {
+                await ensureFriendshipWithAdmin(u.id);
+                succeeded++;
+            } catch (e) {
+                const msg = e instanceof Error ? e.message : String(e);
+                failures.push(`${u.username}(${u.id}): ${msg}`);
+            }
+        }
+
+        res.json({
+            success: true,
+            message: `已为 ${succeeded} 个用户与主管理员（ID:${adminId}）补全好友关系`,
+            data: {
+                primaryAdminId: adminId,
+                totalUsers: users.length,
+                succeeded,
+                failures: failures.slice(0, 30)
+            }
+        });
+    } catch (error) {
+        console.error('syncFriendshipsWithAdmin error:', error);
+        res.status(500).json({ success: false, message: '同步好友关系失败' });
+    }
+};
+
+export const listUsers = async (_req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const users = await prisma.user.findMany({
+            orderBy: { id: 'asc' },
+            select: {
+                id: true,
+                username: true,
+                email: true,
+                role: true,
+                status: true,
+                storageQuota: true,
+                storageUsed: true,
+                createdAt: true
+            }
+        });
+
+        res.json({
+            success: true,
+            data: users.map((u) => ({
+                id: u.id,
+                username: u.username,
+                email: u.email,
+                role: u.role,
+                status: u.status,
+                storage_quota: Number(u.storageQuota),
+                storage_used: Number(u.storageUsed),
+                created_at: u.createdAt
+            }))
+        });
+    } catch (error) {
+        console.error('List users error:', error);
+        res.status(500).json({ success: false, message: '获取用户列表失败' });
+    }
+};
+
+export const updateUserStatus = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const id = parseInt(req.params.id, 10);
+        const { status } = req.body as { status?: string };
+
+        if (Number.isNaN(id)) {
+            res.status(400).json({ success: false, message: '无效的用户 ID' });
+            return;
+        }
+
+        if (status !== 'active' && status !== 'disabled') {
+            res.status(400).json({ success: false, message: '状态必须为 active 或 disabled' });
+            return;
+        }
+
+        if (!req.user) {
+            res.status(401).json({ success: false, message: '未认证' });
+            return;
+        }
+
+        if (id === req.user.id) {
+            res.status(400).json({ success: false, message: '不能禁用自己的账号' });
+            return;
+        }
+
+        const target = await prisma.user.findUnique({ where: { id }, select: { role: true } });
+        if (!target) {
+            res.status(404).json({ success: false, message: '用户不存在' });
+            return;
+        }
+
+        if (target.role === 'admin' && status === 'disabled') {
+            res.status(400).json({ success: false, message: '不能禁用管理员账号' });
+            return;
+        }
+
+        await prisma.$transaction(async (tx) => {
+            await tx.user.update({
+                where: { id },
+                data: { status: status as 'active' | 'disabled' }
+            });
+            if (status === 'disabled') {
+                await tx.refreshToken.updateMany({
+                    where: { userId: id },
+                    data: { isRevoked: true }
+                });
+            }
+        });
+
+        res.json({ success: true, message: '用户状态已更新' });
+    } catch (error) {
+        console.error('Update user status error:', error);
+        res.status(500).json({ success: false, message: '更新用户状态失败' });
+    }
+};
+
+export const resetUserPassword = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const id = parseInt(req.params.id, 10);
+        const { newPassword } = req.body as { newPassword?: string };
+
+        if (Number.isNaN(id)) {
+            res.status(400).json({ success: false, message: '无效的用户 ID' });
+            return;
+        }
+
+        if (!newPassword || typeof newPassword !== 'string') {
+            res.status(400).json({ success: false, message: '请提供新密码' });
+            return;
+        }
+
+        const pwdErr = validatePasswordStrength(newPassword);
+        if (pwdErr) {
+            res.status(400).json({ success: false, message: pwdErr });
+            return;
+        }
+
+        const target = await prisma.user.findUnique({ where: { id } });
+        if (!target) {
+            res.status(404).json({ success: false, message: '用户不存在' });
+            return;
+        }
+
+        const hashed = hashPassword(newPassword);
+
+        await prisma.$transaction(async (tx) => {
+            await tx.user.update({
+                where: { id },
+                data: { password: hashed }
+            });
+            await tx.refreshToken.updateMany({
+                where: { userId: id },
+                data: { isRevoked: true }
+            });
+        });
+
+        res.json({ success: true, message: '密码已重置，用户需重新登录' });
+    } catch (error) {
+        console.error('Reset user password error:', error);
+        res.status(500).json({ success: false, message: '重置密码失败' });
     }
 };

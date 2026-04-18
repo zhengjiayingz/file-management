@@ -114,6 +114,17 @@ request.interceptors.response.use(
       }
     }
 
+    // 刷新 token 时账号被封禁
+    if (
+      error.response?.status === 403 &&
+      originalRequest.url?.includes('/auth/refresh')
+    ) {
+      const authStore = useAuthStore()
+      authStore.logout()
+      window.location.href = '/login'
+      return Promise.reject(error)
+    }
+
     return Promise.reject(error)
   }
 )

@@ -1,5 +1,12 @@
 import express, { Router } from 'express';
-import { login, register, getCurrentUser, refreshToken, logout } from '../controllers/auth.controller.js';
+import {
+  login,
+  register,
+  getCurrentUser,
+  refreshToken,
+  logout,
+  forgotPasswordRequest
+} from '../controllers/auth.controller.js';
 import { authenticate } from '../middleware/auth.middleware.js';
 
 const router: Router = express.Router();
@@ -105,6 +112,8 @@ router.post('/register', register);
  *         description: 用户名或密码错误
  */
 router.post('/login', login);
+
+router.post('/forgot-password', forgotPasswordRequest);
 
 /**
  * @swagger

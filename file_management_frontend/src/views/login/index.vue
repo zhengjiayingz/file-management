@@ -22,6 +22,10 @@
         </el-form-item>
       </el-form>
 
+      <div v-if="!isRegister" class="login-extras">
+        <el-link type="primary" @click="handleForgotPassword">{{ t('login.forgotPassword') }}</el-link>
+      </div>
+
       <div class="form-footer">
         <el-link type="primary" @click="toggleMode">
           {{ isRegister ? t('login.hasAccount') : t('login.noAccount') }}
@@ -114,7 +118,8 @@ const handleAuth = async () => {
     console.error('❌ [登录错误]', error)
     console.error('❌ [错误详情] response:', error.response)
     console.error('❌ [错误详情] message:', error.message)
-    ElMessage.error((isRegister.value ? t('login.register') : t('login.login')) + ' Failed: ' + (error.response?.data?.message || error.message || 'Error'))
+    const msg = error.response?.data?.message || error.message || 'Error'
+    ElMessage.error((isRegister.value ? t('login.register') : t('login.login')) + ' Failed: ' + msg)
   } finally {
     loading.value = false
   }
@@ -123,6 +128,20 @@ const handleAuth = async () => {
 const toggleMode = () => {
   isRegister.value = !isRegister.value
   loginForm.value = { username: '', password: '', email: '' }
+}
+
+const handleForgotPassword = async () => {
+  const name = loginForm.value.username?.trim()
+  if (!name) {
+    ElMessage.warning(t('login.forgotPasswordNeedUsername'))
+    return
+  }
+  try {
+    const r = await authApi.forgotPassword({ username: name })
+    ElMessage.info(r.message || '请等待管理员重置密码')
+  } catch (error: any) {
+    ElMessage.error(error.response?.data?.message || error.message || 'Error')
+  }
 }
 </script>
 
@@ -146,6 +165,11 @@ const toggleMode = () => {
     text-align: center;
     margin-bottom: 30px;
     color: #303133;
+  }
+
+  .login-extras {
+    margin-top: 8px;
+    text-align: center;
   }
 
   .form-footer {

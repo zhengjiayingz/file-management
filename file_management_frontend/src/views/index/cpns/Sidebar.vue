@@ -67,11 +67,17 @@
                 </el-icon>
                 <span>{{ t('sidebar.logs') }}</span>
             </el-menu-item>
+            <el-menu-item index="transfer-records" @click="router.push('/transfer-records')">
+                <el-icon>
+                    <Upload />
+                </el-icon>
+                <span>{{ t('sidebar.transferRecords') }}</span>
+            </el-menu-item>
             <el-menu-item index="admin" v-if="authStore.user?.role === 'admin'" @click="router.push('/admin')">
                 <el-icon>
                     <Setting />
                 </el-icon>
-                <span>管理员看板</span>
+                <span>{{ t('sidebar.adminDashboard') }}</span>
             </el-menu-item>
             <el-menu-item index="chat" class="menu-item-chat" @click="openFriendPanel">
                 <el-icon>
@@ -93,7 +99,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { Folder, Clock, Star, Delete, List, Picture, VideoPlay, Headset, Document, Collection, Setting, ChatDotRound } from '@element-plus/icons-vue'
+import { Folder, Clock, Star, Delete, List, Upload, Picture, VideoPlay, Headset, Document, Collection, Setting, ChatDotRound } from '@element-plus/icons-vue'
 import { useI18n } from 'vue-i18n'
 import { useThemeStore } from '@stores/theme'
 import { useAuthStore } from '@stores/auth'
@@ -116,6 +122,7 @@ const activeMenu = computed(() => {
     if (path.startsWith('/admin')) return 'admin'
     if (path.startsWith('/recycle-bin')) return '4'
     if (path.startsWith('/logs')) return '5'
+    if (path.startsWith('/transfer-records')) return 'transfer-records'
     if (path === '/' && query.type) {
         return `file-type-${query.type}`
     }

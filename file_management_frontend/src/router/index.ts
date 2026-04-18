@@ -29,6 +29,12 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: '/transfer-records',
+      name: 'transfer-records',
+      component: () => import('../views/transfer-records/index.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
       path: '/admin',
       name: 'admin',
       component: () => import('../views/admin/index.vue'),

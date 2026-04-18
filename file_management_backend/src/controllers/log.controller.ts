@@ -3,9 +3,183 @@ import { Response } from 'express';
 import prisma from '../lib/prisma.js';
 import { AuthRequest } from '../types/index.js';
 
+/** 与 file/query.controller 中 storageWhereForMimeCategory 一致，用于上传/下载记录筛选 */
+function storageWhereForMimeCategory(typeStr: string): Record<string, unknown> | null {
+  switch (typeStr) {
+    case 'image':
+      return { mimeType: { startsWith: 'image/' } };
+    case 'video':
+      return { mimeType: { startsWith: 'video/' } };
+    case 'audio':
+      return { mimeType: { startsWith: 'audio/' } };
+    case 'document':
+      return {
+        OR: [
+          { mimeType: { startsWith: 'text/' } },
+          { mimeType: { contains: 'pdf' } },
+          { mimeType: { contains: 'word' } },
+          { mimeType: { contains: 'excel' } },
+          { mimeType: { contains: 'sheet' } },
+          { mimeType: { contains: 'powerpoint' } },
+          { mimeType: { contains: 'presentation' } },
+          { mimeType: { contains: 'document' } }
+        ]
+      };
+    case 'other':
+      return {
+        AND: [
+          { mimeType: { not: { startsWith: 'image/' } } },
+          { mimeType: { not: { startsWith: 'video/' } } },
+          { mimeType: { not: { startsWith: 'audio/' } } },
+          {
+            NOT: {
+              OR: [
+                { mimeType: { startsWith: 'text/' } },
+                { mimeType: { contains: 'pdf' } },
+                { mimeType: { contains: 'word' } },
+                { mimeType: { contains: 'excel' } },
+                { mimeType: { contains: 'sheet' } },
+                { mimeType: { contains: 'powerpoint' } },
+                { mimeType: { contains: 'presentation' } },
+                { mimeType: { contains: 'document' } }
+              ]
+            }
+          }
+        ]
+      };
+    default:
+      return null;
+  }
+}
+
+/**
+ * 上传/下载记录：仅当前用户、操作类型 UPLOAD/DOWNLOAD，筛选参数与文件列表接口（q、createdFrom、createdTo、type、entryKind、tagId）对齐
+ */
+async function buildTransferLogWhere(
+  req: AuthRequest,
+  currentUserId: number
+): Promise<{ where: Record<string, unknown>; empty: boolean }> {
+  const q = req.query.q ?? req.query.keyword;
+  const { createdFrom, createdTo, type, entryKind, tagId: tagIdQuery } = req.query;
+
+  const where: Record<string, unknown> = {
+    userId: currentUserId,
+    operationType: { in: ['UPLOAD', 'DOWNLOAD'] }
+  };
+
+  const cf = createdFrom ? String(createdFrom).trim() : '';
+  const ct = createdTo ? String(createdTo).trim() : '';
+  if (cf || ct) {
+    (where as any).createdAt = {};
+    if (cf) {
+      (where as any).createdAt.gte = new Date(cf);
+    }
+    if (ct) {
+      const end = new Date(ct);
+      end.setHours(23, 59, 59, 999);
+      (where as any).createdAt.lte = end;
+    }
+  }
+
+  const ek = entryKind ? String(entryKind) : 'all';
+  const typeStr = type ? String(type) : 'all';
+  const mimeWhere = typeStr !== 'all' ? storageWhereForMimeCategory(typeStr) : null;
+
+  const andList: Record<string, unknown>[] = [];
+
+  const tagIdNum =
+    tagIdQuery !== undefined && tagIdQuery !== '' && tagIdQuery !== null
+      ? parseInt(String(tagIdQuery), 10)
+      : NaN;
+  if (!isNaN(tagIdNum)) {
+    const tagged = await prisma.userFile.findMany({
+      where: {
+        userId: currentUserId,
+        userFileTags: {
+          some: {
+            tagId: tagIdNum,
+            tag: { userId: currentUserId }
+          }
+        }
+      },
+      select: { id: true }
+    });
+    const tids = tagged.map((t) => t.id);
+    if (tids.length === 0) {
+      return { where: {}, empty: true };
+    }
+    andList.push({ resourceId: { in: tids } });
+  }
+
+  if (mimeWhere) {
+    if (ek === 'folder') {
+      return { where: {}, empty: true };
+    }
+    if (ek === 'file') {
+      const filesMime = await prisma.userFile.findMany({
+        where: {
+          userId: currentUserId,
+          fileType: 'file',
+          storage: mimeWhere as any
+        },
+        select: { id: true }
+      });
+      const ids = filesMime.map((f) => f.id);
+      if (ids.length === 0) {
+        return { where: {}, empty: true };
+      }
+      andList.push({ resourceType: 'FILE', resourceId: { in: ids } });
+    } else {
+      const filesMime = await prisma.userFile.findMany({
+        where: {
+          userId: currentUserId,
+          fileType: 'file',
+          storage: mimeWhere as any
+        },
+        select: { id: true }
+      });
+      const mids = filesMime.map((f) => f.id);
+      andList.push({
+        OR: [
+          { resourceType: 'FOLDER' },
+          { AND: [{ resourceType: 'FILE' }, { resourceId: { in: mids } }] }
+        ]
+      });
+    }
+  } else {
+    if (ek === 'file') {
+      (where as any).resourceType = 'FILE';
+    } else if (ek === 'folder') {
+      (where as any).resourceType = 'FOLDER';
+    }
+  }
+
+  if (q && String(q).trim()) {
+    const trimmed = String(q).trim();
+    const nameMatches = await prisma.userFile.findMany({
+      where: {
+        userId: currentUserId,
+        fileName: { contains: trimmed }
+      },
+      select: { id: true }
+    });
+    const nids = nameMatches.map((f) => f.id);
+    andList.push({
+      OR: [{ description: { contains: trimmed } }, { resourceId: { in: nids } }]
+    });
+  }
+
+  if (andList.length) {
+    (where as any).AND = andList;
+  }
+
+  return { where, empty: false };
+}
+
 /**
  * 获取操作日志
  * 支持：分页，搜索（类型、日期、关键字、用户），排序
+ * transferOnly=true：仅当前用户的上传/下载记录，筛选与文件列表一致（q、createdFrom、createdTo、type、entryKind、tagId）
  */
 export const getOperationLogs = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -15,12 +189,11 @@ export const getOperationLogs = async (req: AuthRequest, res: Response): Promise
     }
 
     const currentUserId = req.user.id;
-    
-    // 获取完整用户信息以判断角色
+
     const currentUser = await prisma.user.findUnique({
       where: { id: currentUserId }
     });
-    
+
     if (!currentUser) {
       res.status(401).json({ success: false, message: '用户不存在' });
       return;
@@ -28,53 +201,62 @@ export const getOperationLogs = async (req: AuthRequest, res: Response): Promise
 
     const isAdmin = currentUser.role === 'admin';
 
-    // 获取查询参数
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 20;
     const skip = (page - 1) * limit;
 
+    const transferOnly = String(req.query.transferOnly || '') === 'true';
+
     const { operationType, type, startDate, endDate, keyword, targetUserId, sortOrder } = req.query;
 
-    // 构建查询条件
-    const where: any = {};
+    let where: any = {};
 
-    // 1. 权限过滤：非管理员只能查自己的
-    if (!isAdmin) {
-      where.userId = currentUserId;
-    } else if (targetUserId) {
-      // 管理员且指定了目标用户
-      where.userId = parseInt(targetUserId as string);
-    }
-    // 如果是管理员且没指定 targetUserId，则查所有
-
-    // 2. 操作类型过滤
-    if (operationType) {
-      where.operationType = operationType;
-    } else if (type) {
-      where.operationType = type;
-    }
-
-    // 3. 日期范围过滤
-    if (startDate || endDate) {
-      where.createdAt = {};
-      if (startDate) {
-        where.createdAt.gte = new Date(startDate as string);
+    if (transferOnly) {
+      const built = await buildTransferLogWhere(req, currentUserId);
+      if (built.empty) {
+        res.json({
+          success: true,
+          data: [],
+          pagination: {
+            total: 0,
+            page,
+            limit,
+            totalPages: 0
+          }
+        });
+        return;
       }
-      if (endDate) {
-        // 结束日期通常涵盖当天结束，如 2023-01-01 -> 2023-01-01 23:59:59，或者前端传第二天0点
-        // 这里简单处理，如果前端传的是日期字符串，Prisma会处理比较
-        where.createdAt.lte = new Date(endDate as string);
+      where = built.where;
+    } else {
+      if (!isAdmin) {
+        where.userId = currentUserId;
+      } else if (targetUserId) {
+        where.userId = parseInt(targetUserId as string);
+      }
+
+      if (operationType) {
+        where.operationType = operationType;
+      } else if (type) {
+        where.operationType = type;
+      }
+
+      if (startDate || endDate) {
+        where.createdAt = {};
+        if (startDate) {
+          where.createdAt.gte = new Date(startDate as string);
+        }
+        if (endDate) {
+          where.createdAt.lte = new Date(endDate as string);
+        }
+      }
+
+      if (keyword) {
+        where.description = {
+          contains: keyword as string
+        };
       }
     }
 
-    // 4. 关键字搜索 (description)
-    if (keyword) {
-      where.description = {
-        contains: keyword as string
-      };
-    }
-
-    // 执行查询
     const total = await prisma.operationLog.count({ where });
 
     const logs = await prisma.operationLog.findMany({
@@ -82,7 +264,7 @@ export const getOperationLogs = async (req: AuthRequest, res: Response): Promise
       skip,
       take: limit,
       orderBy: {
-        createdAt: (sortOrder === 'asc' ? 'asc' : 'desc')
+        createdAt: sortOrder === 'asc' ? 'asc' : 'desc'
       },
       include: {
         user: {
@@ -105,7 +287,6 @@ export const getOperationLogs = async (req: AuthRequest, res: Response): Promise
         totalPages: Math.ceil(total / limit)
       }
     });
-
   } catch (error) {
     console.error('Get logs error:', error);
     res.status(500).json({ success: false, message: '获取日志列表失败' });

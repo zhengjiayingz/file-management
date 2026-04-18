@@ -1,7 +1,13 @@
 import { Router } from 'express';
 import { authenticate } from '../middleware/auth.middleware.js';
 import { requireAdmin } from '../middleware/admin.middleware.js';
-import { getDashboardStats } from '../controllers/admin.controller.js';
+import {
+    getDashboardStats,
+    syncFriendshipsWithAdmin,
+    listUsers,
+    updateUserStatus,
+    resetUserPassword
+} from '../controllers/admin.controller.js';
 
 const router: Router = Router();
 
@@ -9,5 +15,11 @@ const router: Router = Router();
 router.use(authenticate, requireAdmin);
 
 router.get('/dashboard', getDashboardStats);
+
+router.post('/sync-friendships', syncFriendshipsWithAdmin);
+
+router.get('/users', listUsers);
+router.patch('/users/:id/status', updateUserStatus);
+router.post('/users/:id/reset-password', resetUserPassword);
 
 export default router;

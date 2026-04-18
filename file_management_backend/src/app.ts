@@ -13,6 +13,7 @@ import userPreferenceRoutes from './routes/user-preference.routes.js';
 import adminRoutes from './routes/admin.routes.js';
 import friendshipRoutes from './routes/friendship.routes.js';
 import messageRoutes from './routes/message.routes.js';
+import vipRoutes from './routes/vip.routes.js';
 
 // 导入中间件
 import { errorHandler } from './middleware/error.middleware.js';
@@ -73,6 +74,7 @@ app.use('/api/logs', logRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/friendships', friendshipRoutes);
 app.use('/api/messages', messageRoutes);
+app.use('/api/vip', vipRoutes);
 
 // 404 处理
 app.use(notFound);

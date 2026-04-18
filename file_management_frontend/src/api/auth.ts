@@ -62,6 +62,12 @@ export const authApi = {
     return res.data
   },
 
+  /** 忘记密码：通知管理员（需填写用户名） */
+  async forgotPassword(data: { username: string }): Promise<{ message: string }> {
+    const res = await request.post<{ success: boolean; message: string }>('/auth/forgot-password', data)
+    return { message: res.data.message }
+  },
+
   // 获取当前用户信息
   async getCurrentUser(): Promise<User> {
     const res = await request.get<{

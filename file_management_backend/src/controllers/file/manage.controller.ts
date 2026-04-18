@@ -1,7 +1,15 @@
+import path from 'path';
 import { Response } from 'express';
 import prisma from '../../lib/prisma.js';
 import { AuthRequest } from '../../types/index.js';
 import { logOperation, LogOperationType, LogResourceType } from '../../services/logger.service.js';
+import {
+  computeSelectionRoots,
+  expandDescendants,
+  loadParentChainMap,
+  ObjectNotFoundError,
+  isNodeUnderAncestor
+} from '../../utils/fileBatch.utils.js';
 
 /**
  * 创建文件夹
@@ -738,6 +746,273 @@ export const restoreFilesBatch = async (req: AuthRequest, res: Response): Promis
   } catch (error) {
     console.error('Restore batch error:', error);
     res.status(500).json({ success: false, message: '批量还原失败' });
+  }
+};
+
+const MAX_BATCH_SOFT_DELETE_INPUT = 2000;
+const MAX_BATCH_SOFT_DELETE_EXPANDED = 10000;
+const MAX_BATCH_MOVE_INPUT = 2000;
+
+/**
+ * 批量移入回收站（软删）：展开子孙后一次 updateMany，事务内完成。
+ */
+export const deleteFilesBatch = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ success: false, message: '未认证' });
+      return;
+    }
+
+    const raw = req.body?.ids;
+    if (!Array.isArray(raw) || raw.length === 0) {
+      res.status(400).json({ success: false, message: '请提供非空的 ids 数组' });
+      return;
+    }
+
+    const uniqueIds = [...new Set(raw.map((x: unknown) => parseInt(String(x), 10)).filter((n) => !isNaN(n) && n > 0))];
+    if (uniqueIds.length === 0) {
+      res.status(400).json({ success: false, message: '无效的文件 ID' });
+      return;
+    }
+    if (uniqueIds.length > MAX_BATCH_SOFT_DELETE_INPUT) {
+      res.status(400).json({
+        success: false,
+        message: `单次最多删除 ${MAX_BATCH_SOFT_DELETE_INPUT} 项`
+      });
+      return;
+    }
+
+    const userId = req.user.id;
+
+    const initialRows = await prisma.userFile.findMany({
+      where: {
+        id: { in: uniqueIds },
+        userId,
+        isDeleted: false
+      },
+      select: { id: true }
+    });
+    if (initialRows.length !== uniqueIds.length) {
+      res.status(400).json({ success: false, message: '部分文件不存在或已删除' });
+      return;
+    }
+
+    const expanded = await expandDescendants(userId, uniqueIds, false);
+
+    if (expanded.size > MAX_BATCH_SOFT_DELETE_EXPANDED) {
+      res.status(400).json({
+        success: false,
+        message: `展开子项后数量超过上限（${MAX_BATCH_SOFT_DELETE_EXPANDED}）`
+      });
+      return;
+    }
+
+    const deletedAt = new Date();
+
+    await prisma.$transaction(async (tx) => {
+      await tx.userFile.updateMany({
+        where: {
+          userId,
+          id: { in: [...expanded] },
+          isDeleted: false
+        },
+        data: {
+          isDeleted: true,
+          deletedAt
+        }
+      });
+    });
+
+    try {
+      await logOperation({
+        req,
+        userId,
+        operationType: LogOperationType.DELETE,
+        resourceType: LogResourceType.FILE,
+        resourceId: uniqueIds[0]!,
+        description: `Batch move to recycle bin (${expanded.size} items)`
+      });
+    } catch (logErr) {
+      console.error('[deleteFilesBatch] logOperation:', logErr);
+    }
+
+    res.json({
+      success: true,
+      message: `已移入回收站 ${expanded.size} 项`,
+      data: { deletedCount: expanded.size }
+    });
+  } catch (error) {
+    console.error('deleteFilesBatch error:', error);
+    res.status(500).json({ success: false, message: '批量删除失败' });
+  }
+};
+
+/**
+ * 批量移动：选中项去重为根后，在事务内更新 parentId，并处理目标目录重名（自动加后缀）。
+ */
+export const moveFilesBatch = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ success: false, message: '未认证' });
+      return;
+    }
+
+    const rawIds = req.body?.ids;
+    const rawParent = req.body?.parentId;
+
+    if (!Array.isArray(rawIds) || rawIds.length === 0) {
+      res.status(400).json({ success: false, message: '请提供非空的 ids 数组' });
+      return;
+    }
+
+    const uniqueIds = [...new Set(rawIds.map((x: unknown) => parseInt(String(x), 10)).filter((n) => !isNaN(n) && n > 0))];
+    if (uniqueIds.length === 0) {
+      res.status(400).json({ success: false, message: '无效的文件 ID' });
+      return;
+    }
+    if (uniqueIds.length > MAX_BATCH_MOVE_INPUT) {
+      res.status(400).json({
+        success: false,
+        message: `单次最多移动 ${MAX_BATCH_MOVE_INPUT} 项`
+      });
+      return;
+    }
+
+    let targetParentId: number | null = null;
+    if (rawParent !== undefined && rawParent !== null && rawParent !== '') {
+      const p = parseInt(String(rawParent), 10);
+      if (isNaN(p) || p <= 0) {
+        res.status(400).json({ success: false, message: '目标文件夹无效' });
+        return;
+      }
+      targetParentId = p;
+    }
+
+    const userId = req.user.id;
+
+    const rows = await prisma.userFile.findMany({
+      where: {
+        id: { in: uniqueIds },
+        userId,
+        isDeleted: false
+      },
+      select: {
+        id: true,
+        parentId: true,
+        fileName: true,
+        fileType: true
+      }
+    });
+
+    if (rows.length !== uniqueIds.length) {
+      res.status(400).json({ success: false, message: '部分文件不存在或已删除' });
+      return;
+    }
+
+    const loadIds = [...uniqueIds];
+    if (targetParentId !== null) {
+      loadIds.push(targetParentId);
+    }
+
+    let pmap: Map<number, number | null>;
+    try {
+      pmap = await loadParentChainMap(loadIds, userId);
+    } catch (e) {
+      if (e instanceof ObjectNotFoundError) {
+        res.status(400).json({ success: false, message: '目标路径或文件不存在' });
+        return;
+      }
+      throw e;
+    }
+
+    if (targetParentId !== null) {
+      const parentRow = await prisma.userFile.findFirst({
+        where: {
+          id: targetParentId,
+          userId,
+          isDeleted: false,
+          fileType: 'folder'
+        }
+      });
+      if (!parentRow) {
+        res.status(404).json({ success: false, message: '目标文件夹不存在' });
+        return;
+      }
+    }
+
+    const roots = computeSelectionRoots(uniqueIds, pmap);
+    const rootRows = rows.filter((r) => roots.includes(r.id));
+    rootRows.sort((a, b) => a.id - b.id);
+
+    for (const r of rootRows) {
+      if (r.fileType === 'folder' && targetParentId !== null) {
+        if (r.id === targetParentId || isNodeUnderAncestor(targetParentId, r.id, pmap)) {
+          res.status(400).json({
+            success: false,
+            message: '不能将文件夹移动到自身或其子文件夹内'
+          });
+          return;
+        }
+      }
+    }
+
+    const movingIds = new Set(rootRows.map((r) => r.id));
+
+    const siblings = await prisma.userFile.findMany({
+      where: {
+        userId,
+        isDeleted: false,
+        parentId: targetParentId,
+        id: { notIn: [...movingIds] }
+      },
+      select: { fileName: true }
+    });
+
+    const takenLower = new Set(siblings.map((s) => s.fileName.toLowerCase()));
+
+    await prisma.$transaction(async (tx) => {
+      for (const r of rootRows) {
+        const origExt = path.extname(r.fileName);
+        const origStem = path.basename(r.fileName, origExt);
+        let finalName = r.fileName;
+        let counter = 0;
+        while (takenLower.has(finalName.toLowerCase())) {
+          counter += 1;
+          finalName = `${origStem} (${counter})${origExt}`;
+        }
+        takenLower.add(finalName.toLowerCase());
+
+        await tx.userFile.update({
+          where: { id: r.id },
+          data: {
+            parentId: targetParentId,
+            ...(finalName !== r.fileName ? { fileName: finalName } : {})
+          }
+        });
+      }
+    });
+
+    try {
+      await logOperation({
+        req,
+        userId,
+        operationType: LogOperationType.MOVE,
+        resourceType: LogResourceType.FOLDER,
+        resourceId: rootRows[0]!.id,
+        description: `Batch move ${rootRows.length} items to parentId ${targetParentId ?? 'root'}`
+      });
+    } catch (logErr) {
+      console.error('[moveFilesBatch] logOperation:', logErr);
+    }
+
+    res.json({
+      success: true,
+      message: `已移动 ${rootRows.length} 项`,
+      data: { movedCount: rootRows.length }
+    });
+  } catch (error) {
+    console.error('moveFilesBatch error:', error);
+    res.status(500).json({ success: false, message: '批量移动失败' });
   }
 };
 

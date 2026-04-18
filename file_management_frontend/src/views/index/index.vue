@@ -13,10 +13,7 @@
             @select-image="handleSelectImage" />
           <el-button :icon="FolderAdd" @click="showCreateFolderDialog">{{ t('index.createFolder') }}</el-button>
         </template>
-        <template #right>
-          <el-input v-model="searchText" :placeholder="t('index.searchPlaceholder')" :prefix-icon="Search"
-            style="width: 300px; margin-right: 20px;" @input="handleSearch" />
-        </template>
+        <template #right />
       </GlobalHeader>
 
       <!-- 文件操作工具栏 -->
@@ -43,6 +40,14 @@
         </div>
       </div>
 
+      <FileFilterBar
+        :model-value="fileFilters"
+        :features="driveFilterBarFeatures"
+        :tag-options="tagOptions"
+        @update:model-value="onFileFiltersUpdate"
+        @apply="loadFiles"
+      />
+
       <!-- 批量操作工具栏 (当有选中文件时显示) -->
       <div class="batch-toolbar" v-if="selectedFiles.size > 0">
         <div class="batch-info">
@@ -53,6 +58,7 @@
           <el-button type="primary" :icon="Document" @click="batchDownload">{{ t('fileList.action.download') || '下载'
           }}</el-button>
           <el-button type="success" :icon="Folder" @click="batchMove">{{ t('fileList.action.move') }}</el-button>
+          <el-button type="warning" plain @click="openBatchTagDialog">打标签</el-button>
           <el-button type="danger" :icon="Delete" @click="batchDelete">{{ t('fileList.action.delete') }}</el-button>
         </div>
       </div>
@@ -82,27 +88,8 @@
           :sort-by="sortBy" :sort-order="sortOrder" @click-file="handleFileClick" @dblclick-file="handleFileDoubleClick"
           @context-menu="handleRightClick" @rename="showRenameDialog" @delete="deleteFile" @move="handleMoveFile"
           @download="downloadFile" @history="showHistory" @file-drop="handleFileItemDrop"
-          @sort-change="handleSortChange" @toggle-selection="toggleSelection" @select-all="selectAll" />
-
-        <!-- 存储空间信息 -->
-        <!-- 存储空间信息 -->
-        <div class="storage-info" v-if="authStore.user">
-          <div class="storage-content">
-            <div class="storage-text-row">
-              <el-icon class="storage-icon" size="20" color="#409eff">
-                <Upload />
-              </el-icon>
-              <span class="storage-text">
-                {{ formatStorage(authStore.user.storageUsed) }} /
-                {{ authStore.user.storageQuota === -1 ? '无限制' : formatStorage(authStore.user.storageQuota) }}
-              </span>
-            </div>
-            <el-progress v-if="authStore.user.storageQuota !== -1" :percentage="storagePercentage" :show-text="false"
-              :stroke-width="6"
-              :status="storagePercentage > 90 ? 'exception' : (storagePercentage > 75 ? 'warning' : 'success')"
-              class="storage-progress" />
-          </div>
-        </div>
+          @sort-change="handleSortChange" @toggle-selection="toggleSelection" @select-all="selectAll"
+          @tag="handleTagFile"         />
       </el-main>
     </el-container>
 
@@ -144,8 +131,15 @@
     <CustomImageViewer v-model="previewVisible" :url-list="previewUrlList" :initial-index="previewInitialIndex" />
 
     <!-- 视频播放弹窗 -->
-    <video-player-dialog v-model="videoPlayerVisible" :title="currentVideoTitle" :video-url="currentVideoUrl"
-      :file-name="currentVideoTitle" @download="currentVideoFile && downloadFile(currentVideoFile)" />
+    <video-player-dialog
+      v-model="videoPlayerVisible"
+      :title="currentVideoTitle"
+      :video-url="currentVideoUrl"
+      :file-name="currentVideoTitle"
+      :file-id="currentVideoFile?.id"
+      :media-kind="currentMediaKind"
+      @download="currentVideoFile && downloadFile(currentVideoFile)"
+    />
 
     <!-- 移动文件弹窗 -->
     <MoveDialog v-model="moveDialogVisible" :files-to-move="filesToMove" @success="handleMoveSuccess" />
@@ -167,22 +161,30 @@
       :current-dir-name="archiveExtractCurrentDirLabel"
       @success="loadFiles"
     />
+
+    <FileTagDialog
+      v-model="tagDialogVisible"
+      :files="filesForTagDialog"
+      @success="onTagDialogSuccess"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox, ElImageViewer } from 'element-plus'
 import {
-  User, ArrowDown, Folder, Search, FolderAdd,
+  User, ArrowDown, Folder, FolderAdd,
   Clock, Star, Delete, List, Grid, MoreFilled, Document, Download
 } from '@element-plus/icons-vue'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@stores/auth'
 import { authApi } from '@api/auth'
 import fileApiService from '@api/file'
-import type { FileItem as FileInfo } from '@typing/file'
+import type { FileItem as FileInfo, FileTagItem, FileQueryParams, FileTypeCategory } from '@typing/file'
+import type { FileFilterState, FileFilterFeatures } from '@typing/fileFilter'
+import { defaultFileFilterState, defaultFileFilterFeatures } from '@typing/fileFilter'
 import FileUpload from '@components/FileUpload/index.vue'
 import ImageCropperDialog from '@components/ImageCropperDialog/index.vue'
 import VideoPlayerDialog from '@components/VideoPlayerDialog/index.vue'
@@ -190,16 +192,19 @@ import MoveDialog from '@components/MoveDialog/index.vue'
 import FileHistoryDialog from '@components/FileHistoryDialog/index.vue'
 import OfficePreviewDialog from '@components/OfficePreviewDialog/index.vue'
 import ArchiveExtractDialog from '@components/ArchiveExtractDialog/index.vue'
+import FileTagDialog from '@components/FileTagDialog/index.vue'
 import CustomImageViewer from '@components/CustomImageViewer/index.vue'
 import Sidebar from './cpns/Sidebar.vue'
 import FileList from './cpns/FileList.vue'
 import GlobalHeader from '@components/GlobalHeader/index.vue'
+import FileFilterBar from '@components/FileFilterBar/index.vue'
 import { formatFileSize } from '@utils/fileUpload'
 import {
   isArchiveFile,
   isZipExtractableOnline,
   canUseOnlineArchiveExtract
 } from '@utils/archive'
+import { compareFileEntryCategory, getFileEntryCategory } from '@utils/fileCategory'
 
 const router = useRouter()
 const route = useRoute()
@@ -207,13 +212,56 @@ const authStore = useAuthStore()
 const { t, locale } = useI18n()
 
 // 响应式数据
-const searchText = ref('')
 const viewMode = ref<'list' | 'grid'>('list')
 const files = ref<FileInfo[]>([])
 const currentFolderId = ref<number | undefined>(undefined)
 const breadcrumbs = ref<{ id: number; name: string }[]>([])
 const isDragOver = ref(false)
 const loading = ref(false)
+
+const fileFilters = reactive<FileFilterState>(defaultFileFilterState())
+
+/** 首页筛选：可在此写入 { tag: false } 等；分类视图下自动隐藏「文件类型」避免与侧栏重复 */
+const driveFilterFeatures = {} as Partial<FileFilterFeatures>
+
+const driveFilterBarFeatures = computed(() => ({
+  ...defaultFileFilterFeatures,
+  ...driveFilterFeatures,
+  ...(route.query.type ? { fileTypeCategory: false } : {})
+}))
+
+function onFileFiltersUpdate(v: FileFilterState) {
+  Object.assign(fileFilters, v)
+}
+
+const tagOptions = ref<FileTagItem[]>([])
+const tagDialogVisible = ref(false)
+const filesForTagDialog = ref<FileInfo[]>([])
+
+const loadTagOptions = async () => {
+  try {
+    tagOptions.value = await fileApiService.listFileTags()
+  } catch {
+    /* 筛选下拉失败时忽略 */
+  }
+}
+
+const openBatchTagDialog = () => {
+  const list = files.value.filter((f) => selectedFiles.value.has(f.id))
+  if (list.length === 0) return
+  filesForTagDialog.value = list
+  tagDialogVisible.value = true
+}
+
+const handleTagFile = (file: FileInfo) => {
+  filesForTagDialog.value = [file]
+  tagDialogVisible.value = true
+}
+
+const onTagDialogSuccess = () => {
+  void loadFiles()
+  void loadTagOptions()
+}
 
 // 对话框相关
 const createFolderDialogVisible = ref(false)
@@ -241,6 +289,7 @@ const videoPlayerVisible = ref(false)
 const currentVideoUrl = ref('')
 const currentVideoTitle = ref('')
 const currentVideoFile = ref<FileInfo | null>(null)
+const currentMediaKind = ref<'video' | 'audio'>('video')
 
 // 移动文件相关
 const moveDialogVisible = ref(false)
@@ -252,30 +301,22 @@ const handleSelectImage = (file: File) => {
 }
 
 // 计算属性
-const sortBy = ref<'name' | 'size' | 'time'>('time')
+const sortBy = ref<'name' | 'size' | 'time' | 'type'>('time')
 const sortOrder = ref<'asc' | 'desc'>('desc')
 const selectedFiles = ref<Set<number>>(new Set())
 
 // 计算属性
 const filteredFiles = computed(() => {
-  let result = [...files.value] // Create a shallow copy
+  const result = [...files.value]
 
-  // 搜索过滤
-  if (searchText.value) {
-    const keyword = searchText.value.toLowerCase()
-    result = result.filter((file: FileInfo) =>
-      file.fileName.toLowerCase().includes(keyword)
-    )
-  }
-
-  // 排序
+  // 排序（筛选已由服务端完成）
   return result.sort((a: FileInfo, b: FileInfo) => {
-    // 始终将文件夹排在前面 (可选，根据需求)
-    // 如果想要纯排序，可以去掉这部分，但通常文件管理器文件夹在最前
-    if (a.fileType === 'folder' && b.fileType !== 'folder') return -1
-    if (a.fileType !== 'folder' && b.fileType === 'folder') return 1
+    // 按类型排序时：顺序完全由类型/名称决定；其它列排序时文件夹优先
+    if (sortBy.value !== 'type') {
+      if (a.fileType === 'folder' && b.fileType !== 'folder') return -1
+      if (a.fileType !== 'folder' && b.fileType === 'folder') return 1
+    }
 
-    // 如果都是文件夹或都是文件，则按规则排序
     let compareResult = 0
     switch (sortBy.value) {
       case 'name':
@@ -283,6 +324,12 @@ const filteredFiles = computed(() => {
         break
       case 'size':
         compareResult = (a.fileSize || 0) - (b.fileSize || 0)
+        break
+      case 'type':
+        compareResult = compareFileEntryCategory(getFileEntryCategory(a), getFileEntryCategory(b))
+        if (compareResult === 0) {
+          compareResult = a.fileName.localeCompare(b.fileName, 'zh-CN')
+        }
         break
       case 'time':
       default:
@@ -294,7 +341,7 @@ const filteredFiles = computed(() => {
   })
 })
 
-const handleSortChange = (column: 'name' | 'size' | 'time') => {
+const handleSortChange = (column: 'name' | 'size' | 'time' | 'type') => {
   if (sortBy.value === column) {
     sortOrder.value = sortOrder.value === 'asc' ? 'desc' : 'asc'
   } else {
@@ -330,39 +377,44 @@ const selectAll = (checked: boolean) => {
   }
 }
 
-const storagePercentage = computed(() => {
-  if (!authStore.user || authStore.user.storageQuota <= 0) return 0
-  let pct = (authStore.user.storageUsed / authStore.user.storageQuota) * 100
-  return Math.min(Math.max(pct, 0), 100) // Clamp between 0 and 100
-
-})
-
-
 // 生命周期
 onMounted(() => {
   loadFiles()
+  loadTagOptions()
 })
 
 // 加载文件列表
 const loadFiles = async () => {
   try {
     loading.value = true
-    const params: any = {}
+    const params: FileQueryParams = {}
 
-    // Check for type filter (category view)
-    const type = route.query.type
-    if (type) {
-      params.type = type
-      // In category view, we ignore parentId (handled by backend or we don't send it)
+    const routeType = route.query.type
+    if (routeType && typeof routeType === 'string') {
+      params.type = routeType as FileTypeCategory
     } else {
-      params.parentId = currentFolderId.value
+      params.parentId = currentFolderId.value ?? ''
+      if (fileFilters.type && fileFilters.type !== 'all') {
+        params.type = fileFilters.type
+      }
     }
 
-    if (searchText.value.trim()) {
-      params.q = searchText.value.trim()
-      delete params.parentId
-      delete params.type
+    if (fileFilters.q?.trim()) {
+      params.q = fileFilters.q.trim()
     }
+    if (fileFilters.createdFrom) {
+      params.createdFrom = fileFilters.createdFrom
+    }
+    if (fileFilters.createdTo) {
+      params.createdTo = fileFilters.createdTo
+    }
+    if (fileFilters.entryKind && fileFilters.entryKind !== 'all') {
+      params.entryKind = fileFilters.entryKind
+    }
+    if (fileFilters.tagId != null) {
+      params.tagId = fileFilters.tagId
+    }
+
     files.value = await fileApiService.getFiles(params)
   } catch (error: any) {
     ElMessage.error('加载文件列表失败: ' + (error.message || '未知错误'))
@@ -371,14 +423,17 @@ const loadFiles = async () => {
   }
 }
 
-// Watch for route query changes (e.g. switching categories)
-watch(() => route.query, () => {
-  // Clear search text when switching categories or views
-  searchText.value = ''
-  currentFolderId.value = undefined // Reset folder when switching top-level views via URL
-  breadcrumbs.value = []
-  loadFiles()
-})
+watch(
+  () => route.query.type,
+  () => {
+    if (route.query.type) {
+      currentFolderId.value = undefined
+      breadcrumbs.value = []
+      fileFilters.q = ''
+    }
+    loadFiles()
+  }
+)
 
 // 文件上传成功处理
 const handleUploadSuccess = (fileInfo: FileInfo) => {
@@ -391,15 +446,6 @@ const handleUploadSuccess = (fileInfo: FileInfo) => {
 // 文件上传错误处理
 const handleUploadError = (error: string) => {
   ElMessage.error('文件上传失败: ' + error)
-}
-
-let searchTimeout: any = null
-// 搜索处理
-const handleSearch = () => {
-  if (searchTimeout) clearTimeout(searchTimeout)
-  searchTimeout = setTimeout(() => {
-    loadFiles()
-  }, 300)
 }
 
 // 拖拽上传：必须在可接收拖放的容器上 dragover/drop 调用 preventDefault，否则会触发浏览器默认行为（打开文件等）
@@ -455,6 +501,11 @@ const isVideoFile = (file: FileInfo) => {
     /\.(mp4|webm|ogg|mov|wmv|flv|avi|rmvb|mkv)$/i.test(file.fileName)
 }
 
+const isAudioFile = (file: FileInfo) => {
+  return (file.mimeType && file.mimeType.startsWith('audio/')) ||
+    /\.(mp3|wav|ogg|flac|aac|m4a|opus|wma)$/i.test(file.fileName)
+}
+
 const isDocumentFile = (file: FileInfo) => {
   const mime = file.mimeType || ''
   const name = file.fileName.toLowerCase()
@@ -489,7 +540,13 @@ const handleFileDoubleClick = async (file: FileInfo) => {
 
       previewVisible.value = true
     } else if (isVideoFile(file)) {
-      // 如果是视频，则打开视频播放器
+      currentMediaKind.value = 'video'
+      currentVideoUrl.value = getFileViewUrl(file)
+      currentVideoTitle.value = file.fileName
+      currentVideoFile.value = file
+      videoPlayerVisible.value = true
+    } else if (isAudioFile(file)) {
+      currentMediaKind.value = 'audio'
       currentVideoUrl.value = getFileViewUrl(file)
       currentVideoTitle.value = file.fileName
       currentVideoFile.value = file
@@ -536,7 +593,7 @@ const navigateToFolder = (folderId?: number, folderName?: string) => {
   }
 
   currentFolderId.value = folderId
-  searchText.value = ''
+  fileFilters.q = ''
 
   // 更新面包屑导航
   if (folderId === undefined) {
@@ -593,18 +650,42 @@ const formatDate = (dateString: string): string => {
   }
 }
 
-// 批量下载
+// 批量下载（单文件直链；多选或单个文件夹 → ZIP，含文件夹递归）
 const batchDownload = async () => {
   if (selectedFiles.value.size === 0) return
-  const ids = Array.from(selectedFiles.value)
-
-  // 浏览器通常会阻止同时弹出多个下载。
-  // MVP 方案：循环下载。
-  for (const id of ids) {
-    const file = files.value.find(f => f.id === id)
-    if (file && file.fileType !== 'folder') {
-      downloadFile(file)
+  const selected = files.value.filter((f) => selectedFiles.value.has(f.id))
+  if (selected.length === 0) return
+  if (selected.length === 1 && selected[0]!.fileType === 'file') {
+    await downloadFile(selected[0]!)
+    return
+  }
+  try {
+    const blob = await fileApiService.downloadBatchZip(selected.map((f) => f.id))
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `batch-download-${Date.now()}.zip`
+    document.body.appendChild(a)
+    a.click()
+    window.URL.revokeObjectURL(url)
+    document.body.removeChild(a)
+    ElMessage.success('压缩包下载已开始')
+  } catch (error: unknown) {
+    let msg = '打包下载失败'
+    const ax = error as { response?: { data?: Blob } }
+    const data = ax.response?.data
+    if (data instanceof Blob && data.type.includes('json')) {
+      try {
+        const text = await data.text()
+        const j = JSON.parse(text) as { message?: string }
+        if (j.message) msg = j.message
+      } catch {
+        /* ignore */
+      }
+    } else if (error instanceof Error && error.message) {
+      msg = error.message
     }
+    ElMessage.error(msg)
   }
 }
 
@@ -632,11 +713,9 @@ const batchDelete = async () => {
     )
 
     const ids = Array.from(selectedFiles.value)
-    // 循环调用删除 (Promise.all)
-    const promises = ids.map(id => fileApiService.deleteFile(id))
-    await Promise.allSettled(promises)
+    const { deletedCount } = await fileApiService.deleteFilesBatch(ids)
 
-    ElMessage.success('批量删除完成')
+    ElMessage.success(`已移入回收站 ${deletedCount} 项`)
     clearSelection()
     loadFiles()
   } catch (e) {
@@ -1031,36 +1110,6 @@ const formatStorage = (bytes: number) => {
 
 
 
-// 存储空间信息
-.storage-info {
-  position: fixed;
-  bottom: 20px;
-  right: 20px;
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
-  padding: 12px 16px;
-  min-width: 200px;
-  z-index: 100;
-
-  .storage-content {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .storage-text-row {
-    display: flex;
-    align-items: center;
-    font-size: 14px;
-    color: #606266;
-  }
-
-  .storage-icon {
-    margin-right: 8px;
-  }
-}
-
 // 响应式设计
 @media (max-width: 768px) {
   .sidebar {
@@ -1084,5 +1133,18 @@ const formatStorage = (bytes: number) => {
   .file-list.grid {
     grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
   }
+}
+
+.tag-opt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tag-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex-shrink: 0;
 }
 </style>

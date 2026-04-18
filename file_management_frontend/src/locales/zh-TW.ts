@@ -11,6 +11,30 @@ export default {
     settings: '設置',
     logout: '退出登錄'
   },
+  filterBar: {
+    labelFileName: '檔名',
+    labelDateRange: '上傳時間',
+    labelType: '檔案類型',
+    labelEntry: '條目',
+    labelTag: '標籤',
+    fileNamePlaceholder: '檔名（包含）',
+    createdFrom: '開始日期',
+    createdTo: '結束日期',
+    typePlaceholder: '檔案類型',
+    typeAll: '全部類型',
+    typeImage: '圖片',
+    typeVideo: '影片',
+    typeAudio: '音訊',
+    typeDocument: '文件',
+    typeOther: '其他',
+    entryKindPlaceholder: '條目',
+    entryAll: '全部',
+    entryFile: '僅檔案',
+    entryFolder: '僅資料夾',
+    tagPlaceholder: '標籤',
+    query: '查詢',
+    reset: '重設條件'
+  },
   theme: {
     light: '淺色模式',
     dark: '深色模式',
@@ -22,6 +46,13 @@ export default {
     favorites: '收藏',
     recycleBin: '回收筒',
     logs: '操作紀錄',
+    transferRecords: '上傳/下載紀錄',
+    adminDashboard: '管理員看板',
+    images: '圖片',
+    videos: '影片',
+    audio: '音訊',
+    documents: '文件',
+    categories: '分類',
     contactsAndMessages: '通訊錄與訊息'
   },
   login: {
@@ -31,7 +62,9 @@ export default {
     login: '登入',
     register: '註冊',
     noAccount: '沒有帳號？去註冊',
-    hasAccount: '已有帳號？去登入'
+    hasAccount: '已有帳號？去登入',
+    forgotPassword: '忘記密碼？',
+    forgotPasswordNeedUsername: '請先填寫使用者名稱'
   },
   index: {
     toolbar: {
@@ -53,9 +86,19 @@ export default {
   fileList: {
     header: {
       name: '名稱',
+      tags: '標籤',
+      type: '類型',
       size: '大小',
       date: '修改日期',
       action: '操作'
+    },
+    typeCategory: {
+      folder: '資料夾',
+      image: '圖片',
+      video: '影片',
+      audio: '音訊',
+      document: '文件',
+      other: '其他'
     },
     action: {
       rename: '重新命名',
@@ -64,6 +107,11 @@ export default {
       download: '下載',
       history: '歷史紀錄'
     }
+  },
+  mediaPlayer: {
+    restoredProgress: '已從上次位置繼續播放',
+    audioNotSupported: '您的瀏覽器不支援 audio 標籤。',
+    downloadWithExternal: '下載並使用本機播放器'
   },
   dialog: {
     createFolder: {
@@ -133,6 +181,7 @@ export default {
     permanentlyDeletedCountMsg: '已徹底刪除 {count} 項',
     header: {
       fileName: '檔名',
+      tags: '標籤',
       size: '檔案大小',
       deletedAt: '刪除時間',
       action: '操作'
@@ -174,6 +223,115 @@ export default {
       ipAddress: 'IP地址',
       operationTime: '操作時間',
       unknown: '未知'
+    }
+  },
+  transferRecords: {
+    title: '上傳/下載紀錄',
+    loadError: '載入紀錄失敗'
+  },
+  admin: {
+    title: '系統管理控制台',
+    backHome: '返回首頁',
+    loadError: '載入統計資料失敗',
+    loadErrorUnknown: '未知錯誤',
+    cards: {
+      totalUsers: '總使用者數',
+      activeUsers: '活躍使用者',
+      totalStorage: '總儲存使用',
+      totalFiles: '檔案總數',
+      adminCount: '管理員人數',
+      systemStatus: '系統狀態',
+      running: '執行中'
+    },
+    charts: {
+      fileTypeDistribution: '檔案類型分布',
+      storageRanking: '儲存使用排行 (Top 5)',
+      storageAxisMB: '儲存使用 (MB)',
+      pieSeriesName: '檔案類型',
+      pieTooltip: '{b}: {c} 個 ({d}%)'
+    },
+    recentLogs: '最近操作紀錄',
+    table: {
+      time: '時間',
+      user: '使用者',
+      operationType: '操作類型',
+      resourceType: '資源類型',
+      description: '描述'
+    },
+    category: {
+      image: '圖片',
+      video: '影片',
+      audio: '音訊',
+      text: '文字'
+    },
+    docHint: {
+      word: 'Word 文件',
+      excel: 'Excel 試算表',
+      ppt: 'PPT 簡報',
+      archive: '壓縮檔'
+    },
+    mime: {
+      image_png: 'PNG 圖片',
+      image_jpeg: 'JPEG 圖片',
+      image_gif: 'GIF 圖片',
+      image_webp: 'WebP 圖片',
+      image_svg_xml: 'SVG 圖片',
+      image_bmp: 'BMP 圖片',
+      video_mp4: 'MP4 影片',
+      video_webm: 'WebM 影片',
+      video_ogg: 'OGG 影片',
+      video_quicktime: 'MOV 影片',
+      video_x_msvideo: 'AVI 影片',
+      video_x_matroska: 'MKV 影片',
+      audio_mpeg: 'MP3 音訊',
+      audio_ogg: 'OGG 音訊',
+      audio_wav: 'WAV 音訊',
+      audio_flac: 'FLAC 音訊',
+      application_pdf: 'PDF 文件',
+      application_msword: 'Word 文件',
+      application_vnd_openxmlformats_officedocument_wordprocessingml_document: 'Word 文件',
+      application_vnd_ms_excel: 'Excel 試算表',
+      application_vnd_openxmlformats_officedocument_spreadsheetml_sheet: 'Excel 試算表',
+      application_vnd_ms_powerpoint: 'PPT 簡報',
+      application_vnd_openxmlformats_officedocument_presentationml_presentation: 'PPT 簡報',
+      text_plain: '純文字',
+      text_html: 'HTML 檔案',
+      text_css: 'CSS 檔案',
+      text_javascript: 'JavaScript',
+      application_json: 'JSON 檔案',
+      application_xml: 'XML 檔案',
+      application_zip: 'ZIP 壓縮檔',
+      application_x_rar_compressed: 'RAR 壓縮檔',
+      application_x_7z_compressed: '7z 壓縮檔',
+      application_gzip: 'GZ 壓縮檔'
+    },
+    userManagement: {
+      title: '使用者管理',
+      id: 'ID',
+      username: '使用者名稱',
+      email: '信箱',
+      role: '角色',
+      status: '狀態',
+      storage: '儲存用量',
+      createdAt: '註冊時間',
+      actions: '操作',
+      resetPassword: '重設密碼',
+      active: '正常',
+      disabled: '已停用',
+      loadError: '載入使用者清單失敗',
+      statusUpdated: '狀態已更新',
+      resetSuccess: '密碼已重設',
+      resetPromptTitle: '重設密碼',
+      resetPromptPlaceholder: '新密碼（至少8位，含數字/大小寫/特殊字元中三種）',
+      cannotDisableSelf: '不能停用自己的帳號',
+      cannotDisableAdmin: '不能停用管理員帳號',
+      syncFriends: '同步與主管理員好友',
+      syncFriendsError: '同步好友失敗',
+      roles: {
+        admin: '管理員',
+        user: '使用者',
+        vip: '會員'
+      }
     }
   },
   file: {

@@ -7,6 +7,28 @@
             <div class="header-right">
                 <slot name="right"></slot>
 
+                <!-- 会员中心 + 空间额度（参考网盘头部） -->
+                <div v-if="authStore.user" class="member-storage-block">
+                    <el-link type="primary" :underline="false" class="member-center-link" @click="vipDialogVisible = true">
+                        会员中心
+                    </el-link>
+                    <div class="quota-wrap" v-if="authStore.user.storageQuota !== -1">
+                        <span class="quota-text">
+                            {{ formatBytes(authStore.user.storageUsed) }} / {{ formatBytes(authStore.user.storageQuota) }}
+                        </span>
+                        <el-progress
+                            :percentage="storagePct"
+                            :show-text="false"
+                            :stroke-width="5"
+                            :status="storagePct > 90 ? 'exception' : storagePct > 75 ? 'warning' : 'success'"
+                            class="quota-bar"
+                        />
+                    </div>
+                    <div v-else class="quota-wrap">
+                        <span class="quota-text">已用 {{ formatBytes(authStore.user.storageUsed) }} / 无限制</span>
+                    </div>
+                </div>
+
                 <!-- 语言切换 -->
                 <el-dropdown @command="handleLanguageChange" trigger="click" style="margin-right: 15px">
                     <span class="el-dropdown-link">
@@ -82,10 +104,13 @@
                 </el-dropdown>
             </div>
         </div>
+
+        <VipCenterDialog v-model="vipDialogVisible" />
     </el-header>
 </template>
 
 <script setup lang="ts">
+import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { User, ArrowDown, Sunny, Moon, Monitor } from '@element-plus/icons-vue'
@@ -95,11 +120,27 @@ import { authApi } from '@api/auth'
 import { useI18n } from 'vue-i18n'
 import type { ThemeMode } from '@stores/theme'
 import userPreferenceApi from '@api/user-preference'
+import VipCenterDialog from '@components/VipCenterDialog/index.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
 const themeStore = useThemeStore()
 const { t, locale } = useI18n()
+
+const vipDialogVisible = ref(false)
+
+function formatBytes(n: number): string {
+    if (n < 1024) return `${n} B`
+    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
+    if (n < 1024 * 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} MB`
+    return `${(n / (1024 * 1024 * 1024)).toFixed(2)} GB`
+}
+
+const storagePct = computed(() => {
+    const u = authStore.user
+    if (!u || u.storageQuota <= 0 || u.storageQuota === -1) return 0
+    return Math.min(100, Math.round((u.storageUsed / u.storageQuota) * 100))
+})
 
 const handleLanguageChange = async (lang: string) => {
     locale.value = lang
@@ -177,7 +218,43 @@ const handleCommand = async (command: string) => {
     .header-right {
         display: flex;
         align-items: center;
+        flex-wrap: wrap;
+        gap: 8px;
     }
+}
+
+.member-storage-block {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-right: 12px;
+    padding: 4px 12px;
+    border-radius: 8px;
+    background: #f7f8fa;
+    border: 1px solid #ebeef5;
+}
+
+.member-center-link {
+    font-size: 14px;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.quota-wrap {
+    min-width: 140px;
+    max-width: 220px;
+}
+
+.quota-text {
+    display: block;
+    font-size: 12px;
+    color: #606266;
+    line-height: 1.2;
+    margin-bottom: 4px;
+}
+
+.quota-bar {
+    width: 100%;
 }
 
 .el-dropdown-link {

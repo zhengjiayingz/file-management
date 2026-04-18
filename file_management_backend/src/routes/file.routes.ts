@@ -11,6 +11,7 @@ import {
   getFiles,
   getFileById,
   downloadFile,
+  downloadBatchAsZip,
   getFileThumbnail,
   checkFileName,
   previewFile
@@ -29,6 +30,8 @@ import {
   permanentDeleteFile,
   permanentDeleteFilesBatch,
   restoreFilesBatch,
+  deleteFilesBatch,
+  moveFilesBatch,
   saveSharedFile
 } from '../controllers/file/manage.controller.js';
 import {
@@ -36,6 +39,13 @@ import {
   rollbackVersion,
   downloadVersion
 } from '../controllers/file/version.controller.js';
+import {
+  listTags,
+  createTag,
+  updateTag,
+  deleteTag,
+  setFileTags
+} from '../controllers/file/fileTag.controller.js';
 import { authenticate } from '../middleware/auth.middleware.js';
 import { upload } from '../middleware/upload.middleware.js';
 
@@ -348,6 +358,12 @@ router.post('/folder', createFolder);
  */
 router.get('/', getFiles);
 
+// 标签（须注册在 /:id 之前，避免被当成 id = "tags"）
+router.get('/tags', listTags);
+router.post('/tags', createTag);
+router.put('/tags/:tagId', updateTag);
+router.delete('/tags/:tagId', deleteTag);
+
 /**
  * @swagger
  * /api/files/batch/permanent-delete:
@@ -435,6 +451,36 @@ router.post('/batch/permanent-delete', permanentDeleteFilesBatch);
  *                       type: integer
  */
 router.post('/batch/restore', restoreFilesBatch);
+
+router.post('/batch/delete', deleteFilesBatch);
+
+router.post('/batch/move', moveFilesBatch);
+
+/**
+ * @swagger
+ * /api/files/batch/download-zip:
+ *   post:
+ *     summary: 批量打包为 ZIP 下载（仅文件）
+ *     tags: [文件管理]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [ids]
+ *             properties:
+ *               ids:
+ *                 type: array
+ *                 items:
+ *                   type: integer
+ *     responses:
+ *       200:
+ *         description: application/zip 流
+ */
+router.post('/batch/download-zip', downloadBatchAsZip);
 
 /**
  * @swagger
@@ -582,6 +628,9 @@ router.get('/:id/download', downloadFile);
  *         description: 转换失败或 LibreOffice 未安装
  */
 router.get('/:id/preview', previewFile);
+
+// 设置文件标签（全量替换）
+router.put('/:id/tags', setFileTags);
 
 // 重命名文件/文件夹
 /**

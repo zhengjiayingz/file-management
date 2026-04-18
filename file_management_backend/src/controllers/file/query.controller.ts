@@ -1,12 +1,19 @@
 import { Response } from 'express';
 import path from 'path';
 import fs from 'fs';
+import archiver from 'archiver';
 import sharp from 'sharp';
 import ffmpeg from 'fluent-ffmpeg';
 import prisma from '../../lib/prisma.js';
 import { AuthRequest } from '../../types/index.js';
 import { ensureDirectoryExists } from '../../utils/file.utils.js';
 import { resolveStorageFilePath } from '../../utils/storagePath.utils.js';
+import {
+  computeSelectionRoots,
+  loadParentChainMap,
+  ObjectNotFoundError,
+  sanitizeZipPathSegment
+} from '../../utils/fileBatch.utils.js';
 import { logOperation, LogOperationType, LogResourceType } from '../../services/logger.service.js';
 
 // 尝试配置本地 FFmpeg 路径（如果存在）
@@ -23,8 +30,59 @@ ffmpeg.setFfmpegPath(ffmpegInstaller.path);
 //   ffmpeg.setFfmpegPath(localFfmpegPath);
 // }
 
+/** 按 MIME 大类筛选 FileStorage（仅适用于 file 类型条目） */
+function storageWhereForMimeCategory(typeStr: string): Record<string, unknown> | null {
+  switch (typeStr) {
+    case 'image':
+      return { mimeType: { startsWith: 'image/' } };
+    case 'video':
+      return { mimeType: { startsWith: 'video/' } };
+    case 'audio':
+      return { mimeType: { startsWith: 'audio/' } };
+    case 'document':
+      return {
+        OR: [
+          { mimeType: { startsWith: 'text/' } },
+          { mimeType: { contains: 'pdf' } },
+          { mimeType: { contains: 'word' } },
+          { mimeType: { contains: 'excel' } },
+          { mimeType: { contains: 'sheet' } },
+          { mimeType: { contains: 'powerpoint' } },
+          { mimeType: { contains: 'presentation' } },
+          { mimeType: { contains: 'document' } }
+        ]
+      };
+    case 'other':
+      return {
+        AND: [
+          { mimeType: { not: { startsWith: 'image/' } } },
+          { mimeType: { not: { startsWith: 'video/' } } },
+          { mimeType: { not: { startsWith: 'audio/' } } },
+          {
+            NOT: {
+              OR: [
+                { mimeType: { startsWith: 'text/' } },
+                { mimeType: { contains: 'pdf' } },
+                { mimeType: { contains: 'word' } },
+                { mimeType: { contains: 'excel' } },
+                { mimeType: { contains: 'sheet' } },
+                { mimeType: { contains: 'powerpoint' } },
+                { mimeType: { contains: 'presentation' } },
+                { mimeType: { contains: 'document' } }
+              ]
+            }
+          }
+        ]
+      };
+    default:
+      return null;
+  }
+}
+
 /**
  * 获取文件列表
+ * 查询参数：parentId, isDeleted, q(文件名包含), type(image|video|...|all), entryKind(file|folder|all),
+ * tagId, createdFrom, createdTo (ISO 日期或 YYYY-MM-DD)
  */
 export const getFiles = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -36,43 +94,80 @@ export const getFiles = async (req: AuthRequest, res: Response): Promise<void> =
       return;
     }
 
-    const { parentId, isDeleted, q, type } = req.query;
+    const { parentId, isDeleted, q, type, tagId: tagIdQuery, createdFrom, createdTo, entryKind } = req.query;
 
     const whereClause: any = {
       userId: req.user.id,
       isDeleted: isDeleted === 'true'
     };
 
-    if (q) {
-      whereClause.fileName = {
-        contains: q as string
+    const tagIdNum =
+      tagIdQuery !== undefined && tagIdQuery !== '' && tagIdQuery !== null
+        ? parseInt(String(tagIdQuery), 10)
+        : NaN;
+    if (!isNaN(tagIdNum)) {
+      whereClause.userFileTags = {
+        some: {
+          tagId: tagIdNum,
+          tag: { userId: req.user.id }
+        }
       };
-    } else if (type && type !== 'all') {
-      const typeStr = type as string;
-      if (typeStr === 'image') {
-        whereClause.storage = { mimeType: { startsWith: 'image/' } };
-      } else if (typeStr === 'video') {
-        whereClause.storage = { mimeType: { startsWith: 'video/' } };
-      } else if (typeStr === 'audio') {
-        whereClause.storage = { mimeType: { startsWith: 'audio/' } };
-      } else if (typeStr === 'document') {
-        whereClause.storage = {
-          OR: [
-            { mimeType: { startsWith: 'text/' } },
-            { mimeType: { contains: 'pdf' } },
-            { mimeType: { contains: 'word' } },
-            { mimeType: { contains: 'excel' } },
-            { mimeType: { contains: 'sheet' } },
-            { mimeType: { contains: 'powerpoint' } },
-            { mimeType: { contains: 'presentation' } },
-            { mimeType: { contains: 'document' } }
-          ]
-        };
+    }
+
+    const cf = createdFrom ? String(createdFrom).trim() : '';
+    const ct = createdTo ? String(createdTo).trim() : '';
+    if (cf || ct) {
+      whereClause.createdAt = {};
+      if (cf) {
+        whereClause.createdAt.gte = new Date(cf);
       }
-    } else {
-      // 如果不是查询回收站（即查询正常文件），则必须添加 parentId 过滤
-      if (isDeleted !== 'true') {
-        whereClause.parentId = parentId ? parseInt(parentId as string) : null;
+      if (ct) {
+        const end = new Date(ct);
+        end.setHours(23, 59, 59, 999);
+        whereClause.createdAt.lte = end;
+      }
+    }
+
+    if (q && String(q).trim()) {
+      whereClause.fileName = {
+        contains: String(q).trim()
+      };
+    }
+
+    const ek = entryKind ? String(entryKind) : 'all';
+    if (ek === 'file') {
+      whereClause.fileType = 'file';
+    } else if (ek === 'folder') {
+      whereClause.fileType = 'folder';
+    }
+
+    const typeStr = type ? String(type) : 'all';
+    const mimeWhere = typeStr !== 'all' ? storageWhereForMimeCategory(typeStr) : null;
+
+    if (mimeWhere) {
+      if (whereClause.fileType === 'folder') {
+        whereClause.id = { in: [] };
+      } else if (whereClause.fileType === 'file') {
+        whereClause.storage = mimeWhere;
+      } else {
+        whereClause.AND = whereClause.AND || [];
+        whereClause.AND.push({
+          OR: [{ fileType: 'folder' }, { fileType: 'file', storage: mimeWhere }]
+        });
+      }
+    }
+
+    const isRecycle = isDeleted === 'true';
+    if (!isRecycle) {
+      const parentKeyPresent = Object.prototype.hasOwnProperty.call(req.query, 'parentId');
+      if (parentKeyPresent) {
+        const pv = parentId as string | undefined;
+        whereClause.parentId =
+          pv === '' || pv === undefined || pv === 'null' || pv === 'undefined'
+            ? null
+            : parseInt(String(pv), 10);
+      } else if (typeStr === 'all') {
+        whereClause.parentId = null;
       }
     }
 
@@ -85,6 +180,11 @@ export const getFiles = async (req: AuthRequest, res: Response): Promise<void> =
             fileSize: true,
             mimeType: true
           }
+        },
+        userFileTags: {
+          include: {
+            tag: true
+          }
         }
       },
       orderBy: [
@@ -93,7 +193,7 @@ export const getFiles = async (req: AuthRequest, res: Response): Promise<void> =
       ]
     });
 
-    const files = userFiles.map(file => ({
+    const files = userFiles.map((file) => ({
       id: file.id,
       parentId: file.parentId, // 添加 parentId 映射
       fileName: file.fileName,
@@ -101,7 +201,13 @@ export const getFiles = async (req: AuthRequest, res: Response): Promise<void> =
       fileSize: file.storage ? Number(file.storage.fileSize) : 0,
       mimeType: file.storage?.mimeType || (file.fileType === 'folder' ? 'folder' : 'unknown'),
       createdAt: file.createdAt,
-      updatedAt: file.updatedAt
+      updatedAt: file.updatedAt,
+      isDeleted: file.isDeleted,
+      tags: file.userFileTags.map((u) => ({
+        id: u.tag.id,
+        tagName: u.tag.tagName,
+        color: u.tag.color
+      }))
     }));
 
     res.json({
@@ -196,6 +302,11 @@ export const getFileById = async (req: AuthRequest, res: Response): Promise<void
             fileSize: true,
             mimeType: true
           }
+        },
+        userFileTags: {
+          include: {
+            tag: true
+          }
         }
       }
     });
@@ -218,7 +329,12 @@ export const getFileById = async (req: AuthRequest, res: Response): Promise<void
         fileSize: userFile.storage ? Number(userFile.storage.fileSize) : 0,
         mimeType: userFile.storage?.mimeType || 'unknown',
         createdAt: userFile.createdAt,
-        updatedAt: userFile.updatedAt
+        updatedAt: userFile.updatedAt,
+        tags: userFile.userFileTags.map((u) => ({
+          id: u.tag.id,
+          tagName: u.tag.tagName,
+          color: u.tag.color
+        }))
       }
     });
   } catch (error) {
@@ -617,5 +733,290 @@ export const previewFile = async (req: AuthRequest, res: Response): Promise<void
       success: false,
       message: `文档预览失败: ${error.message || '未知错误'}`
     });
+  }
+};
+
+/** 顶层选中项数量上限；展开文件夹后的文件数上限 */
+const BATCH_ZIP_MAX_TOP_IDS = 200;
+const BATCH_ZIP_MAX_FILE_ENTRIES = 500;
+
+type ZipBuildEntry = { kind: 'file'; abs: string; zipPath: string } | { kind: 'dir'; zipPath: string };
+
+async function buildZipEntriesForRoots(
+  userId: number,
+  rootIds: number[],
+  maxFiles: number
+): Promise<ZipBuildEntry[]> {
+  const used = new Set<string>();
+  const out: ZipBuildEntry[] = [];
+  let fileCount = 0;
+
+  const allocPath = (p: string): string => {
+    const norm = p.replace(/\\/g, '/');
+    let z = norm;
+    let n = 0;
+    while (used.has(z.toLowerCase())) {
+      n += 1;
+      if (z.endsWith('/')) {
+        const d = z.replace(/\/$/, '');
+        const ext = path.extname(d);
+        const stem = path.basename(d, ext);
+        const parent = path.posix.dirname(d);
+        z =
+          parent === '.' || parent === ''
+            ? `${stem} (${n})/`
+            : `${parent}/${stem} (${n})/`;
+      } else {
+        const ext = path.extname(z);
+        const stem = path.basename(z, ext);
+        const parent = path.posix.dirname(z);
+        z =
+          parent === '.' || parent === ''
+            ? `${stem} (${n})${ext}`
+            : `${parent}/${stem} (${n})${ext}`;
+      }
+    }
+    used.add(z.toLowerCase());
+    return z;
+  };
+
+  const walkFolder = async (folderId: number, prefix: string): Promise<void> => {
+    const children = await prisma.userFile.findMany({
+      where: { userId, parentId: folderId, isDeleted: false },
+      orderBy: [{ fileType: 'desc' }, { fileName: 'asc' }],
+      include: {
+        storage: { select: { filePath: true } }
+      }
+    });
+    const pref = prefix.replace(/\/$/, '');
+    if (children.length === 0) {
+      const dirPath = allocPath(`${pref}/`);
+      out.push({ kind: 'dir', zipPath: dirPath });
+      return;
+    }
+    for (const ch of children) {
+      const seg = sanitizeZipPathSegment(ch.fileName);
+      const rel = pref ? `${pref}/${seg}` : seg;
+      if (ch.fileType === 'folder') {
+        await walkFolder(ch.id, rel);
+      } else {
+        if (fileCount >= maxFiles) {
+          throw new Error(`ZIP_FILE_LIMIT:${maxFiles}`);
+        }
+        if (!ch.storage?.filePath) {
+          throw new Error(`MISSING_STORAGE:${ch.fileName}`);
+        }
+        const abs = resolveStorageFilePath(ch.storage.filePath);
+        if (!fs.existsSync(abs)) {
+          throw new Error(`MISSING_DISK:${ch.fileName}`);
+        }
+        fileCount += 1;
+        out.push({ kind: 'file', abs, zipPath: allocPath(rel) });
+      }
+    }
+  };
+
+  const roots = await prisma.userFile.findMany({
+    where: { id: { in: rootIds }, userId, isDeleted: false },
+    orderBy: { id: 'asc' },
+    include: {
+      storage: { select: { filePath: true } }
+    }
+  });
+  if (roots.length !== rootIds.length) {
+    throw new Error('ROOT_MISMATCH');
+  }
+
+  for (const r of roots) {
+    const seg = sanitizeZipPathSegment(r.fileName);
+    if (r.fileType === 'file') {
+      if (fileCount >= maxFiles) {
+        throw new Error(`ZIP_FILE_LIMIT:${maxFiles}`);
+      }
+      if (!r.storage?.filePath) {
+        throw new Error(`MISSING_STORAGE:${r.fileName}`);
+      }
+      const abs = resolveStorageFilePath(r.storage.filePath);
+      if (!fs.existsSync(abs)) {
+        throw new Error(`MISSING_DISK:${r.fileName}`);
+      }
+      fileCount += 1;
+      out.push({ kind: 'file', abs, zipPath: allocPath(seg) });
+    } else {
+      await walkFolder(r.id, seg);
+    }
+  }
+
+  return out;
+}
+
+/**
+ * POST /api/files/batch/download-zip
+ * 将选中的文件与文件夹（文件夹递归）打包为 ZIP 流式下载
+ */
+export const downloadBatchAsZip = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({
+        success: false,
+        message: '未认证'
+      });
+      return;
+    }
+
+    const raw = (req.body as { ids?: unknown }).ids;
+    if (!Array.isArray(raw) || raw.length === 0) {
+      res.status(400).json({
+        success: false,
+        message: '请提供有效的文件 id 列表'
+      });
+      return;
+    }
+
+    const ids = [...new Set(raw.map((x) => Number(x)).filter((n) => !Number.isNaN(n) && n > 0))];
+    if (ids.length === 0) {
+      res.status(400).json({
+        success: false,
+        message: '请提供有效的文件 id 列表'
+      });
+      return;
+    }
+
+    if (ids.length > BATCH_ZIP_MAX_TOP_IDS) {
+      res.status(400).json({
+        success: false,
+        message: `单次最多选择 ${BATCH_ZIP_MAX_TOP_IDS} 个顶层项`
+      });
+      return;
+    }
+
+    const userId = req.user.id;
+
+    const initialRows = await prisma.userFile.findMany({
+      where: {
+        id: { in: ids },
+        userId,
+        isDeleted: false
+      },
+      select: { id: true }
+    });
+    if (initialRows.length !== ids.length) {
+      res.status(400).json({
+        success: false,
+        message: '部分文件不存在或已删除'
+      });
+      return;
+    }
+
+    let pmap: Map<number, number | null>;
+    try {
+      pmap = await loadParentChainMap(ids, userId);
+    } catch (e) {
+      if (e instanceof ObjectNotFoundError) {
+        res.status(400).json({ success: false, message: '路径数据不完整，请重试' });
+        return;
+      }
+      throw e;
+    }
+
+    const rootIds = computeSelectionRoots(ids, pmap).sort((a, b) => a - b);
+
+    let zipEntries: ZipBuildEntry[];
+    try {
+      zipEntries = await buildZipEntriesForRoots(userId, rootIds, BATCH_ZIP_MAX_FILE_ENTRIES);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : '';
+      if (msg.startsWith('ZIP_FILE_LIMIT:')) {
+        res.status(400).json({
+          success: false,
+          message: `压缩包内文件数量超过上限（${BATCH_ZIP_MAX_FILE_ENTRIES}）`
+        });
+        return;
+      }
+      if (msg.startsWith('MISSING_DISK:')) {
+        const name = msg.split(':')[1] ?? '';
+        res.status(404).json({ success: false, message: `文件在磁盘上不存在：${name}` });
+        return;
+      }
+      if (msg.startsWith('MISSING_STORAGE:')) {
+        const name = msg.split(':')[1] ?? '';
+        res.status(404).json({ success: false, message: `存储记录缺失：${name}` });
+        return;
+      }
+      if (msg === 'ROOT_MISMATCH') {
+        res.status(400).json({ success: false, message: '选中项数据不一致，请刷新后重试' });
+        return;
+      }
+      throw e;
+    }
+
+    const filePieces = zipEntries.filter((e) => e.kind === 'file');
+    if (filePieces.length === 0 && zipEntries.every((e) => e.kind === 'dir')) {
+      // 仅空目录：仍生成 zip
+    } else if (filePieces.length === 0) {
+      res.status(400).json({ success: false, message: '没有可打包的文件' });
+      return;
+    }
+
+    const archive = archiver('zip', { zlib: { level: 6 } });
+    archive.on('warning', (err: Error & { code?: string }) => {
+      if (err.code === 'ENOENT') {
+        console.warn('[batch-zip]', err);
+      } else {
+        console.error('[batch-zip]', err);
+      }
+    });
+    archive.on('error', (err: Error) => {
+      console.error('[batch-zip] archive error:', err);
+      if (!res.headersSent) {
+        res.status(500).json({
+          success: false,
+          message: '打包失败'
+        });
+      } else {
+        res.end();
+      }
+    });
+
+    const safeTs = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const zipName = `batch-download-${safeTs}.zip`;
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${encodeURIComponent(zipName)}"; filename*=UTF-8''${encodeURIComponent(zipName)}`
+    );
+
+    archive.pipe(res);
+
+    try {
+      await logOperation({
+        req,
+        userId: req.user!.id,
+        operationType: LogOperationType.DOWNLOAD,
+        resourceType: LogResourceType.FILE,
+        resourceId: rootIds[0]!,
+        description: `Batch zip download (${filePieces.length} files)`
+      });
+    } catch (logErr) {
+      console.error('[batch-zip] logOperation:', logErr);
+    }
+
+    for (const e of zipEntries) {
+      if (e.kind === 'file') {
+        archive.file(e.abs, { name: e.zipPath });
+      } else {
+        archive.append(Buffer.alloc(0), { name: e.zipPath });
+      }
+    }
+
+    await archive.finalize();
+  } catch (error) {
+    console.error('downloadBatchAsZip error:', error);
+    if (!res.headersSent) {
+      res.status(500).json({
+        success: false,
+        message: '打包下载失败'
+      });
+    }
   }
 };

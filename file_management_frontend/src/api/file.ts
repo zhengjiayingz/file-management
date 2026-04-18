@@ -1,6 +1,7 @@
 import request from '@utils/request'
 import type {
   FileItem,
+  FileTagItem,
   CheckFileExistsResponse,
   CreateFolderParams,
   RenameFileParams,
@@ -144,10 +145,39 @@ export const fileApiService = {
     return res.data.data
   },
 
+  /** 用户标签列表 */
+  async listFileTags(): Promise<FileTagItem[]> {
+    const res = await request.get<any>('/files/tags')
+    return res.data.data
+  },
+
+  async createFileTag(tagName: string, color?: string | null): Promise<FileTagItem> {
+    const res = await request.post<any>('/files/tags', { tagName, color })
+    return res.data.data
+  },
+
+  async updateFileTag(
+    tagId: number,
+    body: { tagName?: string; color?: string | null }
+  ): Promise<FileTagItem> {
+    const res = await request.put<any>(`/files/tags/${tagId}`, body)
+    return res.data.data
+  },
+
+  async deleteFileTag(tagId: number): Promise<void> {
+    await request.delete(`/files/tags/${tagId}`)
+  },
+
+  /** 全量替换某文件的标签，返回最新 tags */
+  async setFileTags(fileId: number, tagIds: number[]): Promise<FileTagItem[]> {
+    const res = await request.put<any>(`/files/${fileId}/tags`, { tagIds })
+    return res.data.data.tags
+  },
+
   // 获取回收站文件列表
-  async getRecycleBinFiles(): Promise<FileItem[]> {
+  async getRecycleBinFiles(params?: Omit<FileQueryParams, 'isDeleted'>): Promise<FileItem[]> {
     const res = await request.get<any>('/files', {
-      params: { isDeleted: true }
+      params: { isDeleted: true, ...params }
     })
     return res.data.data
   },
@@ -164,6 +194,30 @@ export const fileApiService = {
       responseType: 'blob'
     })
     return res.data as Blob
+  },
+
+  /** 将选中的文件与文件夹（文件夹递归）打包为 ZIP */
+  async downloadBatchZip(ids: number[]): Promise<Blob> {
+    const res = await request.post(`/files/batch/download-zip`, { ids }, {
+      responseType: 'blob',
+      timeout: 600000
+    })
+    return res.data as Blob
+  },
+
+  /** 批量移入回收站（软删），服务端展开子孙并一次 updateMany */
+  async deleteFilesBatch(ids: number[]): Promise<{ deletedCount: number }> {
+    const res = await request.post<any>('/files/batch/delete', { ids })
+    return res.data.data
+  },
+
+  /** 批量移动（事务内更新；选中项会去重为顶层根） */
+  async moveFilesBatch(ids: number[], parentId?: number): Promise<{ movedCount: number }> {
+    const res = await request.post<any>('/files/batch/move', {
+      ids,
+      parentId: parentId === undefined ? null : parentId
+    })
+    return res.data.data
   },
 
   /** VIP/管理员：列出 ZIP 内条目（用于在线解压到网盘） */

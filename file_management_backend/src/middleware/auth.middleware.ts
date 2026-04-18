@@ -45,10 +45,18 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
       }
     });
 
-    if (!user || user.status !== 'active') {
+    if (!user) {
       res.status(401).json({
         success: false,
-        message: '用户不存在或已被禁用'
+        message: '用户不存在或认证无效'
+      });
+      return;
+    }
+
+    if (user.status !== 'active') {
+      res.status(403).json({
+        success: false,
+        message: '账号处在封禁状态，请联系管理员'
       });
       return;
     }

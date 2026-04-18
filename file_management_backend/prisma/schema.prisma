@@ -37,8 +37,33 @@ model User {
   uploadChunks   UploadChunk[]
   shareAccessLogs ShareAccessLog[]
   userPreference UserPreference?
+  vipUpgradeRequestsAsApplicant VipUpgradeRequest[] @relation("VipApplicant")
+  vipUpgradeRequestsProcessed   VipUpgradeRequest[] @relation("VipProcessedBy")
 
   @@map("users")
+}
+
+/// 用户申请升级 VIP（管理员在通讯录中审核）
+model VipUpgradeRequest {
+  id            Int               @id @default(autoincrement())
+  applicantId   Int               @map("applicant_id")
+  status        VipUpgradeStatus  @default(pending)
+  processedById Int?              @map("processed_by_id")
+  processedAt   DateTime?       @map("processed_at")
+  createdAt     DateTime          @default(now()) @map("created_at")
+
+  applicant   User @relation("VipApplicant", fields: [applicantId], references: [id], onDelete: Cascade)
+  processedBy User? @relation("VipProcessedBy", fields: [processedById], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([applicantId, status])
+  @@map("vip_upgrade_requests")
+}
+
+enum VipUpgradeStatus {
+  pending
+  approved
+  rejected
 }
 
 model UserPreference {

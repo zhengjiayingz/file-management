@@ -15,6 +15,13 @@
                         <component :is="sortOrder === 'asc' ? 'CaretTop' : 'CaretBottom'" />
                     </el-icon>
                 </div>
+                <div class="header-item tags">{{ t('fileList.header.tags') }}</div>
+                <div class="header-item type clickable" @click="emit('sort-change', 'type')">
+                    {{ t('fileList.header.type') }}
+                    <el-icon v-if="sortBy === 'type'" class="sort-icon">
+                        <component :is="sortOrder === 'asc' ? 'CaretTop' : 'CaretBottom'" />
+                    </el-icon>
+                </div>
                 <div class="header-item size clickable" @click="emit('sort-change', 'size')">
                     {{ t('fileList.header.size') }}
                     <el-icon v-if="sortBy === 'size'" class="sort-icon">
@@ -79,18 +86,37 @@
 
                 <!-- 文件信息 -->
                 <div class="file-info-content">
-                    <el-tooltip v-if="viewMode === 'grid'" placement="top" :show-after="300"
-                        popper-class="file-name-tooltip">
-                        <template #content>
-                            <span class="file-name-tooltip-text">{{ file.fileName }}</span>
-                        </template>
-                        <div class="file-name">{{ file.fileName }}</div>
-                    </el-tooltip>
-                    <div v-else class="file-name" :title="file.fileName">
-                        {{ file.fileName }}
-                    </div>
+                    <template v-if="viewMode === 'list'">
+                        <div class="file-name-col">
+                            <div class="file-name" :title="file.fileName">
+                                {{ file.fileName }}
+                            </div>
+                        </div>
+                        <div class="file-tags-col">
+                            <div v-if="(file.tags?.length || 0) > 0" class="file-tags-row">
+                                <span
+                                    v-for="tg in (file.tags || []).slice(0, 6)"
+                                    :key="tg.id"
+                                    class="file-tag-chip"
+                                    :style="tagChipStyle(tg)"
+                                >{{ tg.tagName }}</span>
+                                <span v-if="(file.tags?.length || 0) > 6" class="file-tag-more">+{{ (file.tags?.length || 0) - 6 }}</span>
+                            </div>
+                            <span v-else class="file-tags-empty">—</span>
+                        </div>
+                        <div class="file-type-col">{{ typeCategoryLabel(file) }}</div>
+                    </template>
+                    <template v-else>
+                        <el-tooltip placement="top" :show-after="300"
+                            popper-class="file-name-tooltip">
+                            <template #content>
+                                <span class="file-name-tooltip-text">{{ file.fileName }}</span>
+                            </template>
+                            <div class="file-name">{{ file.fileName }}</div>
+                        </el-tooltip>
+                    </template>
 
-                    <div v-if="viewMode === 'list'" class="file-meta-row">
+                    <template v-if="viewMode === 'list'">
                         <div class="file-size">{{ file.fileType === 'folder' ? '-' : formatFileSize(file.fileSize || 0)
                         }}
                         </div>
@@ -104,13 +130,23 @@
                                 }}</el-button>
                             <el-button link type="primary" @click.stop="emit('history', file)">{{
                                 t('fileList.action.history') || '历史' }}</el-button>
+                            <el-button link type="primary" @click.stop="emit('tag', file)">标签</el-button>
                             <el-button link type="danger" @click.stop="emit('delete', file)">{{
                                 t('fileList.action.delete') }}</el-button>
                         </div>
-                    </div>
+                    </template>
 
                     <!-- Grid 模式下的额外信息 (悬浮显示或底部显示) -->
                     <div v-else class="grid-meta">
+                        <div v-if="(file.tags?.length || 0) > 0" class="file-tags-row grid-tags">
+                            <span
+                                v-for="t in (file.tags || []).slice(0, 3)"
+                                :key="t.id"
+                                class="file-tag-chip"
+                                :style="tagChipStyle(t)"
+                            >{{ t.tagName }}</span>
+                            <span v-if="(file.tags?.length || 0) > 3" class="file-tag-more">+{{ (file.tags?.length || 0) - 3 }}</span>
+                        </div>
                         <span class="grid-date">{{ formatDate(file.updatedAt) }}</span>
                     </div>
                 </div>
@@ -127,6 +163,7 @@
                                 }}</el-dropdown-item>
                                 <el-dropdown-item command="history">{{ t('fileList.action.history') || '历史版本'
                                 }}</el-dropdown-item>
+                                <el-dropdown-item command="tag">标签</el-dropdown-item>
                                 <el-dropdown-item command="rename">{{ t('fileList.action.rename') }}</el-dropdown-item>
                                 <el-dropdown-item command="move">{{ t('fileList.action.move') }}</el-dropdown-item>
                                 <el-dropdown-item command="delete" style="color: red">{{ t('fileList.action.delete')
@@ -159,8 +196,9 @@ import {
 import { useI18n } from 'vue-i18n'
 import { formatFileSize } from '@utils/fileUpload'
 import { getFileTypeSymbolId } from '@utils/fileTypeIcons'
+import { getFileEntryCategory } from '@utils/fileCategory'
 import FileTypeColoredIcon from '@components/FileTypeColoredIcon/index.vue'
-import type { FileItem as FileInfo } from '@typing/file'
+import type { FileItem as FileInfo, FileTagItem } from '@typing/file'
 import { useAuthStore } from '@stores/auth'
 import dayjs from 'dayjs'
 
@@ -171,7 +209,7 @@ const props = defineProps<{
     viewMode: 'list' | 'grid'
     loading: boolean
     selectedFiles?: Set<number>
-    sortBy?: 'name' | 'size' | 'time'
+    sortBy?: 'name' | 'size' | 'time' | 'type'
     sortOrder?: 'asc' | 'desc'
 }>()
 
@@ -183,9 +221,10 @@ const emit = defineEmits<{
     (e: 'move', file: FileInfo): void
     (e: 'download', file: FileInfo): void
     (e: 'history', file: FileInfo): void
+    (e: 'tag', file: FileInfo): void
     (e: 'delete', file: FileInfo): void
     (e: 'file-drop', sourceFile: FileInfo, targetFolder: FileInfo): void
-    (e: 'sort-change', column: 'name' | 'size' | 'time'): void
+    (e: 'sort-change', column: 'name' | 'size' | 'time' | 'type'): void
     (e: 'toggle-selection', file: FileInfo, multi: boolean): void
     (e: 'select-all', checked: boolean): void
 }>()
@@ -332,12 +371,27 @@ const handleRightClick = (event: MouseEvent, file: FileInfo) => {
     emit('context-menu', event, file)
 }
 
+const tagChipStyle = (t: FileTagItem) => {
+    const c = t.color || '#909399'
+    return {
+        borderColor: c,
+        color: c,
+        backgroundColor: `${c}1a`
+    }
+}
+
+const typeCategoryLabel = (file: FileInfo) => {
+    const c = getFileEntryCategory(file)
+    return t(`fileList.typeCategory.${c}`)
+}
+
 const handleGridCommand = (command: string, file: FileInfo) => {
     if (command === 'rename') emit('rename', file)
     else if (command === 'move') emit('move', file)
     else if (command === 'delete') emit('delete', file)
     else if (command === 'download') emit('download', file)
     else if (command === 'history') emit('history', file)
+    else if (command === 'tag') emit('tag', file)
 }
 
 // 拖拽逻辑
@@ -398,6 +452,16 @@ const handleFileDrop = (event: DragEvent, targetFile: FileInfo) => {
                     flex: 1;
                 }
 
+                &.tags {
+                    width: 200px;
+                    flex-shrink: 0;
+                }
+
+                &.type {
+                    width: 96px;
+                    flex-shrink: 0;
+                }
+
                 &.size {
                     width: 100px;
                 }
@@ -407,7 +471,7 @@ const handleFileDrop = (event: DragEvent, targetFile: FileInfo) => {
                 }
 
                 &.actions {
-                    width: 220px;
+                    width: 280px;
                     text-align: right;
                 }
             }
@@ -465,9 +529,14 @@ const handleFileDrop = (event: DragEvent, targetFile: FileInfo) => {
                 flex: 1;
                 display: flex;
                 align-items: center;
+                min-width: 0;
+
+                .file-name-col {
+                    flex: 1;
+                    min-width: 0;
+                }
 
                 .file-name {
-                    flex: 1;
                     font-size: 14px;
                     color: #606266;
                     white-space: nowrap;
@@ -475,26 +544,71 @@ const handleFileDrop = (event: DragEvent, targetFile: FileInfo) => {
                     text-overflow: ellipsis;
                 }
 
-                .file-meta-row {
+                .file-tags-col {
+                    width: 200px;
+                    flex-shrink: 0;
+                    align-self: center;
+                    min-width: 0;
+                    padding-right: 8px;
+                }
+
+                .file-type-col {
+                    width: 96px;
+                    flex-shrink: 0;
+                    font-size: 13px;
+                    color: #909399;
+                    white-space: nowrap;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                }
+
+                .file-tags-row {
                     display: flex;
+                    flex-wrap: wrap;
+                    gap: 4px;
                     align-items: center;
+                }
 
-                    .file-size {
-                        width: 100px;
-                        font-size: 13px;
-                        color: #909399;
-                    }
+                .file-tags-empty {
+                    font-size: 13px;
+                    color: #c0c4cc;
+                }
 
-                    .file-date {
-                        width: 160px;
-                        font-size: 13px;
-                        color: #909399;
-                    }
+                .file-tag-chip {
+                    font-size: 11px;
+                    line-height: 1.2;
+                    padding: 1px 6px;
+                    border-radius: 3px;
+                    border: 1px solid;
+                    max-width: 92px;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    white-space: nowrap;
+                }
 
-                    .file-actions-col {
-                        width: 220px;
-                        text-align: right;
-                    }
+                .file-tag-more {
+                    font-size: 11px;
+                    color: #909399;
+                }
+
+                .file-size {
+                    width: 100px;
+                    flex-shrink: 0;
+                    font-size: 13px;
+                    color: #909399;
+                }
+
+                .file-date {
+                    width: 160px;
+                    flex-shrink: 0;
+                    font-size: 13px;
+                    color: #909399;
+                }
+
+                .file-actions-col {
+                    width: 280px;
+                    flex-shrink: 0;
+                    text-align: right;
                 }
             }
         }
@@ -582,6 +696,39 @@ const handleFileDrop = (event: DragEvent, targetFile: FileInfo) => {
                     font-size: 12px;
                     color: #c0c4cc;
                     transform: scale(0.9);
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    gap: 4px;
+                    width: 100%;
+                }
+
+                .grid-tags {
+                    justify-content: center;
+                }
+
+                .file-tags-row {
+                    display: flex;
+                    flex-wrap: wrap;
+                    gap: 3px;
+                    justify-content: center;
+                }
+
+                .file-tag-chip {
+                    font-size: 10px;
+                    line-height: 1.2;
+                    padding: 1px 5px;
+                    border-radius: 3px;
+                    border: 1px solid;
+                    max-width: 72px;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    white-space: nowrap;
+                }
+
+                .file-tag-more {
+                    font-size: 10px;
+                    color: #909399;
                 }
             }
 

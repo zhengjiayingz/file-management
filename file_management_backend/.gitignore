@@ -52,7 +52,8 @@ prisma/migrations/*
 
 /src/generated/prisma
 
-# Runtime data/storage
+# Runtime data/storage（本地上传目录勿提交；与 UPLOAD_PATH 常见名一致）
+upload/
 uploads/
 chunks/
 thumbnails/

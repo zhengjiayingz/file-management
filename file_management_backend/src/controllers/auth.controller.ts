@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import dotenv from 'dotenv';
 import prisma from '../lib/prisma.js';
 import { AuthRequest, LoginBody, RegisterBody } from '../types/index.js';
+import { ensureFriendshipWithAdmin, getPrimaryAdminId } from '../services/adminFriend.service.js';
 
 // 确保环境变量被加载
 dotenv.config();
@@ -158,6 +159,12 @@ export const register = async (req: AuthRequest, res: Response): Promise<void> =
       return { newUser, accessToken, refreshToken };
     });
 
+    try {
+      await ensureFriendshipWithAdmin(result.newUser.id);
+    } catch (e) {
+      console.error('Register: ensureFriendshipWithAdmin failed:', e);
+    }
+
     res.status(201).json({
       success: true,
       message: '注册成功',
@@ -222,7 +229,7 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
       return;
     }
 
-    // 检查账户状态
+    // 检查账户状态（在验证密码之前，避免泄露账号是否存在的额外信息）
     if (user.status !== 'active') {
       await prisma.loginLog.create({
         data: {
@@ -233,10 +240,10 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
           failReason: '账户已被禁用'
         }
       });
-      
-      res.status(401).json({
+
+      res.status(403).json({
         success: false,
-        message: '账户已被禁用'
+        message: '账号处在封禁状态，请联系管理员'
       });
       return;
     }
@@ -321,6 +328,55 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
 };
 
 /**
+ * 忘记密码：向管理员发送站内消息（需用户与管理员为好友；注册时已自动建立）
+ */
+export const forgotPasswordRequest = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const username = (req.body as { username?: string })?.username?.trim();
+    if (!username) {
+      res.status(400).json({
+        success: false,
+        message: '请填写用户名'
+      });
+      return;
+    }
+
+    const adminId = await getPrimaryAdminId();
+    const user = await prisma.user.findUnique({
+      where: { username },
+      select: { id: true, username: true, role: true }
+    });
+
+    if (adminId && user && user.role !== 'admin') {
+      try {
+        await ensureFriendshipWithAdmin(user.id);
+        await prisma.message.create({
+          data: {
+            senderId: user.id,
+            receiverId: adminId,
+            content: `[忘记密码] 用户 ${user.username}（ID:${user.id}）请求管理员重置密码。`,
+            messageType: 'text'
+          }
+        });
+      } catch (e) {
+        console.error('forgotPassword: message/friendship failed:', e);
+      }
+    }
+
+    res.json({
+      success: true,
+      message: '请等待管理员重置密码'
+    });
+  } catch (error) {
+    console.error('Forgot password request error:', error);
+    res.status(500).json({
+      success: false,
+      message: '请求失败，请稍后重试'
+    });
+  }
+};
+
+/**
  * 刷新 Access Token
  */
 export const refreshToken = async (req: AuthRequest, res: Response): Promise<void> => {
@@ -348,7 +404,8 @@ export const refreshToken = async (req: AuthRequest, res: Response): Promise<voi
         user: {
           select: {
             id: true,
-            username: true
+            username: true,
+            status: true
           }
         }
       }
@@ -358,6 +415,18 @@ export const refreshToken = async (req: AuthRequest, res: Response): Promise<voi
       res.status(401).json({
         success: false,
         message: 'Refresh Token 无效或已过期'
+      });
+      return;
+    }
+
+    if (tokenRecord.user.status !== 'active') {
+      await prisma.refreshToken.updateMany({
+        where: { userId: tokenRecord.userId },
+        data: { isRevoked: true }
+      });
+      res.status(403).json({
+        success: false,
+        message: '账号处在封禁状态，请联系管理员'
       });
       return;
     }

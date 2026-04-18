@@ -11,6 +11,30 @@ export default {
     settings: '设置',
     logout: '退出登录'
   },
+  filterBar: {
+    labelFileName: '文件名',
+    labelDateRange: '上传时间',
+    labelType: '文件类型',
+    labelEntry: '条目',
+    labelTag: '标签',
+    fileNamePlaceholder: '文件名（包含）',
+    createdFrom: '开始日期',
+    createdTo: '结束日期',
+    typePlaceholder: '文件类型',
+    typeAll: '全部类型',
+    typeImage: '图片',
+    typeVideo: '视频',
+    typeAudio: '音频',
+    typeDocument: '文档',
+    typeOther: '其他',
+    entryKindPlaceholder: '条目',
+    entryAll: '全部',
+    entryFile: '仅文件',
+    entryFolder: '仅文件夹',
+    tagPlaceholder: '标签',
+    query: '查询',
+    reset: '重置条件'
+  },
   theme: {
     light: '浅色模式',
     dark: '深色模式',
@@ -22,6 +46,8 @@ export default {
     favorites: '收藏',
     recycleBin: '回收站',
     logs: '操作记录',
+    transferRecords: '上传/下载记录',
+    adminDashboard: '管理员看板',
     images: '图片',
     videos: '视频',
     audio: '音频',
@@ -36,7 +62,9 @@ export default {
     login: '登录',
     register: '注册',
     noAccount: '没有账号？去注册',
-    hasAccount: '已有账号？去登录'
+    hasAccount: '已有账号？去登录',
+    forgotPassword: '忘记密码？',
+    forgotPasswordNeedUsername: '请先填写用户名'
   },
   index: {
     toolbar: {
@@ -58,9 +86,19 @@ export default {
   fileList: {
     header: {
       name: '名称',
+      tags: '标签',
+      type: '类型',
       size: '大小',
       date: '修改日期',
       action: '操作'
+    },
+    typeCategory: {
+      folder: '文件夹',
+      image: '图片',
+      video: '视频',
+      audio: '音频',
+      document: '文档',
+      other: '其他'
     },
     action: {
       rename: '重命名',
@@ -69,6 +107,11 @@ export default {
       download: '下载',
       history: '历史记录'
     }
+  },
+  mediaPlayer: {
+    restoredProgress: '已从上次位置继续播放',
+    audioNotSupported: '您的浏览器不支持 audio 标签。',
+    downloadWithExternal: '下载并使用本地播放器'
   },
   dialog: {
     createFolder: {
@@ -138,6 +181,7 @@ export default {
     permanentlyDeletedCountMsg: '已彻底删除 {count} 项',
     header: {
       fileName: '文件名',
+      tags: '标签',
       size: '文件大小',
       deletedAt: '删除时间',
       action: '操作'
@@ -180,8 +224,116 @@ export default {
       operationTime: '操作时间',
       unknown: 'Unknown'
     }
-  }
-  ,
+  },
+  transferRecords: {
+    title: '上传/下载记录',
+    loadError: '加载记录失败'
+  },
+  admin: {
+    title: '系统管理控制台',
+    backHome: '返回首页',
+    loadError: '加载统计数据失败',
+    loadErrorUnknown: '未知错误',
+    cards: {
+      totalUsers: '总用户数',
+      activeUsers: '活跃用户',
+      totalStorage: '总存储使用',
+      totalFiles: '文件总数',
+      adminCount: '管理员人数',
+      systemStatus: '系统状态',
+      running: '运行中'
+    },
+    charts: {
+      fileTypeDistribution: '文件类型分布',
+      storageRanking: '存储使用排行 (Top 5)',
+      storageAxisMB: '存储使用 (MB)',
+      pieSeriesName: '文件类型',
+      pieTooltip: '{b}: {c} 个 ({d}%)'
+    },
+    recentLogs: '最近操作日志',
+    table: {
+      time: '时间',
+      user: '用户',
+      operationType: '操作类型',
+      resourceType: '资源类型',
+      description: '描述'
+    },
+    category: {
+      image: '图片',
+      video: '视频',
+      audio: '音频',
+      text: '文本'
+    },
+    docHint: {
+      word: 'Word 文档',
+      excel: 'Excel 表格',
+      ppt: 'PPT 演示',
+      archive: '压缩包'
+    },
+    mime: {
+      image_png: 'PNG 图片',
+      image_jpeg: 'JPEG 图片',
+      image_gif: 'GIF 图片',
+      image_webp: 'WebP 图片',
+      image_svg_xml: 'SVG 图片',
+      image_bmp: 'BMP 图片',
+      video_mp4: 'MP4 视频',
+      video_webm: 'WebM 视频',
+      video_ogg: 'OGG 视频',
+      video_quicktime: 'MOV 视频',
+      video_x_msvideo: 'AVI 视频',
+      video_x_matroska: 'MKV 视频',
+      audio_mpeg: 'MP3 音频',
+      audio_ogg: 'OGG 音频',
+      audio_wav: 'WAV 音频',
+      audio_flac: 'FLAC 音频',
+      application_pdf: 'PDF 文档',
+      application_msword: 'Word 文档',
+      application_vnd_openxmlformats_officedocument_wordprocessingml_document: 'Word 文档',
+      application_vnd_ms_excel: 'Excel 表格',
+      application_vnd_openxmlformats_officedocument_spreadsheetml_sheet: 'Excel 表格',
+      application_vnd_ms_powerpoint: 'PPT 演示',
+      application_vnd_openxmlformats_officedocument_presentationml_presentation: 'PPT 演示',
+      text_plain: '纯文本',
+      text_html: 'HTML 文件',
+      text_css: 'CSS 文件',
+      text_javascript: 'JavaScript',
+      application_json: 'JSON 文件',
+      application_xml: 'XML 文件',
+      application_zip: 'ZIP 压缩包',
+      application_x_rar_compressed: 'RAR 压缩包',
+      application_x_7z_compressed: '7z 压缩包',
+      application_gzip: 'GZ 压缩包'
+    },
+    userManagement: {
+      title: '用户管理',
+      id: 'ID',
+      username: '用户名',
+      email: '邮箱',
+      role: '角色',
+      status: '状态',
+      storage: '存储用量',
+      createdAt: '注册时间',
+      actions: '操作',
+      resetPassword: '重置密码',
+      active: '正常',
+      disabled: '已禁用',
+      loadError: '加载用户列表失败',
+      statusUpdated: '状态已更新',
+      resetSuccess: '密码已重置',
+      resetPromptTitle: '重置密码',
+      resetPromptPlaceholder: '新密码（至少8位，含数字/大小写/特殊字符中三种）',
+      cannotDisableSelf: '不能禁用自己的账号',
+      cannotDisableAdmin: '不能禁用管理员账号',
+      syncFriends: '同步与主管理员好友',
+      syncFriendsError: '同步好友失败',
+      roles: {
+        admin: '管理员',
+        user: '用户',
+        vip: '会员'
+      }
+    }
+  },
   file: {
     move: {
       title: '移动到',
