@@ -4,6 +4,8 @@
 
 本文档详细描述了文件管理系统各个功能模块的业务流程，包括每个步骤涉及的数据表操作。
 
+**与需求文档对齐**：验收口径与权限/回收策略以 [REQUIREMENTS.md](./REQUIREMENTS.md) 为准。**2026-04-18**：§7.3 已改为「仅定时任务回收无引用物理文件」，废止原「管理员手动清理」流程描述；VIP 完整申请与审核见 REQUIREMENTS「VIP 升级与审核流程」及本节 **6.2** 说明。
+
 ---
 
 ## 目录
@@ -1306,6 +1308,8 @@ WHERE id = ?
 
 ### 6.2 升级VIP流程
 
+**产品说明**：用户侧先提交 **VIP 升级申请**，管理员在「通讯录 → VIP申请」或会话内对 `[VIP升级申请]` 消息操作 **同意/拒绝**；**同意**后后端对申请人执行与本节一致的落库（角色、配额等）。完整交互见 [REQUIREMENTS.md](./REQUIREMENTS.md)「VIP 升级与审核流程」。以下对应 **审核通过之后** 的数据更新步骤（若实现中含 `vip_expire_at` 等字段，以实现为准）。
+
 **流程步骤：**
 
 1. **验证用户状态**
@@ -1481,45 +1485,13 @@ LIMIT 20
 
 ---
 
-### 7.3 清理无引用文件流程
+### 7.3 无引用物理文件回收（产品说明）
 
-**流程步骤：**
+与 [REQUIREMENTS.md](./REQUIREMENTS.md) **§4(2)**、**§2(6)** 一致：**不提供**管理员手动清理无引用物理文件的入口（避免误操作与过高维护成本）。  
 
-1. **验证管理员权限**
+**实际回收路径**：仅通过 **定时任务** 处理 `status = 'pending_delete'` 且已超过保留期的记录，详见下文 **「8.2 清理待删除文件任务」**（按 `marked_delete_at` 等字段与 **24 小时** 规则执行，以实现为准）。
 
-2. **查询待删除文件**
-   - 查找 status = 'pending_delete' 的文件
-   - 可以忽略24小时限制（手动清理）
-
-3. **删除物理文件**
-   - 从服务器删除文件
-
-4. **删除数据库记录**
-   - 删除 file_storage 记录
-
-5. **记录操作日志**
-
-**涉及的表操作：**
-
-| 表名 | 操作类型 | 说明 |
-|------|---------|------|
-| file_storage | SELECT | 查询待删除文件 |
-| file_storage | DELETE | 删除文件记录 |
-| operation_logs | INSERT | 记录清理操作 |
-
-**SQL 示例：**
-```sql
--- 查询待删除文件
-SELECT id, file_path, file_size FROM file_storage
-WHERE status = 'pending_delete' AND reference_count = 0
-
--- 删除文件记录
-DELETE FROM file_storage WHERE id = ?
-
--- 记录操作
-INSERT INTO operation_logs (user_id, operation_type, resource_type, description, ip_address)
-VALUES (?, 'cleanup_files', 'system', '手动清理无引用文件', ?)
-```
+> 历史文档中曾描述「管理员手动清理」流程，已废止，不再作为业务流程要求。
 
 ---
 
