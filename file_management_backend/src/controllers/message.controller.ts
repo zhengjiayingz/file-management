@@ -1,6 +1,8 @@
 import { Response } from 'express';
 import { PrismaClient, MessageType, FriendshipStatus } from '@prisma/client';
 import { AuthRequest } from '../types/index.js';
+import { emitToUser } from '../realtime/socket.js';
+import { loadMessageForEmit } from '../realtime/messagePayload.js';
 
 const prisma = new PrismaClient();
 
@@ -41,6 +43,11 @@ export const sendMessage = async (req: AuthRequest, res: Response): Promise<any>
                 fileId: fileId ? parseInt(fileId) : null,
             },
         });
+
+        const full = await loadMessageForEmit(message.id);
+        if (full) {
+            emitToUser(receiverId, 'message:new', { message: full });
+        }
 
         return res.status(201).json({
             message: '消息发送成功',

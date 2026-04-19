@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { PrismaClient, FriendshipStatus } from '@prisma/client';
 import { AuthRequest } from '../types/index.js';
+import { emitFriendshipSync } from '../realtime/socket.js';
 
 const prisma = new PrismaClient();
 
@@ -64,6 +65,8 @@ export const sendFriendRequest = async (req: AuthRequest, res: Response): Promis
             },
         });
 
+        emitFriendshipSync(friend.id);
+
         return res.status(201).json({
             message: '好友请求发送成功',
             friendship,
@@ -107,6 +110,8 @@ export const acceptFriendRequest = async (req: AuthRequest, res: Response): Prom
             data: { status: FriendshipStatus.accepted },
         });
 
+        emitFriendshipSync(userId, friendship.userId);
+
         return res.json({
             message: '已接受好友申请',
             friendship: updatedFriendship,
@@ -148,6 +153,8 @@ export const rejectFriendRequest = async (req: AuthRequest, res: Response): Prom
             where: { id: friendship.id },
             data: { status: FriendshipStatus.rejected },
         });
+
+        emitFriendshipSync(userId, friendship.userId);
 
         return res.json({
             message: '已拒绝好友申请',
@@ -279,6 +286,8 @@ export const removeFriend = async (req: AuthRequest, res: Response): Promise<any
         await prisma.friendship.delete({
             where: { id: friendship.id },
         });
+
+        emitFriendshipSync(userId, parsedFriendId);
 
         return res.json({ message: '已删除好友' });
     } catch (error: any) {

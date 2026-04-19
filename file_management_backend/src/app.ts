@@ -2,7 +2,9 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
+import { createServer } from 'http';
 import { fileURLToPath } from 'url';
+import { initSocket } from './realtime/socket.js';
 
 // 导入路由
 import authRoutes from './routes/auth.routes.js';
@@ -89,7 +91,10 @@ app.use(errorHandler);
 import { initCleanupJob } from './jobs/cleanup.job.js';
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
+const httpServer = createServer(app);
+initSocket(httpServer);
+
+httpServer.listen(PORT, () => {
   console.log(`🚀 Server is running on port ${PORT}`);
 
   // 初始化定时任务
@@ -98,6 +103,7 @@ app.listen(PORT, () => {
   console.log(`📝 Environment: ${process.env.NODE_ENV}`);
   console.log(`🌐 CORS Origin: ${process.env.CORS_ORIGIN}`);
   console.log(`💾 Database: Prisma + MySQL`);
+  console.log(`🔌 WebSocket: Socket.IO at /socket.io`);
 });
 
 export default app;

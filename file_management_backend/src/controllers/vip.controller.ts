@@ -2,6 +2,8 @@ import { Response } from 'express';
 import prisma from '../lib/prisma.js';
 import { AuthRequest } from '../types/index.js';
 import { logOperation, LogOperationType, LogResourceType } from '../services/logger.service.js';
+import { emitToUser } from '../realtime/socket.js';
+import { loadMessageForEmit } from '../realtime/messagePayload.js';
 
 const VIP_QUOTA_BYTES = BigInt(2 * 1024 * 1024 * 1024); // 2GB
 
@@ -13,7 +15,7 @@ async function notifyAdminsVipApply(applicantId: number, username: string): Prom
   const content = `[VIP升级申请] 用户 ${username}（ID:${applicantId}）申请升级为 VIP。可在本条消息下方直接同意或拒绝，也可在通讯录 → VIP申请 中处理。`;
   for (const a of admins) {
     if (a.id === applicantId) continue;
-    await prisma.message.create({
+    const created = await prisma.message.create({
       data: {
         senderId: applicantId,
         receiverId: a.id,
@@ -21,6 +23,10 @@ async function notifyAdminsVipApply(applicantId: number, username: string): Prom
         messageType: 'text'
       }
     });
+    const full = await loadMessageForEmit(created.id);
+    if (full) {
+      emitToUser(a.id, 'message:new', { message: full });
+    }
   }
 }
 

@@ -13,13 +13,13 @@
 
         <!-- 侧边栏抽屉 -->
         <el-drawer v-model="drawerVisible" :title="currentChatFriend ? `与 ${currentChatFriend.username} 聊天` : '好友与消息'"
-            size="380px" :with-header="true" @close="handleDrawerClose">
+            size="380px" :with-header="true">
             <!-- 为了自定义Header返回按钮 -->
             <template #header="{ close, titleId, titleClass }">
                 <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
                     <div style="display: flex; align-items: center; gap: 8px;">
                         <el-button v-if="currentChatFriend" icon="ArrowLeft" circle size="small"
-                            @click="currentChatFriend = null; loadData(); stopPollingChat()" />
+                            @click="currentChatFriend = null; loadData()" />
                         <h4 :id="titleId" :class="titleClass" style="margin: 0; color: #303133;">
                             {{ currentChatFriend ? currentChatFriend.username : '好友与消息' }}
                         </h4>
@@ -289,6 +289,11 @@ import type { FileItem } from '@typing/file'
 import { useI18n } from 'vue-i18n'
 import { vipApi } from '@api/vip'
 import type { VipPendingItem } from '@api/vip'
+import {
+    connectContactsSocket,
+    disconnectContactsSocket,
+    setContactsSocketHandlers,
+} from '@/realtime/contactsSocket'
 
 const { t } = useI18n()
 const authStore = useAuthStore()
@@ -320,7 +325,6 @@ const currentChatFriend = ref<any>(null)
 const chatMessages = ref<any[]>([])
 const messageText = ref('')
 const chatHistoryRef = ref<HTMLElement | null>(null)
-let chatPollTimer: any = null
 let summaryPollTimer: any = null
 
 // 选择文件分享
@@ -366,9 +370,15 @@ const openDrawerPanel = () => {
     }
 }
 
-const handleDrawerClose = () => {
-    stopPollingChat()
-}
+/** 抽屉关闭（含右上角 X）时退出当前聊天，避免仍按「会话打开」自动已读导致收不到未读提醒 */
+watch(drawerVisible, (visible) => {
+    if (!visible && currentChatFriend.value) {
+        currentChatFriend.value = null
+        chatMessages.value = []
+        messageText.value = ''
+        loadData()
+    }
+})
 
 // 轮询基础数据(全量请求/未读数) - 建议10秒一次
 const startGlobalPolling = () => {
@@ -532,6 +542,53 @@ const sendFriendRequest = async (user: any) => {
     }
 }
 
+const handleSocketMessageNew = async (payload: { message?: Record<string, unknown> }) => {
+    const m = payload?.message as
+        | {
+              id: number
+              senderId: number
+              receiverId: number
+              messageType: string
+              content: string
+              createdAt: string
+              file?: { id: number; fileName: string; fileType: string }
+          }
+        | undefined
+    if (!m) return
+    const uid = myUserId.value
+    const fid = currentChatFriend.value?.friendId
+    /** 抽屉打开且正在看该好友会话时，对方发来的消息视为已读；抽屉仅隐藏但未退出会话的问题由关闭时清空 currentChatFriend 解决 */
+    const incomingInOpenChat =
+        drawerVisible.value &&
+        fid != null &&
+        uid != null &&
+        m.senderId === fid &&
+        m.receiverId === uid
+
+    if (fid && (m.senderId === fid || m.receiverId === fid)) {
+        const exists = chatMessages.value.some((x: { id: number }) => x.id === m.id)
+        if (!exists) {
+            chatMessages.value.push(m as (typeof chatMessages.value)[number])
+            scrollToBottom()
+        }
+    }
+
+    if (incomingInOpenChat) {
+        try {
+            await messageApi.markAsRead(fid)
+        } catch {
+            /* 忽略，仍刷新汇总 */
+        }
+    }
+
+    fetchUnreadSummary()
+}
+
+const handleSocketFriendshipSync = () => {
+    fetchFriends()
+    fetchPendingRequests()
+}
+
 const handleRequest = async (requestId: number, accept: boolean) => {
     try {
         if (accept) {
@@ -560,7 +617,6 @@ const openChat = (friend: any) => {
     }
 
     loadChatHistory()
-    startPollingChat()
 }
 
 const loadChatHistory = async (scroll = true) => {
@@ -581,21 +637,6 @@ const scrollToBottom = () => {
             chatHistoryRef.value.scrollTop = chatHistoryRef.value.scrollHeight + 100
         }
     })
-}
-
-// 聊天内每2秒轮询一次（简化版WebSocket）
-const startPollingChat = () => {
-    if (chatPollTimer) clearInterval(chatPollTimer)
-    chatPollTimer = setInterval(() => {
-        if (currentChatFriend.value) {
-            loadChatHistory(false)
-            // 在这里如果是打开状态，可以静默调一次markAsRead (防多端)
-        }
-    }, 2000)
-}
-
-const stopPollingChat = () => {
-    if (chatPollTimer) clearInterval(chatPollTimer)
 }
 
 const handleSendMessage = async () => {
@@ -698,15 +739,41 @@ const confirmSaveFileHere = async () => {
 }
 
 onMounted(() => {
-    if (authStore.isLoggedIn) {
+    setContactsSocketHandlers({
+        onMessageNew: handleSocketMessageNew,
+        onFriendshipSync: handleSocketFriendshipSync,
+    })
+    if (authStore.isLoggedIn && authStore.token) {
+        connectContactsSocket(authStore.token)
         fetchUnreadSummary()
     }
     startGlobalPolling()
     window.addEventListener('open-friend-panel', openDrawerPanel)
 })
+
+watch(
+    () => authStore.token,
+    (t) => {
+        if (authStore.isLoggedIn && t) {
+            connectContactsSocket(t)
+        }
+    },
+)
+
+watch(
+    () => authStore.isLoggedIn,
+    (loggedIn) => {
+        if (!loggedIn) {
+            disconnectContactsSocket()
+        } else if (authStore.token) {
+            connectContactsSocket(authStore.token)
+        }
+    },
+)
+
 onUnmounted(() => {
     stopGlobalPolling()
-    stopPollingChat()
+    disconnectContactsSocket()
     window.removeEventListener('open-friend-panel', openDrawerPanel)
 })
 

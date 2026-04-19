@@ -5,6 +5,8 @@ import dotenv from 'dotenv';
 import prisma from '../lib/prisma.js';
 import { AuthRequest, LoginBody, RegisterBody } from '../types/index.js';
 import { ensureFriendshipWithAdmin, getPrimaryAdminId } from '../services/adminFriend.service.js';
+import { emitToUser } from '../realtime/socket.js';
+import { loadMessageForEmit } from '../realtime/messagePayload.js';
 
 // 确保环境变量被加载
 dotenv.config();
@@ -350,7 +352,7 @@ export const forgotPasswordRequest = async (req: AuthRequest, res: Response): Pr
     if (adminId && user && user.role !== 'admin') {
       try {
         await ensureFriendshipWithAdmin(user.id);
-        await prisma.message.create({
+        const created = await prisma.message.create({
           data: {
             senderId: user.id,
             receiverId: adminId,
@@ -358,6 +360,10 @@ export const forgotPasswordRequest = async (req: AuthRequest, res: Response): Pr
             messageType: 'text'
           }
         });
+        const full = await loadMessageForEmit(created.id);
+        if (full) {
+          emitToUser(adminId, 'message:new', { message: full });
+        }
       } catch (e) {
         console.error('forgotPassword: message/friendship failed:', e);
       }
