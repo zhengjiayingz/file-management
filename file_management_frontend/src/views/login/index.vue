@@ -37,7 +37,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { User, Lock, Message } from '@element-plus/icons-vue'
 import { useAuthStore } from '@stores/auth'
@@ -45,6 +45,7 @@ import { authApi } from '@api/auth'
 import { useI18n } from 'vue-i18n'
 
 const router = useRouter()
+const route = useRoute()
 const authStore = useAuthStore()
 const { t } = useI18n()
 
@@ -110,8 +111,13 @@ const handleAuth = async () => {
       console.log('🔵 [8] 检查 localStorage token:', localStorage.getItem('token'))
       console.log('🔵 [9] 检查 store.isLoggedIn:', authStore.isLoggedIn)
 
-      console.log('🔵 [10] 准备跳转到首页')
-      router.push('/')
+      console.log('🔵 [10] 准备跳转')
+      const redirect = typeof route.query.redirect === 'string' ? route.query.redirect.trim() : ''
+      if (redirect.startsWith('/')) {
+        await router.push(redirect)
+      } else {
+        await router.push('/')
+      }
     }
 
   } catch (error: any) {

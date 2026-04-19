@@ -313,9 +313,18 @@ export const fileApiService = {
     await request.put(`/files/${id}/move`, data)
   },
 
-  // 保存他人分享的文件到我的网盘
-  async saveSharedFileToMyDrive(id: number, parentId?: number): Promise<FileItem> {
-    const res = await request.post<any>(`/files/${id}/save-to-my-drive`, { parentId: parentId || null })
+  // 保存他人分享的文件到我的网盘（链接分享转存需传 shareCode + extractCode）
+  async saveSharedFileToMyDrive(
+    id: number,
+    parentId?: number,
+    shareContext?: { shareCode: string; extractCode?: string | null }
+  ): Promise<FileItem> {
+    const body: Record<string, unknown> = { parentId: parentId ?? null }
+    if (shareContext?.shareCode) {
+      body.shareCode = shareContext.shareCode
+      if (shareContext.extractCode) body.extractCode = shareContext.extractCode
+    }
+    const res = await request.post<any>(`/files/${id}/save-to-my-drive`, body)
     return res.data.data
   }
 }

@@ -1,6 +1,7 @@
 import path from 'path';
 import { Response } from 'express';
 import prisma from '../../lib/prisma.js';
+import { verifySharedFileForSave } from '../share.controller.js';
 import { AuthRequest } from '../../types/index.js';
 import { logOperation, LogOperationType, LogResourceType } from '../../services/logger.service.js';
 import {
@@ -1216,7 +1217,17 @@ export const saveSharedFile = async (req: AuthRequest, res: Response): Promise<v
     }
 
     const sourceFileId = parseInt(req.params.id);
-    const { parentId } = req.body;
+    const { shareCode, extractCode } = req.body as {
+      shareCode?: string;
+      extractCode?: string;
+    };
+    const parentIdRaw = (req.body as { parentId?: number | string | null }).parentId;
+    const parentId: number | null =
+      parentIdRaw === null || parentIdRaw === undefined || parentIdRaw === ''
+        ? null
+        : typeof parentIdRaw === 'number'
+          ? parentIdRaw
+          : parseInt(String(parentIdRaw), 10);
 
     if (isNaN(sourceFileId)) {
       res.status(400).json({ success: false, message: '无效的文件ID' });
@@ -1240,6 +1251,16 @@ export const saveSharedFile = async (req: AuthRequest, res: Response): Promise<v
       return;
     }
 
+    const shareCodeStr =
+      typeof shareCode === 'string' && shareCode.trim() !== '' ? shareCode.trim() : '';
+    if (shareCodeStr) {
+      const v = await verifySharedFileForSave(shareCodeStr, extractCode, sourceFileId);
+      if (!v.ok) {
+        res.status(v.status).json({ success: false, message: v.message });
+        return;
+      }
+    }
+
     const user = await prisma.user.findUnique({
       where: { id: req.user.id }
     });
@@ -1255,10 +1276,15 @@ export const saveSharedFile = async (req: AuthRequest, res: Response): Promise<v
       return;
     }
 
-    if (parentId) {
+    if (parentId !== null && !Number.isInteger(parentId)) {
+      res.status(400).json({ success: false, message: '无效的目标文件夹' });
+      return;
+    }
+
+    if (parentId !== null) {
       const targetFolder = await prisma.userFile.findFirst({
         where: {
-          id: parseInt(parentId),
+          id: parentId,
           userId: req.user.id,
           fileType: 'folder',
           isDeleted: false
@@ -1285,7 +1311,7 @@ export const saveSharedFile = async (req: AuthRequest, res: Response): Promise<v
       const exists = await prisma.userFile.findFirst({
         where: {
           userId: req.user.id,
-          parentId: parentId ? parseInt(parentId) : null,
+          parentId: parentId ?? null,
           fileName: finalFileName,
           isDeleted: false
         }
@@ -1313,7 +1339,7 @@ export const saveSharedFile = async (req: AuthRequest, res: Response): Promise<v
         data: {
           userId: req.user!.id,
           storageId: sourceFile.storageId,
-          parentId: parentId ? parseInt(parentId) : null,
+          parentId: parentId ?? null,
           fileName: finalFileName,
           fileType: 'file'
         }

@@ -148,17 +148,23 @@ model UploadChunk {
 }
 
 model FileShare {
-  id            Int      @id @default(autoincrement())
-  userId        Int      @map("user_id")
-  userFileId    Int      @map("user_file_id")
-  shareCode     String   @unique @map("share_code") @db.VarChar(32)
-  extractCode   String?  @map("extract_code") @db.VarChar(6)
-  permission    SharePermission @default(download)
-  expireAt      DateTime? @map("expire_at")
-  viewCount     Int      @default(0) @map("view_count")
-  downloadCount Int      @default(0) @map("download_count")
-  status        ShareStatus @default(active)
-  createdAt     DateTime @default(now()) @map("created_at")
+  id               Int      @id @default(autoincrement())
+  userId           Int      @map("user_id")
+  userFileId       Int      @map("user_file_id")
+  /// 批量分享时的全部 user_files.id（JSON 数组）；与 userFileId（首项）同时写入便于校验与扩展
+  userFileIds      Json?    @map("user_file_ids")
+  shareCode        String   @unique @map("share_code") @db.VarChar(32)
+  extractCode      String?  @map("extract_code") @db.VarChar(6)
+  permission       SharePermission @default(download)
+  expireAt         DateTime? @map("expire_at")
+  /// 是否将提取码附加在分享 URL 查询参数中（访客端解析用）
+  autoFillExtract  Boolean  @default(false) @map("auto_fill_extract")
+  /// 访问人数上限；null 表示不限制（访客端校验待实现）
+  maxVisitors      Int?     @map("max_visitors")
+  viewCount        Int      @default(0) @map("view_count")
+  downloadCount    Int      @default(0) @map("download_count")
+  status           ShareStatus @default(active)
+  createdAt        DateTime @default(now()) @map("created_at")
 
   // Relations
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)

@@ -57,6 +57,7 @@
         <div class="batch-actions">
           <el-button type="primary" :icon="Document" @click="batchDownload">{{ t('fileList.action.download') || '下载'
           }}</el-button>
+          <el-button type="primary" plain :icon="Share" @click="openShareDialog">分享</el-button>
           <el-button type="success" :icon="Folder" @click="batchMove">{{ t('fileList.action.move') }}</el-button>
           <el-button type="warning" plain @click="openBatchTagDialog">打标签</el-button>
           <el-button type="danger" :icon="Delete" @click="batchDelete">{{ t('fileList.action.delete') }}</el-button>
@@ -167,6 +168,8 @@
       :files="filesForTagDialog"
       @success="onTagDialogSuccess"
     />
+
+    <ShareLinkDialog v-model="shareDialogVisible" :files="shareDialogFiles" />
   </div>
 </template>
 
@@ -176,7 +179,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox, ElImageViewer } from 'element-plus'
 import {
   User, ArrowDown, Folder, FolderAdd,
-  Clock, Star, Delete, List, Grid, MoreFilled, Document, Download
+  Clock, Star, Delete, List, Grid, MoreFilled, Document, Download, Share
 } from '@element-plus/icons-vue'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@stores/auth'
@@ -193,6 +196,7 @@ import FileHistoryDialog from '@components/FileHistoryDialog/index.vue'
 import OfficePreviewDialog from '@components/OfficePreviewDialog/index.vue'
 import ArchiveExtractDialog from '@components/ArchiveExtractDialog/index.vue'
 import FileTagDialog from '@components/FileTagDialog/index.vue'
+import ShareLinkDialog from '@components/ShareLinkDialog/index.vue'
 import CustomImageViewer from '@components/CustomImageViewer/index.vue'
 import Sidebar from './cpns/Sidebar.vue'
 import FileList from './cpns/FileList.vue'
@@ -261,6 +265,19 @@ const handleTagFile = (file: FileInfo) => {
 const onTagDialogSuccess = () => {
   void loadFiles()
   void loadTagOptions()
+}
+
+const shareDialogVisible = ref(false)
+const shareDialogFiles = ref<FileInfo[]>([])
+
+const openShareDialog = () => {
+  const list = files.value.filter((f) => selectedFiles.value.has(f.id))
+  if (list.length === 0) {
+    ElMessage.warning('请先勾选要分享的文件或文件夹')
+    return
+  }
+  shareDialogFiles.value = list
+  shareDialogVisible.value = true
 }
 
 // 对话框相关

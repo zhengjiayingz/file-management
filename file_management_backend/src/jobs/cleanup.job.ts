@@ -6,23 +6,47 @@ import prisma from '../lib/prisma.js';
 import { resolveStorageFilePath } from '../utils/storagePath.utils.js';
 
 /**
- * 初始化物理文件清理定时任务
- * 规则：
- * 1. 检查状态为 pending_delete 的文件
- * 2. 确认引用计数 <= 0
- * 3. 确认标记删除时间超过 24 小时
- * 4. 执行物理删除并移除数据库记录
+ * 初始化清理定时任务（每小时）
+ * 1. 物理文件：pending_delete、引用计数为 0、标记删除超过 24 小时 → 删磁盘 + 删 file_storage
+ * 2. 分享：expire_at 早于当前时间（非永久分享）→ 删 file_shares（share_access_logs 级联删除）
  */
+async function cleanupExpiredFileShares(now: Date): Promise<number> {
+  let totalDeleted = 0;
+  const batchSize = 100;
+
+  for (;;) {
+    const batch = await prisma.fileShare.findMany({
+      where: {
+        expireAt: { lt: now }
+      },
+      select: { id: true },
+      take: batchSize
+    });
+
+    if (batch.length === 0) break;
+
+    const { count } = await prisma.fileShare.deleteMany({
+      where: { id: { in: batch.map((r) => r.id) } }
+    });
+    totalDeleted += count;
+
+    if (batch.length < batchSize) break;
+  }
+
+  return totalDeleted;
+}
+
 export const initCleanupJob = () => {
   // 每小时的第 0 分钟执行 (0 * * * *)
   cron.schedule('0 * * * *', async () => {
-    console.log('Running cleanup job: checking for files to permanently delete...');
-    
+    console.log('Running cleanup job: files (pending_delete) + expired shares...');
+
     try {
-      // 24小时前的时间点
+      const now = new Date();
+
+      // --- 1) 物理文件清理 ---
       const retentionThreshold = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
-      // 查询待删除的文件
       const filesToDelete = await prisma.fileStorage.findMany({
         where: {
           status: 'pending_delete',
@@ -33,44 +57,48 @@ export const initCleanupJob = () => {
             lt: retentionThreshold
           }
         },
-        take: 100 // 每次最多处理100个，避免一次性压力过大
+        take: 100
       });
 
-      if (filesToDelete.length === 0) {
-        console.log('No files to clean up.');
-        return;
-      }
+      let fileSuccess = 0;
+      let fileFail = 0;
 
-      console.log(`Found ${filesToDelete.length} files to delete.`);
+      if (filesToDelete.length > 0) {
+        console.log(`Found ${filesToDelete.length} files to delete.`);
 
-      let successCount = 0;
-      let failCount = 0;
+        for (const file of filesToDelete) {
+          try {
+            const physicalPath = resolveStorageFilePath(file.filePath);
+            if (fs.existsSync(physicalPath)) {
+              fs.unlinkSync(physicalPath);
+              console.log(`Deleted physical file: ${physicalPath}`);
+            } else {
+              console.warn(`Physical file not found (skipping unlink): ${file.filePath}`);
+            }
 
-      for (const file of filesToDelete) {
-        try {
-          const physicalPath = resolveStorageFilePath(file.filePath);
-          // 1. 物理删除
-          if (fs.existsSync(physicalPath)) {
-            fs.unlinkSync(physicalPath);
-            console.log(`Deleted physical file: ${physicalPath}`);
-          } else {
-            console.warn(`Physical file not found (skipping unlink): ${file.filePath}`);
+            await prisma.fileStorage.delete({
+              where: { id: file.id }
+            });
+
+            fileSuccess++;
+          } catch (err) {
+            console.error(`Failed to delete file ID ${file.id}:`, err);
+            fileFail++;
           }
-
-          // 2. 删除数据库记录
-          await prisma.fileStorage.delete({
-            where: { id: file.id }
-          });
-          
-          successCount++;
-        } catch (err) {
-          console.error(`Failed to delete file ID ${file.id}:`, err);
-          failCount++;
         }
+      } else {
+        console.log('No pending_delete files to clean up.');
       }
 
-      console.log(`Cleanup job finished. Success: ${successCount}, Failed: ${failCount}`);
+      console.log(`File cleanup: success ${fileSuccess}, failed ${fileFail}`);
 
+      // --- 2) 过期分享清理 ---
+      const shareDeleted = await cleanupExpiredFileShares(now);
+      if (shareDeleted > 0) {
+        console.log(`Expired share records deleted: ${shareDeleted}`);
+      } else {
+        console.log('No expired shares to delete.');
+      }
     } catch (error) {
       console.error('Error during cleanup job execution:', error);
     }

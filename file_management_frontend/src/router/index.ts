@@ -39,6 +39,17 @@ const router = createRouter({
       name: 'admin',
       component: () => import('../views/admin/index.vue'),
       meta: { requiresAuth: true, requiresAdmin: true }
+    },
+    {
+      path: '/share/:code',
+      name: 'share-access',
+      component: () => import('../views/share-access/index.vue')
+    },
+    {
+      path: '/share-save/:code',
+      name: 'share-save',
+      component: () => import('../views/share-save/index.vue'),
+      meta: { requiresAuth: true }
     }
   ]
 })
@@ -51,7 +62,10 @@ router.beforeEach((to, from, next) => {
 
   if (to.meta.requiresAuth && !authStore.isLoggedIn) {
     console.log('🔴 [路由守卫] 未登录,重定向到登录页')
-    next('/login')
+    next({
+      path: '/login',
+      query: { redirect: to.fullPath }
+    })
   } else if (to.meta.requiresAdmin && authStore.user?.role !== 'admin') {
     console.log('🔴 [路由守卫] 非管理员, 拒绝访问')
     next('/')
