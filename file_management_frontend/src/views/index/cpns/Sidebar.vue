@@ -11,18 +11,6 @@
                 </el-icon>
                 <span>{{ t('sidebar.home') }}</span>
             </el-menu-item>
-            <el-menu-item index="2">
-                <el-icon>
-                    <Clock />
-                </el-icon>
-                <span>{{ t('sidebar.sync') }}</span>
-            </el-menu-item>
-            <el-menu-item index="3">
-                <el-icon>
-                    <Star />
-                </el-icon>
-                <span>{{ t('sidebar.favorites') }}</span>
-            </el-menu-item>
             <el-sub-menu index="categories">
                 <template #title>
                     <el-icon>
@@ -99,7 +87,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { Folder, Clock, Star, Delete, List, Upload, Picture, VideoPlay, Headset, Document, Collection, Setting, ChatDotRound } from '@element-plus/icons-vue'
+import { Folder, Delete, List, Upload, Picture, VideoPlay, Headset, Document, Collection, Setting, ChatDotRound } from '@element-plus/icons-vue'
 import { useI18n } from 'vue-i18n'
 import { useThemeStore } from '@stores/theme'
 import { useAuthStore } from '@stores/auth'
@@ -126,8 +114,6 @@ const activeMenu = computed(() => {
     if (path === '/' && query.type) {
         return `file-type-${query.type}`
     }
-    // if (path.startsWith('/sync')) return '2'
-    // if (path.startsWith('/favorites')) return '3'
     return '1' // Default to home/files
 })
 

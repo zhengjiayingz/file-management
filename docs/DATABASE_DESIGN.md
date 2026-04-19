@@ -1,8 +1,11 @@
 # 文件管理系统数据库设计文档
 
+> **与代码对齐**：本文档以 `file_management_backend/prisma/schema.prisma` 及 Prisma 迁移生成的表结构为准。  
+> **最后更新**：2026-04-18。
+
 ## 1. 数据库概述
 
-本系统采用 MySQL 数据库，使用 Prisma ORM 进行数据访问。数据库设计遵循第三范式，支持多用户文件管理、文件去重、好友系统、消息系统等功能。
+本系统采用 MySQL 数据库，使用 Prisma ORM 进行数据访问。数据库设计遵循第三范式，支持多用户文件管理、文件去重、**链接分享**（含访问日志）、**VIP 升级申请与审核**、好友系统、消息系统、标签与版本历史等功能。另有 `_prisma_migrations` 表由 Prisma 维护，不在下文字段级展开。
 
 ## 2. 核心设计原则
 
@@ -36,7 +39,6 @@
 - PRIMARY KEY (id)
 - UNIQUE INDEX (username)
 - UNIQUE INDEX (email)
-- INDEX (role)
 
 **说明：**
 - 普通用户 storage_quota = 1GB (1073741824)
@@ -52,7 +54,7 @@
 | 字段名 | 类型 | 约束 | 说明 |
 |--------|------|------|------|
 | id | INT | PRIMARY KEY, AUTO_INCREMENT | 物理文件ID |
-| file_hash | VARCHAR(64) | UNIQUE, NOT NULL | 文件MD5哈希值 |
+| file_hash | VARCHAR(64) | UNIQUE, NOT NULL | 文件指纹哈希（实现为 SHA256，字段名沿用 file_hash） |
 | file_path | VARCHAR(500) | NOT NULL | 服务器存储路径 |
 | file_size | BIGINT | NOT NULL | 文件大小（字节） |
 | mime_type | VARCHAR(100) | NOT NULL | 文件MIME类型 |
@@ -67,7 +69,7 @@
 - INDEX (status, marked_delete_at)
 
 **说明：**
-- file_hash 用于文件去重和秒传
+- file_hash 用于文件去重和秒传（与上传流程中的指纹算法一致）
 - reference_count 为 0 时标记为 pending_delete
 - marked_delete_at 后 24 小时物理删除
 
@@ -132,20 +134,23 @@
 
 ### 3.5 文件分享表 (file_shares)
 
-存储文件分享链接信息。
+存储**链接分享**信息（支持单选或多选文件/文件夹，`user_file_id` 与批量列表首项一致，便于外键与查询）。
 
 | 字段名 | 类型 | 约束 | 说明 |
 |--------|------|------|------|
 | id | INT | PRIMARY KEY, AUTO_INCREMENT | 分享ID |
 | user_id | INT | NOT NULL | 分享者ID |
-| user_file_id | INT | NOT NULL | 用户文件ID |
-| share_code | VARCHAR(32) | UNIQUE, NOT NULL | 分享码（唯一标识） |
-| extract_code | VARCHAR(6) | NULL | 提取码（私密分享） |
-| permission | ENUM('view', 'download', 'edit') | NOT NULL, DEFAULT 'download' | 权限 |
-| expire_at | DATETIME | NULL | 过期时间（NULL表示永久） |
-| view_count | INT | NOT NULL, DEFAULT 0 | 访问次数 |
-| download_count | INT | NOT NULL, DEFAULT 0 | 下载次数 |
-| status | ENUM('active', 'expired', 'cancelled') | NOT NULL, DEFAULT 'active' | 状态 |
+| user_file_id | INT | NOT NULL | 主关联的 user_files.id（多选时通常为首项） |
+| user_file_ids | JSON | NULL | 批量分享时全部 `user_files.id` 的 JSON 数组；与 `user_file_id` 同时写入 |
+| share_code | VARCHAR(32) | UNIQUE, NOT NULL | 分享码（URL 路径段，唯一） |
+| extract_code | VARCHAR(6) | NULL | 提取码；库列为 6 字符以内，**业务规则为固定 4 位**字母数字；无提取码表示公开访问 |
+| permission | ENUM('view', 'download', 'edit') | NOT NULL, DEFAULT 'download' | 分享权限（当前实现创建时多为 download，可扩展） |
+| expire_at | DATETIME | NULL | 过期时间（NULL 表示永久） |
+| auto_fill_extract | TINYINT(1) / BOOLEAN | NOT NULL, DEFAULT FALSE | 是否在分享链接查询参数中带提取码（`?e=`） |
+| max_visitors | INT | NULL | 访问人数上限；NULL 不限制（访客侧校验以实现为准） |
+| view_count | INT | NOT NULL, DEFAULT 0 | 访问次数（展示/统计） |
+| download_count | INT | NOT NULL, DEFAULT 0 | 下载次数（展示/统计） |
+| status | ENUM('active', 'expired', 'cancelled') | NOT NULL, DEFAULT 'active' | 状态；过期可在访问时更新，也可由定时任务清理记录 |
 | created_at | DATETIME | NOT NULL, DEFAULT CURRENT_TIMESTAMP | 创建时间 |
 
 **索引：**
@@ -155,6 +160,9 @@
 - INDEX (status, expire_at)
 - FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 - FOREIGN KEY (user_file_id) REFERENCES user_files(id) ON DELETE CASCADE
+
+**说明：**
+- 定时任务可删除 `expire_at` 早于当前时间的分享行，`share_access_logs` 随外键级联删除。
 
 ---
 
@@ -341,8 +349,8 @@
 | user_file_id | INT | NOT NULL | 用户文件ID |
 | storage_id | INT | NOT NULL | 物理文件ID |
 | file_name | VARCHAR(255) | NOT NULL | 当时文件名 |
-| file_size | BIGINT | NOT NULL | 文件大小 |
 | version | INT | NOT NULL | 版本号 |
+| file_size | BIGINT | NOT NULL | 文件大小 |
 | created_at | DATETIME | NOT NULL, DEFAULT CURRENT_TIMESTAMP | 归档时间 |
 
 **索引：**
@@ -410,6 +418,28 @@
 
 ---
 
+### 3.16 VIP 升级申请表 (vip_upgrade_requests)
+
+普通用户提交 **VIP 升级申请**，管理员审核（通讯录「VIP 申请」或会话内操作）。与 `users` 存在申请人、处理人两条可选外键。
+
+| 字段名 | 类型 | 约束 | 说明 |
+|--------|------|------|------|
+| id | INT | PRIMARY KEY, AUTO_INCREMENT | 申请记录ID |
+| applicant_id | INT | NOT NULL | 申请人 user id |
+| status | ENUM('pending', 'approved', 'rejected') | NOT NULL, DEFAULT 'pending' | 审核状态 |
+| processed_by_id | INT | NULL | 处理人（管理员）user id |
+| processed_at | DATETIME | NULL | 处理时间 |
+| created_at | DATETIME | NOT NULL, DEFAULT CURRENT_TIMESTAMP | 申请时间 |
+
+**索引：**
+- PRIMARY KEY (id)
+- INDEX (status)
+- INDEX (applicant_id, status)
+- FOREIGN KEY (applicant_id) REFERENCES users(id) ON DELETE CASCADE
+- FOREIGN KEY (processed_by_id) REFERENCES users(id) ON DELETE SET NULL
+
+---
+
 ## 4. ER 关系图
 
 ### 4.1 完整 ER 图（Mermaid）
@@ -428,9 +458,10 @@ erDiagram
     users ||--o{ refresh_tokens : "持有令牌"
     users ||--o{ upload_chunks : "上传分片"
     users ||--|| user_preferences : "配置偏好"
+    users ||--o{ vip_upgrade_requests : "VIP申请或审批"
+    users ||--o{ share_access_logs : "访客可选"
     
     file_storage ||--o{ user_files : "被引用"
-    file_storage ||--o{ upload_chunks : "分片记录"
     file_storage ||--o{ file_histories : "历史版本"
     
     user_files ||--o{ file_shares : "被分享"
@@ -499,10 +530,13 @@ erDiagram
         int id PK
         int user_id FK
         int user_file_id FK
+        json user_file_ids
         string share_code UK
         string extract_code
         enum permission
         datetime expire_at
+        boolean auto_fill_extract
+        int max_visitors
         int view_count
         int download_count
         enum status
@@ -570,6 +604,7 @@ erDiagram
     login_logs {
         int id PK
         int user_id FK
+        string username
         string ip_address
         string location
         string device
@@ -607,8 +642,17 @@ erDiagram
         int user_file_id FK
         int storage_id FK
         string file_name
-        int version
         bigint file_size
+        int version
+        datetime created_at
+    }
+
+    vip_upgrade_requests {
+        int id PK
+        int applicant_id FK
+        enum status
+        int processed_by_id FK
+        datetime processed_at
         datetime created_at
     }
 ```
@@ -618,6 +662,8 @@ erDiagram
 **用户中心关系：**
 - 一个用户可以拥有多个文件（user_files）
 - 一个用户可以创建多个分享链接（file_shares）
+- 用户可作为申请人或审批人关联多条 VIP 升级记录（vip_upgrade_requests：`applicant_id` / `processed_by_id`）
+- 已登录访客访问分享时，`share_access_logs.visitor_id` 可指向用户（未登录为 NULL）
 - 用户之间可以建立好友关系（friendships）
 - 用户之间可以发送消息（messages）
 - 一个用户可以有多个登录会话（refresh_tokens）
@@ -631,8 +677,7 @@ erDiagram
 - user_files 表通过 parent_id 自关联实现文件夹层级结构
 
 **分片上传：**
-- upload_chunks 记录文件分片信息
-- 通过 file_hash 关联到最终的物理文件
+- `upload_chunks` 仅与 `users` 外键关联；通过 `file_hash` + `chunk_index` 与合并后的 `file_storage` **逻辑对应**，Prisma 中未建立 `upload_chunks → file_storage` 外键
 
 **文件标签：**
 - file_tags 和 user_files 通过 user_file_tags 实现多对多关系
@@ -652,10 +697,13 @@ users (用户)
   ├─→ operation_logs (操作日志)
   ├─→ login_logs (登录日志)
   ├─→ refresh_tokens (刷新令牌)
+  ├─→ upload_chunks (分片上传记录，仅 user_id 外键)
+  ├─→ vip_upgrade_requests (VIP 申请，申请人/处理人)
+  ├─→ share_access_logs (作为访客 visitor_id，可选)
   └─→ user_preferences (用户偏好)
 
 file_storage (物理文件)
-  └─→ upload_chunks (上传分片)
+  （合并完成后由业务写入；与 upload_chunks 无数据库外键）
 
 file_shares (文件分享)
   └─→ share_access_logs (访问日志)
@@ -737,13 +785,18 @@ JOIN file_storage fs ON uf.storage_id = fs.id
 WHERE uf.user_id = ? AND uf.is_deleted = FALSE AND uf.file_type = 'file'
 ```
 
-### 5.4 好友关系管理
+### 5.5 链接分享与过期清理
+
+1. 分享创建后写入 `file_shares`；访客校验提取码（若有）并访问时写入 `share_access_logs`（`action` 为 view / download）。
+2. `expire_at` 早于当前时间的分享在访问逻辑中可标记为 `expired`；定时任务可删除 `expire_at` 已过的行以回收数据，并级联删除其访问日志。
+
+### 5.6 好友关系管理
 
 1. 用户A发送好友请求：创建 `friendships` 记录，`status = 'pending'`
 2. 用户B接受：更新 `status = 'accepted'`，同时创建反向关系记录
 3. 用户B拒绝：更新 `status = 'rejected'`
 
-### 5.5 文件版本管理
+### 5.7 文件版本管理
 
 1. **版本更新**：
     - 用户上传同名文件（且选择“覆盖”或“保存新版本”）。
@@ -769,9 +822,9 @@ WHERE uf.user_id = ? AND uf.is_deleted = FALSE AND uf.file_type = 'file'
    - 文件哈希缓存（秒传检测）
    - 分享链接缓存
 4. **定时任务**：
-   - 清理过期分片（24小时）
-   - 清理待删除文件（24小时）
-   - 更新分享状态（过期检测）
+   - 清理过期分片（24小时，以实现为准）
+   - 清理待删除物理文件（`pending_delete` 且超过保留期）
+   - 清理已过期的分享记录（`file_shares.expire_at`）
    - 清理过期的 Refresh Token
 5. **读写分离**：日志表使用从库查询
 
@@ -801,5 +854,5 @@ WHERE uf.user_id = ? AND uf.is_deleted = FALSE AND uf.file_type = 'file'
 
 ---
 
-**文档版本**：v1.0  
-**最后更新**：2026-01-15
+**文档版本**：v1.1  
+**最后更新**：2026-04-18（与 `prisma/schema.prisma` 对齐）
