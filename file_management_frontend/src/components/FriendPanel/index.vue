@@ -517,20 +517,9 @@ const handleSearchUser = async () => {
     searching.value = true
     searchPushed.value = true
     try {
-        const res = await userApi.search(searchKeyword.value.trim())
-        // 从 axios 或者 拦截器 响应中安全提取用户数组
-        let rawUsers = []
-        if (Array.isArray(res)) {
-            rawUsers = res
-        } else if (res.data && Array.isArray(res.data)) {
-            rawUsers = res.data
-        } else if (res.data && res.data.data && Array.isArray(res.data.data)) {
-            rawUsers = res.data.data
-        }
-
-        // 过滤掉已经是好友的和自己
+        const rawUsers = await userApi.search(searchKeyword.value.trim())
         const friendIds = friends.value.map(f => f.friendId)
-        searchResults.value = rawUsers.filter((u: any) => !friendIds.includes(u.id))
+        searchResults.value = rawUsers.filter(u => !friendIds.includes(u.id))
     } catch (error: any) {
         ElMessage.error(t('friendPanel.msg.searchFailed'))
     } finally {

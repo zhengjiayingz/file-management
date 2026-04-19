@@ -1,5 +1,5 @@
 import request from '@utils/request'
-import type { User, UserRole } from '@typing/user'
+import type { UserRole } from '@typing/user'
 
 export interface UserProfileDTO {
   id: number
@@ -40,7 +40,24 @@ function mapProfile(data: {
   }
 }
 
+/** 好友搜索等：与后端 GET /api/user/search 返回的 data 项一致 */
+export interface UserSearchResultDTO {
+  id: number
+  username: string
+  email: string | null
+}
+
 export const userApi = {
+  /** 按用户名模糊或纯数字按 ID 搜索用户（不含当前登录用户），最多 20 条 */
+  async search(keyword: string): Promise<UserSearchResultDTO[]> {
+    const trimmed = keyword.trim()
+    if (!trimmed) return []
+    const res = await request.get<{ success: boolean; data: UserSearchResultDTO[] }>('/user/search', {
+      params: { keyword: trimmed },
+    })
+    return res.data.data ?? []
+  },
+
   async getProfile(): Promise<UserProfileDTO> {
     const res = await request.get<{
       success: boolean
