@@ -1,7 +1,7 @@
 <template>
   <el-dialog
     v-model="visible"
-    title="开通会员"
+    :title="t('vipCenter.title')"
     width="min(960px, 96vw)"
     class="vip-center-dialog"
     destroy-on-close
@@ -12,10 +12,10 @@
         <div class="vip-user-bar">
           <el-avatar :size="48" class="vip-avatar">{{ userInitial }}</el-avatar>
           <div class="vip-user-meta">
-            <div class="vip-greeting">Hi {{ authStore.user?.username }}</div>
+            <div class="vip-greeting">{{ t('vipCenter.greeting', { name: authStore.user?.username ?? '' }) }}</div>
             <div class="vip-badges">
               <span class="tier-pill" :class="tierClass">{{ tierLabel }}</span>
-              <span v-if="authStore.user?.role === 'vip'" class="expire-hint">尊享 VIP 权益</span>
+              <span v-if="authStore.user?.role === 'vip'" class="expire-hint">{{ t('vipCenter.vipBenefitsHint') }}</span>
             </div>
           </div>
         </div>
@@ -24,57 +24,57 @@
           <el-tab-pane name="svip">
             <template #label>
               <div class="tab-label">
-                <span>SVIP</span>
-                <small>尊享特权</small>
+                <span>{{ t('vipCenter.colSvip') }}</span>
+                <small>{{ t('vipCenter.tabSvipSubtitle') }}</small>
               </div>
             </template>
           </el-tab-pane>
           <el-tab-pane name="vip">
             <template #label>
               <div class="tab-label">
-                <span>VIP</span>
-                <small>实用扩容</small>
+                <span>{{ t('vipCenter.colVip') }}</span>
+                <small>{{ t('vipCenter.tabVipSubtitle') }}</small>
               </div>
             </template>
           </el-tab-pane>
         </el-tabs>
 
-        <p class="vip-hint">以下为练习项目对照网盘产品的权益说明，实际以管理员审核为准。</p>
+        <p class="vip-hint">{{ t('vipCenter.disclaimer') }}</p>
 
         <div class="compare-table-wrap">
           <table class="compare-table">
             <thead>
               <tr>
-                <th class="col-feature">特权</th>
-                <th class="col-svip">SVIP</th>
-                <th class="col-vip">VIP</th>
-                <th class="col-user">普通用户</th>
+                <th class="col-feature">{{ t('vipCenter.colPrivilege') }}</th>
+                <th class="col-svip">{{ t('vipCenter.colSvip') }}</th>
+                <th class="col-vip">{{ t('vipCenter.colVip') }}</th>
+                <th class="col-user">{{ t('vipCenter.colNormalUser') }}</th>
               </tr>
             </thead>
             <tbody>
               <tr>
-                <td>存储配额</td>
-                <td class="highlight">2TB 起（示意）</td>
-                <td>2GB</td>
-                <td>1GB</td>
+                <td>{{ t('vipCenter.rowStorage') }}</td>
+                <td class="highlight">{{ t('vipCenter.rowStorageSvip') }}</td>
+                <td>{{ t('vipCenter.rowStorageVip') }}</td>
+                <td>{{ t('vipCenter.rowStorageUser') }}</td>
               </tr>
               <tr>
-                <td>高速下载</td>
-                <td class="highlight">极速</td>
-                <td>优先</td>
-                <td>标准</td>
+                <td>{{ t('vipCenter.rowDownload') }}</td>
+                <td class="highlight">{{ t('vipCenter.rowDownloadSvip') }}</td>
+                <td>{{ t('vipCenter.rowDownloadVip') }}</td>
+                <td>{{ t('vipCenter.rowDownloadUser') }}</td>
               </tr>
               <tr>
-                <td>在线解压（ZIP）</td>
-                <td class="highlight">支持</td>
-                <td>支持</td>
-                <td>下载压缩包</td>
+                <td>{{ t('vipCenter.rowZip') }}</td>
+                <td class="highlight">{{ t('vipCenter.support') }}</td>
+                <td>{{ t('vipCenter.support') }}</td>
+                <td>{{ t('vipCenter.rowZipUser') }}</td>
               </tr>
               <tr>
-                <td>批量操作</td>
-                <td class="highlight">支持</td>
-                <td>支持</td>
-                <td>支持</td>
+                <td>{{ t('vipCenter.rowBatch') }}</td>
+                <td class="highlight">{{ t('vipCenter.support') }}</td>
+                <td>{{ t('vipCenter.support') }}</td>
+                <td>{{ t('vipCenter.support') }}</td>
               </tr>
             </tbody>
           </table>
@@ -83,8 +83,8 @@
 
       <aside class="vip-side">
         <div class="side-inner">
-          <p class="side-title">升级 VIP</p>
-          <p class="side-desc">本环境不接支付，提交后由管理员在「通讯录 → VIP申请」中审核。</p>
+          <p class="side-title">{{ t('vipCenter.sideTitle') }}</p>
+          <p class="side-desc">{{ t('vipCenter.sideDesc') }}</p>
           <el-button
             type="warning"
             size="large"
@@ -104,8 +104,11 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
+import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@stores/auth'
 import { vipApi } from '@api/vip'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   modelValue: boolean
@@ -131,9 +134,9 @@ const userInitial = computed(() =>
 
 const tierLabel = computed(() => {
   const r = authStore.user?.role
-  if (r === 'admin') return '管理员'
-  if (r === 'vip') return 'VIP'
-  return '普通用户'
+  if (r === 'admin') return t('vipCenter.tierAdmin')
+  if (r === 'vip') return t('vipCenter.tierVip')
+  return t('vipCenter.tierUser')
 })
 
 const tierClass = computed(() => {
@@ -152,10 +155,10 @@ const applyDisabled = computed(() => {
 
 const applyButtonText = computed(() => {
   const r = authStore.user?.role
-  if (r === 'vip') return '您已是 VIP'
-  if (r === 'admin') return '管理员无需申请'
-  if (hasPending.value) return '审核处理中…'
-  return '申请升级VIP'
+  if (r === 'vip') return t('vipCenter.btnAlreadyVip')
+  if (r === 'admin') return t('vipCenter.btnAdminNoApply')
+  if (hasPending.value) return t('vipCenter.btnPending')
+  return t('vipCenter.btnApply')
 })
 
 async function refreshStatus() {
@@ -187,7 +190,7 @@ async function handleApply() {
     await refreshStatus()
   } catch (e: unknown) {
     const ax = e as { response?: { data?: { message?: string } } }
-    ElMessage.error(ax.response?.data?.message || '提交失败')
+    ElMessage.error(ax.response?.data?.message || t('vipCenter.submitFailed'))
   } finally {
     applying.value = false
   }

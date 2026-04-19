@@ -77,7 +77,7 @@ export const adminApi = {
         await request.patch(`/admin/users/${userId}/status`, { status });
     },
 
-    async resetUserPassword(userId: number, newPassword: string): Promise<void> {
-        await request.post(`/admin/users/${userId}/reset-password`, { newPassword });
+    async resetUserPassword(userId: number): Promise<void> {
+        await request.post(`/admin/users/${userId}/reset-password`, {});
     }
 };

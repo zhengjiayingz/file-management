@@ -7,23 +7,17 @@ import { AuthRequest, LoginBody, RegisterBody } from '../types/index.js';
 import { ensureFriendshipWithAdmin, getPrimaryAdminId } from '../services/adminFriend.service.js';
 import { emitToUser } from '../realtime/socket.js';
 import { loadMessageForEmit } from '../realtime/messagePayload.js';
+import { hashPassword, validatePasswordStrength } from '../services/passwordPolicy.service.js';
 
 // 确保环境变量被加载
 dotenv.config();
 
 /**
- * SHA256 密码加密
- */
-const hashPassword = (password: string): string => {
-  return crypto.createHash('sha256').update(password).digest('hex');
-};
-
-/**
  * 生成 Access Token (15分钟)
  */
-const generateAccessToken = (userId: number, username: string): string => {
+const generateAccessToken = (userId: number, username: string, mustChangePassword: boolean): string => {
   return jwt.sign(
-    { id: userId, username },
+    { id: userId, username, mustChangePassword },
     process.env.JWT_SECRET!,
     { expiresIn: '15m' }
   );
@@ -61,27 +55,11 @@ export const register = async (req: AuthRequest, res: Response): Promise<void> =
       return;
     }
 
-    // 验证密码强度
-    if (password.length < 8) {
+    const strengthErr = validatePasswordStrength(password);
+    if (strengthErr) {
       res.status(400).json({
         success: false,
-        message: '密码长度至少8位'
-      });
-      return;
-    }
-
-    // 验证密码强度：至少包含数字、字母、大小写、特殊字符中的3种
-    const hasNumber = /\d/.test(password);
-    const hasLower = /[a-z]/.test(password);
-    const hasUpper = /[A-Z]/.test(password);
-    const hasSpecial = /[!@#$%^&*(),.?":{}|<>]/.test(password);
-    
-    const strengthCount = [hasNumber, hasLower, hasUpper, hasSpecial].filter(Boolean).length;
-    
-    if (strengthCount < 3) {
-      res.status(400).json({
-        success: false,
-        message: '密码必须包含数字、字母、大小写、特殊字符中至少3种'
+        message: strengthErr
       });
       return;
     }
@@ -133,7 +111,7 @@ export const register = async (req: AuthRequest, res: Response): Promise<void> =
       });
 
       // 生成tokens
-      const accessToken = generateAccessToken(newUser.id, newUser.username);
+      const accessToken = generateAccessToken(newUser.id, newUser.username, false);
       const refreshToken = generateRefreshToken();
 
       // 存储 Refresh Token
@@ -177,7 +155,11 @@ export const register = async (req: AuthRequest, res: Response): Promise<void> =
           email: result.newUser.email,
           role: result.newUser.role,
           storage_quota: Number(result.newUser.storageQuota),
-          storage_used: Number(result.newUser.storageUsed)
+          storage_used: Number(result.newUser.storageUsed),
+          must_change_password: false,
+          avatar_url: result.newUser.avatarUrl ?? null,
+          vip_expire_at: result.newUser.vipExpireAt ? result.newUser.vipExpireAt.toISOString() : null,
+          created_at: result.newUser.createdAt.toISOString(),
         },
         accessToken: result.accessToken,
         refreshToken: result.refreshToken
@@ -210,7 +192,7 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
 
     // 查找用户
     const user = await prisma.user.findUnique({
-      where: { username }
+      where: { username },
     });
     
     if (!user) {
@@ -274,9 +256,8 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
 
     // 使用事务处理登录成功的操作
     const result = await prisma.$transaction(async (tx) => {
-      // ... (existing code)
       // 生成tokens
-      const accessToken = generateAccessToken(user.id, user.username);
+      const accessToken = generateAccessToken(user.id, user.username, user.mustChangePassword);
       const refreshToken = generateRefreshToken();
 
       // 存储 Refresh Token
@@ -314,7 +295,11 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
           email: user.email,
           role: user.role,
           storage_quota: Number(user.storageQuota),
-          storage_used: Number(user.storageUsed)
+          storage_used: Number(user.storageUsed),
+          must_change_password: user.mustChangePassword,
+          avatar_url: user.avatarUrl ?? null,
+          vip_expire_at: user.vipExpireAt ? user.vipExpireAt.toISOString() : null,
+          created_at: user.createdAt.toISOString(),
         },
         accessToken: result.accessToken,
         refreshToken: result.refreshToken
@@ -397,7 +382,6 @@ export const refreshToken = async (req: AuthRequest, res: Response): Promise<voi
       return;
     }
 
-    // 验证 Refresh Token
     const tokenRecord = await prisma.refreshToken.findFirst({
       where: {
         token: refreshToken,
@@ -411,10 +395,11 @@ export const refreshToken = async (req: AuthRequest, res: Response): Promise<voi
           select: {
             id: true,
             username: true,
-            status: true
-          }
-        }
-      }
+            status: true,
+            mustChangePassword: true,
+          },
+        },
+      },
     });
 
     if (!tokenRecord) {
@@ -446,7 +431,11 @@ export const refreshToken = async (req: AuthRequest, res: Response): Promise<voi
       });
 
       // 生成新的 Access Token
-      const newAccessToken = generateAccessToken(tokenRecord.user.id, tokenRecord.user.username);
+      const newAccessToken = generateAccessToken(
+        tokenRecord.user.id,
+        tokenRecord.user.username,
+        tokenRecord.user.mustChangePassword
+      );
       
       return { newAccessToken };
     });
@@ -496,6 +485,97 @@ export const logout = async (req: AuthRequest, res: Response): Promise<void> => 
 };
 
 /**
+ * 修改密码（含：使用管理员临时密码登录后的强制修改）
+ */
+export const changePassword = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      res.status(401).json({ success: false, message: '未认证' });
+      return;
+    }
+
+    const { currentPassword, newPassword } = req.body as { currentPassword?: string; newPassword?: string };
+    if (!newPassword) {
+      res.status(400).json({ success: false, message: '请提供新密码' });
+      return;
+    }
+
+    const strengthErr = validatePasswordStrength(newPassword);
+    if (strengthErr) {
+      res.status(400).json({ success: false, message: strengthErr });
+      return;
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        username: true,
+        email: true,
+        role: true,
+        password: true,
+        storageQuota: true,
+        storageUsed: true,
+        mustChangePassword: true,
+      },
+    });
+    if (!user) {
+      res.status(404).json({ success: false, message: '用户不存在' });
+      return;
+    }
+
+    if (user.mustChangePassword) {
+      // 管理员重置后的首次改密：不要求填写当前（临时）密码
+    } else {
+      if (!currentPassword) {
+        res.status(400).json({ success: false, message: '请提供当前密码' });
+        return;
+      }
+      if (hashPassword(currentPassword) !== user.password) {
+        res.status(400).json({ success: false, message: '当前密码错误' });
+        return;
+      }
+    }
+
+    if (hashPassword(newPassword) === user.password) {
+      res.status(400).json({ success: false, message: '新密码不能与当前密码相同' });
+      return;
+    }
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        password: hashPassword(newPassword),
+        mustChangePassword: false,
+      },
+    });
+
+    const accessToken = generateAccessToken(user.id, user.username, false);
+
+    res.json({
+      success: true,
+      message: '密码已修改',
+      data: {
+        accessToken,
+        user: {
+          id: user.id,
+          username: user.username,
+          email: user.email,
+          role: user.role,
+          storage_quota: Number(user.storageQuota),
+          storage_used: Number(user.storageUsed),
+          must_change_password: false
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Change password error:', error);
+    res.status(500).json({ success: false, message: '修改密码失败' });
+  }
+};
+
+/**
  * 获取当前用户信息
  */
 export const getCurrentUser = async (req: AuthRequest, res: Response): Promise<void> => {
@@ -518,10 +598,13 @@ export const getCurrentUser = async (req: AuthRequest, res: Response): Promise<v
         storageQuota: true,
         storageUsed: true,
         status: true,
-        createdAt: true
-      }
+        mustChangePassword: true,
+        createdAt: true,
+        avatarUrl: true,
+        vipExpireAt: true,
+      },
     });
-    
+
     if (!user) {
       res.status(404).json({
         success: false,
@@ -540,7 +623,10 @@ export const getCurrentUser = async (req: AuthRequest, res: Response): Promise<v
         storage_quota: Number(user.storageQuota),
         storage_used: Number(user.storageUsed),
         status: user.status,
-        created_at: user.createdAt
+        must_change_password: user.mustChangePassword,
+        created_at: user.createdAt,
+        avatar_url: user.avatarUrl ?? null,
+        vip_expire_at: user.vipExpireAt ? user.vipExpireAt.toISOString() : null,
       }
     });
   } catch (error) {

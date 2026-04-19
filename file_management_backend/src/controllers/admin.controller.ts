@@ -1,26 +1,8 @@
-import crypto from 'crypto';
 import { Response } from 'express';
 import prisma from '../lib/prisma.js';
 import { AuthRequest } from '../types/index.js';
 import { ensureFriendshipWithAdmin, getPrimaryAdminId } from '../services/adminFriend.service.js';
-
-const hashPassword = (password: string): string =>
-  crypto.createHash('sha256').update(password).digest('hex');
-
-function validatePasswordStrength(password: string): string | null {
-  if (password.length < 8) {
-    return '密码长度至少8位';
-  }
-  const hasNumber = /\d/.test(password);
-  const hasLower = /[a-z]/.test(password);
-  const hasUpper = /[A-Z]/.test(password);
-  const hasSpecial = /[!@#$%^&*(),.?":{}|<>]/.test(password);
-  const strengthCount = [hasNumber, hasLower, hasUpper, hasSpecial].filter(Boolean).length;
-  if (strengthCount < 3) {
-    return '密码必须包含数字、字母、大小写、特殊字符中至少3种';
-  }
-  return null;
-}
+import { hashPassword, ADMIN_TEMP_RESET_PASSWORD } from '../services/passwordPolicy.service.js';
 
 export const getDashboardStats = async (_req: AuthRequest, res: Response): Promise<void> => {
     try {
@@ -282,21 +264,9 @@ export const updateUserStatus = async (req: AuthRequest, res: Response): Promise
 export const resetUserPassword = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const id = parseInt(req.params.id, 10);
-        const { newPassword } = req.body as { newPassword?: string };
 
         if (Number.isNaN(id)) {
             res.status(400).json({ success: false, message: '无效的用户 ID' });
-            return;
-        }
-
-        if (!newPassword || typeof newPassword !== 'string') {
-            res.status(400).json({ success: false, message: '请提供新密码' });
-            return;
-        }
-
-        const pwdErr = validatePasswordStrength(newPassword);
-        if (pwdErr) {
-            res.status(400).json({ success: false, message: pwdErr });
             return;
         }
 
@@ -306,12 +276,13 @@ export const resetUserPassword = async (req: AuthRequest, res: Response): Promis
             return;
         }
 
-        const hashed = hashPassword(newPassword);
+        /** 统一临时密码（不符合强度策略）；用户登录后须自行修改为强密码 */
+        const hashed = hashPassword(ADMIN_TEMP_RESET_PASSWORD);
 
         await prisma.$transaction(async (tx) => {
             await tx.user.update({
                 where: { id },
-                data: { password: hashed }
+                data: { password: hashed, mustChangePassword: true },
             });
             await tx.refreshToken.updateMany({
                 where: { userId: id },
@@ -319,7 +290,10 @@ export const resetUserPassword = async (req: AuthRequest, res: Response): Promis
             });
         });
 
-        res.json({ success: true, message: '密码已重置，用户需重新登录' });
+        res.json({
+            success: true,
+            message: '密码已重置。请用户使用统一临时密码登录，登录后须立即修改为符合策略的新密码。',
+        });
     } catch (error) {
         console.error('Reset user password error:', error);
         res.status(500).json({ success: false, message: '重置密码失败' });

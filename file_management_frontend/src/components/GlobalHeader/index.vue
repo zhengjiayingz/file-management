@@ -10,7 +10,7 @@
                 <!-- 会员中心 + 空间额度（参考网盘头部） -->
                 <div v-if="authStore.user" class="member-storage-block">
                     <el-link type="primary" :underline="false" class="member-center-link" @click="vipDialogVisible = true">
-                        会员中心
+                        {{ t('header.memberCenter') }}
                     </el-link>
                     <div class="quota-wrap" v-if="authStore.user.storageQuota !== -1">
                         <span class="quota-text">
@@ -25,23 +25,23 @@
                         />
                     </div>
                     <div v-else class="quota-wrap">
-                        <span class="quota-text">已用 {{ formatBytes(authStore.user.storageUsed) }} / 无限制</span>
+                        <span class="quota-text">{{ t('header.quotaUsedUnlimited', { used: formatBytes(authStore.user.storageUsed) }) }}</span>
                     </div>
                 </div>
 
                 <!-- 语言切换 -->
                 <el-dropdown @command="handleLanguageChange" trigger="click" style="margin-right: 15px">
                     <span class="el-dropdown-link">
-                        {{ locale === 'zh-CN' ? '简体中文' : (locale === 'zh-TW' ? '繁體中文' : 'English') }}
+                        {{ locale === 'zh-CN' ? t('header.langZhCN') : (locale === 'zh-TW' ? t('header.langZhTW') : t('header.langEn')) }}
                         <el-icon class="el-icon--right">
                             <ArrowDown />
                         </el-icon>
                     </span>
                     <template #dropdown>
                         <el-dropdown-menu>
-                            <el-dropdown-item command="zh-CN">简体中文</el-dropdown-item>
-                            <el-dropdown-item command="zh-TW">繁體中文</el-dropdown-item>
-                            <el-dropdown-item command="en-US">English</el-dropdown-item>
+                            <el-dropdown-item command="zh-CN">{{ t('header.langZhCN') }}</el-dropdown-item>
+                            <el-dropdown-item command="zh-TW">{{ t('header.langZhTW') }}</el-dropdown-item>
+                            <el-dropdown-item command="en-US">{{ t('header.langEn') }}</el-dropdown-item>
                         </el-dropdown-menu>
                     </template>
                 </el-dropdown>
@@ -85,7 +85,10 @@
                 <!-- 用户下拉菜单 -->
                 <el-dropdown @command="handleCommand">
                     <span class="user-dropdown">
-                        <el-icon>
+                        <el-avatar v-if="authStore.user" :size="28" :src="userAvatarSrc || undefined" class="user-avatar">
+                            {{ authStore.user.username?.charAt(0)?.toUpperCase() }}
+                        </el-avatar>
+                        <el-icon v-else>
                             <User />
                         </el-icon>
                         {{ authStore.user?.username }}
@@ -106,6 +109,8 @@
         </div>
 
         <VipCenterDialog v-model="vipDialogVisible" />
+        <PersonalInfoDialog v-model="profileDialogVisible" @open-vip="openVipFromProfile" />
+        <UserSettingsDialog v-model="settingsDialogVisible" />
     </el-header>
 </template>
 
@@ -121,6 +126,9 @@ import { useI18n } from 'vue-i18n'
 import type { ThemeMode } from '@stores/theme'
 import userPreferenceApi from '@api/user-preference'
 import VipCenterDialog from '@components/VipCenterDialog/index.vue'
+import PersonalInfoDialog from '@components/PersonalInfoDialog/index.vue'
+import UserSettingsDialog from '@components/UserSettingsDialog/index.vue'
+import { publicAssetUrl } from '@utils/publicAssetUrl'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -128,6 +136,10 @@ const themeStore = useThemeStore()
 const { t, locale } = useI18n()
 
 const vipDialogVisible = ref(false)
+const profileDialogVisible = ref(false)
+const settingsDialogVisible = ref(false)
+
+const userAvatarSrc = computed(() => publicAssetUrl(authStore.user?.avatar))
 
 function formatBytes(n: number): string {
     if (n < 1024) return `${n} B`
@@ -167,13 +179,17 @@ const handleThemeChange = async (mode: string) => {
     }
 }
 
+function openVipFromProfile() {
+    vipDialogVisible.value = true
+}
+
 const handleCommand = async (command: string) => {
     switch (command) {
         case 'profile':
-            ElMessage.info(t('common.profile') || '个人信息功能开发中...')
+            profileDialogVisible.value = true
             break
         case 'settings':
-            ElMessage.info(t('common.settings') || '设置功能开发中...')
+            settingsDialogVisible.value = true
             break
         case 'logout':
             try {
@@ -288,6 +304,11 @@ const handleCommand = async (command: string) => {
 
     .el-icon {
         margin: 0 4px;
+    }
+
+    .user-avatar {
+        flex-shrink: 0;
+        margin-right: 2px;
     }
 }
 </style>

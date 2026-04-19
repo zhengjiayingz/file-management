@@ -1,8 +1,10 @@
 # 文件管理系统 — 需求实现进度报告
 
-> **最后更新时间**: 2026-04-18
+> **最后更新时间**: 2026-04-19
 >
 > **对照文档**: [REQUIREMENTS.md](./REQUIREMENTS.md)、[UNFINISHED_REQUIREMENTS.md](./UNFINISHED_REQUIREMENTS.md)
+>
+> **工程维护**：[DEVELOPMENT.md](./DEVELOPMENT.md)（Prisma `generate`、`postinstall`/`build` 约定、Windows EPERM、TS/IDE）
 >
 > **说明**：下表为按需求条目的对照摘要；**验收口径与未完清单**以 `REQUIREMENTS.md` 实现状态总览及 `UNFINISHED_REQUIREMENTS.md` 为准。
 
@@ -24,13 +26,12 @@
 |---|----------|------|------|
 | (1) | 用户分为普通/VIP/管理员，支持升级VIP，配额管理 | ✅ 已实现 | `role` 含 `user` / `vip` / `admin`；普通 **1GB**、VIP **2GB** 配额与 `storageQuota` / `storageUsed` 联动；**VIP 申请 + 管理员审核**（通讯录「VIP申请」、会话内申请消息同意/拒绝）与 [REQUIREMENTS.md](./REQUIREMENTS.md) 一致 |
 | (2) | 已使用配额以进度条百分比展示 | ✅ 已实现 | 主页 `index.vue` 中有存储空间进度条组件 (`el-progress`) |
-| (3) | 好友系统 + 非实时收发消息 + 好友文件分享 | ✅ 已实现 | `FriendPanel.vue` 实现了好友列表、聊天、文件分享（messageType: file）|
+| (3) | 好友系统 + 收发消息 + 好友文件分享 | ✅ 已实现 | `FriendPanel`：好友列表、聊天、文件分享（`messageType: file`）。**实时**：后端 Socket.IO（`src/realtime/socket.ts`）推送 `message:new`、`friendship:sync`；前端 `contactsSocket.ts` 订阅。仅**抽屉打开且处于该会话**时对来讯自动 `markAsRead`；**关闭抽屉**清空 `currentChatFriend` 以保留未读提醒。 |
 | (4) | 好友申请审核同意机制 | ✅ 已实现 | `friendship.controller` 有 `sendFriendRequest` / `acceptFriendRequest` / `rejectFriendRequest` |
 | (5) | 消息已读状态显示 | ✅ 已实现 | `markAsRead` 接口 + `isRead` + `readAt` 字段 |
-| (6) | 新消息浏览器通知提醒 | ❌ 未实现 | 代码中未找到 `Notification` API 的调用 |
-| (7) | 注册强制密码强度（8位以上，4个要求满足3个） | ⚠️ 部分实现 | 后端 `register` 函数中有密码校验逻辑，前端登录页也有，但需确认是否完整覆盖"4个要求满足3个"的规则 |
-| (8) | SHA256密码存储 + 重置密码 + 修改密码 | ⚠️ 部分实现 | SHA256 加密已实现 (`hashPassword`)。但**没有重置密码和修改密码的接口** |
-| (9) | 双 Token 无感登录 | ✅ 已实现 | `generateAccessToken` (15分钟) + `generateRefreshToken` (7天) + `/refresh` + `/logout` 均已实现 |
+| (6) | 注册强制密码强度（8位以上，4个要求满足3个） | ✅ 已实现 | 后端注册与前端注册流程已按「四选三」规则校验；**已测试验收**通过 |
+| (7) | SHA256密码存储 + 重置密码 + 修改密码 | ✅ 已实现 | SHA256、管理员重置（统一临时密码 + `must_change_password` + 强制改密）、`POST /api/auth/change-password`（强制改密时免填当前密码；**设置** `UserSettingsDialog` 自助改密须原密码 + 新密码强度 + 确认）、与 [REQUIREMENTS.md](./REQUIREMENTS.md) §1(7) 一致 |
+| (8) | 双 Token 无感登录 | ✅ 已实现 | `generateAccessToken` (15分钟) + `generateRefreshToken` (7天) + `/refresh` + `/logout` 均已实现 |
 
 ---
 
@@ -108,6 +109,8 @@
 |---|----------|------|------|
 | (1) | 主题切换（浅色/深色）+ 持久化到数据库 | ✅ 已实现 | `theme.ts` store + `user-preference.controller.ts` 持久化 |
 | (2) | 国际化（简中/繁中/英文）+ 持久化 | ✅ 已实现 | `locales/` 下有 `zh-CN.ts` / `zh-TW.ts` / `en-US.ts` + 持久化到数据库 |
+| (3) | 个人信息弹窗 | ✅ 已实现 | `PersonalInfoDialog`：顶栏用户菜单；`GET /api/user/profile`；展示资料与存储/VIP 摘要；跳转会员中心。见 [REQUIREMENTS.md](./REQUIREMENTS.md)「其他需求」（3） |
+| (4) | 设置弹窗（头像、邮箱、修改密码） | ✅ 已实现 | `UserSettingsDialog`：`POST /api/user/avatar`、`PUT /api/user/profile`、**`POST /api/auth/change-password`**（原密码 + 新密码强度 + 确认）；`users.avatar_url`。见 [REQUIREMENTS.md](./REQUIREMENTS.md)「其他需求」（4） |
 
 ---
 
@@ -115,14 +118,14 @@
 
 | 分类 | 总需求数 | ✅ 已实现 | ⚠️ 部分实现 | ❌ 未实现 |
 |------|----------|----------|------------|----------|
-| 1. 用户管理 | 9 | 6 | 2 | 1 |
+| 1. 用户管理 | 8 | 8 | 0 | 0 |
 | 2. 文件管理 | 17 | 16 | 1 | 0 |
 | 3. 文件分享 | 4 | 2 | 2 | 0 |
 | 4. 权限管理 | 2 | 2 | 0 | 0 |
 | 5. 安全性 | 7 | 3 | 1 | 3 |
 | 6. 管理员功能 | 3 | 2 | 0 | 1 |
-| 7. 其他需求 | 2 | 2 | 0 | 0 |
-| **合计** | **44** | **33 (≈75%)** | **6 (≈14%)** | **5 (≈11%)** |
+| 7. 其他需求 | 4 | 4 | 0 | 0 |
+| **合计** | **45** | **37 (≈82%)** | **4 (≈9%)** | **4 (≈9%)** |
 
 ---
 
@@ -139,7 +142,7 @@
 ### 第二阶段 — ⚠️ 部分完成
 - ⚠️ 文件分享（链接分享、有效期、提取码）— **已实现**；**权限三档**与**分享者侧访问记录**仍为部分，见 [UNFINISHED_REQUIREMENTS.md](./UNFINISHED_REQUIREMENTS.md) §3
 - ✅ 好友系统（添加好友、好友列表）
-- ✅ 消息系统（收发消息、已读状态）
+- ✅ 消息系统（收发消息、已读状态、Socket.IO 实时推送）
 - ✅ 文件预览功能
 - ✅ 缩略图生成
 
@@ -159,17 +162,15 @@
 
 ### 🔴 高优先级
 1. **分享权限与记录补全** — §3(3) 三档权限可选 + 全链路校验；§3(4) 分享者侧访问记录列表（API + 前端）；可选：`max_visitors` 访客端 enforcement（[UNFINISHED_REQUIREMENTS.md](./UNFINISHED_REQUIREMENTS.md) §3）
-2. **密码重置与修改功能** — 用户自助「修改密码」（校验原密码）等与 [UNFINISHED_REQUIREMENTS.md](./UNFINISHED_REQUIREMENTS.md) §1(8) 对齐
 
 ### 🟡 中优先级
-3. **浏览器新消息通知提醒** — Web Notification API（[UNFINISHED_REQUIREMENTS.md](./UNFINISHED_REQUIREMENTS.md) §1(6)）
-4. **大文件分页预览** — §2(17) 剩余项（[UNFINISHED_REQUIREMENTS.md](./UNFINISHED_REQUIREMENTS.md)）
-5. **会话管理** — 多设备管理、远程登出（§5(7)）
+2. **大文件分页预览** — §2(17) 剩余项（[UNFINISHED_REQUIREMENTS.md](./UNFINISHED_REQUIREMENTS.md)）
+3. **会话管理** — 多设备管理、远程登出（§5(7)）
 
 ### 🟢 低优先级（可选）
-6. **异常登录检测** — 异地登录提醒
-7. **Token 黑名单机制** — 安全性增强（§5(2)）
-8. **文件加密存储** — 可选功能
-9. **文件审核** — 违规文件检测与处理（§6(3)）
+4. **异常登录检测** — 异地登录提醒
+5. **Token 黑名单机制** — 安全性增强（§5(2)）
+6. **文件加密存储** — 可选功能
+7. **文件审核** — 违规文件检测与处理（§6(3)）
 
-**已验收 / 不再作为待开发**：VIP 申请与审核、ZIP 在线解压 §2(1-1)、音频/视频播放进度记忆、无引用文件仅依赖定时任务（不提供管理员手动清理）、**链接分享主体**（创建链接、访客访问、转存、过期与定时清理）。详见 [REQUIREMENTS.md](./REQUIREMENTS.md)。
+**已验收 / 不再作为待开发**：VIP 申请与审核、ZIP 在线解压 §2(1-1)、音频/视频播放进度记忆、无引用文件仅依赖定时任务（不提供管理员手动清理）、**链接分享主体**（创建链接、访客访问、转存、过期与定时清理）、**通讯录实时消息与好友同步**（Socket.IO + 抽屉会话状态）。详见 [REQUIREMENTS.md](./REQUIREMENTS.md)。

@@ -2,6 +2,32 @@ import request from '@utils/request'
 
 import type { LoginResult, RegisterResult, User, UserRole } from '@typing/user'
 
+function mapAuthUser(backendUser: {
+  id: number
+  username: string
+  email: string | null
+  role: UserRole
+  storage_quota: number
+  storage_used: number
+  must_change_password?: boolean
+  avatar_url?: string | null
+  vip_expire_at?: string | null
+  created_at?: string
+}): User {
+  return {
+    id: backendUser.id,
+    username: backendUser.username,
+    email: backendUser.email,
+    role: backendUser.role,
+    storageQuota: backendUser.storage_quota,
+    storageUsed: backendUser.storage_used,
+    createdAt: backendUser.created_at ?? new Date().toISOString(),
+    mustChangePassword: Boolean(backendUser.must_change_password),
+    avatar: backendUser.avatar_url ?? undefined,
+    vipExpireAt: backendUser.vip_expire_at ?? null,
+  }
+}
+
 // 认证相关API
 export const authApi = {
   // 用户登录
@@ -16,37 +42,85 @@ export const authApi = {
           role: UserRole;
           storage_quota: number;
           storage_used: number;
+          must_change_password?: boolean;
+          avatar_url?: string | null;
+          vip_expire_at?: string | null;
+          created_at?: string;
         };
         accessToken: string;
         refreshToken: string;
       }
     }>('/auth/login', data)
 
-    // 后端返回 {success, data: {user, accessToken, refreshToken}}
-    // 需要映射 accessToken -> token 和 snake_case -> camelCase
     const backendUser = res.data.data.user
     return {
       message: '登录成功',
-      user: {
-        id: backendUser.id,
-        username: backendUser.username,
-        email: backendUser.email,
-        role: backendUser.role,
-        storageQuota: backendUser.storage_quota,
-        storageUsed: backendUser.storage_used,
-        createdAt: new Date().toISOString() // 后端没返回这个字段,用当前时间
-      },
+      user: mapAuthUser(backendUser),
       token: res.data.data.accessToken,
       refreshToken: res.data.data.refreshToken
     }
   },
 
+  async changePassword(data: { newPassword: string; currentPassword?: string }): Promise<{
+    accessToken: string
+    user: User
+  }> {
+    const res = await request.post<{
+      success: boolean
+      data: {
+        accessToken: string
+        user: {
+          id: number
+          username: string
+          email: string | null
+          role: UserRole
+          storage_quota: number
+          storage_used: number
+          must_change_password: boolean
+        }
+      }
+    }>('/auth/change-password', data)
+
+    const u = res.data.data.user
+    return {
+      accessToken: res.data.data.accessToken,
+      user: {
+        id: u.id,
+        username: u.username,
+        email: u.email,
+        role: u.role,
+        storageQuota: u.storage_quota,
+        storageUsed: u.storage_used,
+        createdAt: new Date().toISOString(),
+        mustChangePassword: Boolean(u.must_change_password)
+      }
+    }
+  },
+
   // 用户注册
   async register(data: { username: string; email?: string; password: string }): Promise<RegisterResult> {
-    const res = await request.post<{ success: boolean; data: { user: User; accessToken: string; refreshToken: string } }>('/auth/register', data)
+    const res = await request.post<{
+      success: boolean
+      data: {
+        user: {
+          id: number
+          username: string
+          email: string | null
+          role: UserRole
+          storage_quota: number
+          storage_used: number
+          must_change_password?: boolean
+          avatar_url?: string | null
+          vip_expire_at?: string | null
+          created_at?: string
+        }
+        accessToken: string
+        refreshToken: string
+      }
+    }>('/auth/register', data)
     return {
       message: '注册成功',
-      user: res.data.data.user
+      user: mapAuthUser(res.data.data.user),
     }
   },
 
@@ -80,7 +154,10 @@ export const authApi = {
         storage_quota: number;
         storage_used: number;
         status: string;
+        must_change_password?: boolean;
         created_at: string;
+        avatar_url?: string | null;
+        vip_expire_at?: string | null;
       }
     }>('/auth/me')
 
@@ -93,7 +170,10 @@ export const authApi = {
       role: backendUser.role,
       storageQuota: backendUser.storage_quota,
       storageUsed: backendUser.storage_used,
-      createdAt: backendUser.created_at
+      createdAt: backendUser.created_at,
+      mustChangePassword: Boolean(backendUser.must_change_password),
+      avatar: backendUser.avatar_url ?? undefined,
+      vipExpireAt: backendUser.vip_expire_at ?? null,
     }
   }
 }

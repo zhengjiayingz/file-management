@@ -308,19 +308,17 @@ async function onUserStatusChange(row: AdminUserRow, active: boolean) {
 
 async function openResetPassword(row: AdminUserRow) {
   try {
-    const { value } = await ElMessageBox.prompt(
-      t('admin.userManagement.resetPromptPlaceholder'),
-      t('admin.userManagement.resetPromptTitle'),
+    await ElMessageBox.confirm(
+      t('admin.userManagement.resetConfirmMessage', { name: row.username }),
+      t('admin.userManagement.resetConfirmTitle'),
       {
         confirmButtonText: t('common.confirm'),
         cancelButtonText: t('common.cancel'),
-        inputType: 'password',
-        inputPlaceholder: t('admin.userManagement.resetPromptPlaceholder')
+        type: 'warning'
       }
     )
-    if (!value || !String(value).trim()) return
-    await adminApi.resetUserPassword(row.id, String(value).trim())
-    ElMessage.success(t('admin.userManagement.resetSuccess'))
+    await adminApi.resetUserPassword(row.id)
+    ElMessage.success(t('admin.userManagement.resetSuccessDetail'))
   } catch (e: unknown) {
     if (e === 'cancel' || e === 'close') return
     const err = e as { response?: { data?: { message?: string } } }

@@ -4,7 +4,9 @@ import { Request } from 'express';
 export interface JwtPayload {
   id: number;
   username: string;
-  role: string;
+  role?: string;
+  /** 为 true 时表示临时密码登录，仅允许修改密码等白名单接口 */
+  mustChangePassword?: boolean;
 }
 
 // 扩展 Express Request 类型
@@ -27,7 +29,8 @@ export interface RegisterBody {
 
 // 更新用户资料请求体
 export interface UpdateProfileBody {
-  email?: string;
+  /** 传空字符串表示清空邮箱 */
+  email?: string | null;
 }
 
 // API 响应格式

@@ -1,7 +1,9 @@
 # 文件管理系统数据库设计文档
 
 > **与代码对齐**：本文档以 `file_management_backend/prisma/schema.prisma` 及 Prisma 迁移生成的表结构为准。  
-> **最后更新**：2026-04-18。
+> **最后更新**：2026-04-19。
+>
+> **Prisma Client**：修改 schema 后须执行 `prisma generate`；`npm install` / `npm run build` 已在后端包内配置自动生成（详见 [DEVELOPMENT.md](./DEVELOPMENT.md)）。Windows 若遇 `query_engine` 的 EPERM，请先停止 `npm run dev` 再生成。
 
 ## 1. 数据库概述
 
@@ -26,11 +28,13 @@
 | id | INT | PRIMARY KEY, AUTO_INCREMENT | 用户ID |
 | username | VARCHAR(50) | UNIQUE, NOT NULL | 用户名 |
 | password | VARCHAR(64) | NOT NULL | 密码（SHA256加密） |
-| email | VARCHAR(100) | UNIQUE | 邮箱 |
+| email | VARCHAR(100) | UNIQUE | 邮箱（可空；`PUT /api/user/profile` 可更新） |
+| avatar_url | VARCHAR(500) | NULL | 头像访问路径（如 `/uploads/avatars/...`） |
 | role | ENUM('user', 'vip', 'admin') | NOT NULL, DEFAULT 'user' | 用户角色 |
 | storage_quota | BIGINT | NOT NULL | 存储配额（字节） |
 | storage_used | BIGINT | NOT NULL, DEFAULT 0 | 已使用存储（字节） |
 | status | ENUM('active', 'disabled') | NOT NULL, DEFAULT 'active' | 账户状态 |
+| must_change_password | BOOLEAN | NOT NULL, DEFAULT FALSE | 管理员重置临时密码后为 TRUE，用户改为强密码后为 FALSE |
 | vip_expire_at | DATETIME | NULL | VIP过期时间 |
 | created_at | DATETIME | NOT NULL, DEFAULT CURRENT_TIMESTAMP | 创建时间 |
 | updated_at | DATETIME | NOT NULL, DEFAULT CURRENT_TIMESTAMP ON UPDATE | 更新时间 |

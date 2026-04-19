@@ -11,6 +11,10 @@ export interface User {
   storageQuota: number; // 存储配额 (字节)
   storageUsed: number;  // 已用存储 (字节)
   createdAt: string;
+  /** 管理员重置后的临时密码登录时为 true，须先改密 */
+  mustChangePassword?: boolean;
+  /** VIP 到期时间 ISO 字符串，非 VIP 常为 null */
+  vipExpireAt?: string | null;
 }
 
 // 登录成功响应数据

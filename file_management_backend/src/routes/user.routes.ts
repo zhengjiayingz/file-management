@@ -1,6 +1,7 @@
 import express, { Router } from 'express';
-import { getProfile, updateProfile, searchUsers } from '../controllers/user.controller.js';
+import { getProfile, updateProfile, searchUsers, uploadAvatar } from '../controllers/user.controller.js';
 import { authenticate } from '../middleware/auth.middleware.js';
+import { avatarUpload } from '../middleware/avatarUpload.middleware.js';
 
 const router: Router = express.Router();
 
@@ -55,6 +56,8 @@ router.get('/profile', getProfile);
  *               $ref: '#/components/schemas/User'
  */
 router.put('/profile', updateProfile);
+
+router.post('/avatar', avatarUpload.single('avatar'), uploadAvatar);
 
 // 搜索用户
 /**

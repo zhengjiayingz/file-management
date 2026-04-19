@@ -15,10 +15,14 @@ model User {
   username       String   @unique @db.VarChar(50)
   password       String   @db.VarChar(64)
   email          String?  @unique @db.VarChar(100)
+  /// 头像 URL 路径，如 /uploads/avatars/xxx.jpg（可为空）
+  avatarUrl      String?  @map("avatar_url") @db.VarChar(500)
   role           Role     @default(user)
   storageQuota   BigInt   @map("storage_quota")
   storageUsed    BigInt   @default(0) @map("storage_used")
   status         Status   @default(active)
+  /// 管理员重置为临时密码后，为 true；用户修改为符合策略的密码后为 false
+  mustChangePassword Boolean @default(false) @map("must_change_password")
   vipExpireAt    DateTime? @map("vip_expire_at")
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")

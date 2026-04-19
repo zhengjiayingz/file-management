@@ -4,7 +4,7 @@
 
 本文档详细描述了文件管理系统各个功能模块的业务流程，包括每个步骤涉及的数据表操作。
 
-**与需求文档对齐**：验收口径与权限/回收策略以 [REQUIREMENTS.md](./REQUIREMENTS.md) 为准。**2026-04-18**：§7.3 已改为「仅定时任务回收无引用物理文件」，废止原「管理员手动清理」流程描述；VIP 完整申请与审核见 REQUIREMENTS「VIP 升级与审核流程」及本节 **6.2** 说明。
+**与需求文档对齐**：验收口径与权限/回收策略以 [REQUIREMENTS.md](./REQUIREMENTS.md) 为准。**2026-04-18**：§7.3 已改为「仅定时任务回收无引用物理文件」，废止原「管理员手动清理」流程描述；VIP 完整申请与审核见 REQUIREMENTS「VIP 升级与审核流程」及本节 **6.2** 说明。**2026-04-19**：补充 **§9.3** 个人信息与资料更新（弹窗 + `GET/PUT /api/user/profile`、`POST /api/user/avatar`），与 REQUIREMENTS「其他需求」（3）（4）一致。**工程**：Prisma Client 生成与 Windows 环境问题见 [DEVELOPMENT.md](./DEVELOPMENT.md)。
 
 ---
 
@@ -18,7 +18,7 @@
 6. [存储管理流程](#6-存储管理流程)
 7. [管理员功能流程](#7-管理员功能流程)
 8. [定时任务流程](#8-定时任务流程)
-9. [用户设置流程](#9-用户设置流程)
+9. [用户设置流程](#9-用户设置流程)（含 [9.3 个人信息与资料更新](#93-个人信息与资料更新头像--邮箱)）
 
 ---
 
@@ -37,7 +37,7 @@
    - 检查用户名是否已存在
    - 检查邮箱是否已注册
    - 密码 SHA256 加密
-   - 创建用户记录
+   - 创建用户记录（`users` 表：`must_change_password`、`avatar_url`、`vip_expire_at` 等由数据库/Prisma 默认值填充，与 [DATABASE_DESIGN.md](./DATABASE_DESIGN.md) §3.1 一致）
 
 3. **初始化配置**
    - 设置默认存储配额（普通用户 1GB）
@@ -1727,6 +1727,44 @@ VALUES (?, ?, ?)
 ON DUPLICATE KEY UPDATE locale = VALUES(locale), theme = VALUES(theme), updated_at = NOW()
 ```
 
+### 9.3 个人信息与资料更新（头像 / 邮箱）
+
+**入口**：顶栏用户菜单「个人信息」「设置」弹窗（前端 `PersonalInfoDialog`、`UserSettingsDialog`）。
+
+**个人信息（只读展示为主）**
+
+1. 打开弹窗时请求 `GET /api/user/profile`。
+2. 后端查询 `users` 表对应字段（含 `avatar_url`、`vip_expire_at`、`storage_quota`、`storage_used`、`status` 等）并返回。
+3. 「进入会员中心」仅打开会员中心弹窗，不单独写库。
+
+**设置 — 邮箱**
+
+1. 用户在「设置」中点击「修改」后编辑邮箱，点击「保存」。
+2. 前端校验邮箱格式（非空须合法；空串表示清空）。
+3. `PUT /api/user/profile`，body：`{ "email": "<string>" }`。
+4. 后端更新 `users.email`；若违反唯一约束返回错误。
+
+**设置 — 头像**
+
+1. 用户选择图片上传，`POST /api/user/avatar`，`multipart/form-data`，字段名 **`avatar`**。
+2. 后端将文件保存至 `uploads/avatars/`，更新 `users.avatar_url` 为可访问相对路径（如 `/uploads/avatars/xxx.jpg`）；可删除用户上一张头像文件（以实现为准）。
+3. 前端用静态资源基地址拼接 URL 展示（如 `VITE_API_BASE_URL` + 路径）。
+
+**设置 — 修改密码（非强制改密场景）**
+
+1. 用户填写当前密码、新密码、确认新密码；前端校验新密码强度（与注册规则一致：至少 8 位，数字 / 小写 / 大写 / 特殊字符至少三种）及两次新密码一致。
+2. `POST /api/auth/change-password`，body：`currentPassword`、`newPassword`（当用户 `must_change_password` 为 false 时后端校验原密码）。
+3. 成功后返回新 `accessToken`，前端更新本地令牌；`must_change_password` 保持为 false。
+
+**涉及的表操作：**
+
+| 表名 | 操作类型 | 说明 |
+|------|---------|------|
+| users | SELECT | `getProfile` |
+| users | UPDATE | `updateProfile`（email）、`uploadAvatar`（avatar_url） |
+
+**说明**：若 Access Token 携带 `must_change_password`（管理员重置后的临时密码登录），中间件会限制除白名单外的 API；用户须先完成强制改密后，方可调用上述资料接口（与实现对齐）。
+
 ---
 
 ## 10. 流程总结
@@ -1774,7 +1812,7 @@ ON DUPLICATE KEY UPDATE locale = VALUES(locale), theme = VALUES(theme), updated_
 
 ---
 
-### 9.3 事务处理建议
+### 10.3 事务处理建议
 
 **需要事务的操作：**
 
@@ -1847,5 +1885,5 @@ WHERE receiver_id = ? AND is_read = FALSE
 
 ---
 
-**文档版本**：v1.0  
-**最后更新**：2026-01-16
+**文档版本**：v1.1  
+**最后更新**：2026-04-19

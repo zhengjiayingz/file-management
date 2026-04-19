@@ -42,8 +42,10 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.setItem('token', loginData.token)
     localStorage.setItem('refreshToken', loginData.refreshToken)
 
-    // 登录后加载用户配置
-    await loadUserPreferences()
+    // 临时密码登录时多数接口被拦截，跳过偏好加载，改密成功后再拉取
+    if (!loginData.user.mustChangePassword) {
+      await loadUserPreferences()
+    }
   }
 
   // 加载用户配置
@@ -141,7 +143,8 @@ export const useAuthStore = defineStore('auth', () => {
     logout,
     updateUser,
     updateToken,
-    refreshUserInfo
+    refreshUserInfo,
+    loadUserPreferences
   }
 })
 

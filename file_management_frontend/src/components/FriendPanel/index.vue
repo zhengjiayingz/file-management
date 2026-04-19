@@ -12,7 +12,7 @@
         </div>
 
         <!-- 侧边栏抽屉 -->
-        <el-drawer v-model="drawerVisible" :title="currentChatFriend ? `与 ${currentChatFriend.username} 聊天` : '好友与消息'"
+        <el-drawer v-model="drawerVisible" :title="panelHeaderTitle"
             size="380px" :with-header="true">
             <!-- 为了自定义Header返回按钮 -->
             <template #header="{ close, titleId, titleClass }">
@@ -21,7 +21,7 @@
                         <el-button v-if="currentChatFriend" icon="ArrowLeft" circle size="small"
                             @click="currentChatFriend = null; loadData()" />
                         <h4 :id="titleId" :class="titleClass" style="margin: 0; color: #303133;">
-                            {{ currentChatFriend ? currentChatFriend.username : '好友与消息' }}
+                            {{ panelHeaderTitle }}
                         </h4>
                     </div>
                 </div>
@@ -30,20 +30,20 @@
             <!-- 主视图 (非聊天界面) -->
             <div v-if="!currentChatFriend" class="panel-body">
                 <el-tabs v-model="activeTab" class="custom-tabs">
-                    <el-tab-pane label="好友" name="friends">
+                    <el-tab-pane :label="t('friendPanel.tabFriends')" name="friends">
                         <!-- 待处理请求提示 -->
                         <div v-if="pendingRequests.length > 0" class="pending-alert" @click="activeTab = 'requests'">
                             <el-icon color="#E6A23C">
                                 <Bell />
                             </el-icon>
-                            <span>您有 {{ pendingRequests.length }} 个待处理的好友请求</span>
+                            <span>{{ t('friendPanel.pendingRequestsHint', { count: pendingRequests.length }) }}</span>
                             <el-icon>
                                 <ArrowRight />
                             </el-icon>
                         </div>
 
                         <div class="list-container">
-                            <el-empty v-if="friends.length === 0" description="暂无好友" :image-size="60" />
+                            <el-empty v-if="friends.length === 0" :description="t('friendPanel.noFriends')" :image-size="60" />
                             <div v-for="friend in friends" :key="friend.friendId" class="friend-item"
                                 @click="openChat(friend)">
                                 <el-avatar :size="40" style="background:#409EFF; font-weight: bold;">
@@ -51,7 +51,7 @@
                                 </el-avatar>
                                 <div class="friend-info">
                                     <span class="name">{{ friend.username }}</span>
-                                    <span class="email">{{ friend.email || '未绑定邮箱' }}</span>
+                                    <span class="email">{{ friend.email || t('friendPanel.noEmail') }}</span>
                                 </div>
                                 <el-badge :value="getUnreadCount(friend.friendId)"
                                     :hidden="getUnreadCount(friend.friendId) === 0" />
@@ -59,16 +59,16 @@
                         </div>
                     </el-tab-pane>
 
-                    <el-tab-pane label="添加" name="add">
+                    <el-tab-pane :label="t('friendPanel.tabAdd')" name="add">
                         <div class="search-box" style="display: flex; gap: 10px; margin-bottom: 15px;">
-                            <el-input v-model="searchKeyword" placeholder="输入用户名或ID搜索" clearable
+                            <el-input v-model="searchKeyword" :placeholder="t('friendPanel.searchPlaceholder')" clearable
                                 @keyup.enter="handleSearchUser" />
                             <el-button type="primary" @click="handleSearchUser" :loading="searching">
-                                搜索
+                                {{ t('friendPanel.search') }}
                             </el-button>
                         </div>
                         <div class="list-container" v-loading="searching">
-                            <el-empty v-if="searchResults.length === 0 && searchPushed" description="未找到匹配的用户"
+                            <el-empty v-if="searchResults.length === 0 && searchPushed" :description="t('friendPanel.noSearchResults')"
                                 :image-size="60" />
                             <div v-for="user in searchResults" :key="user.id" class="friend-item result-item">
                                 <el-avatar :size="40" style="background:#67C23A">
@@ -78,12 +78,12 @@
                                     <span class="name">{{ user.username }} (ID: {{ user.id }})</span>
                                 </div>
                                 <el-button size="small" type="primary" plain
-                                    @click="sendFriendRequest(user)">添加</el-button>
+                                    @click="sendFriendRequest(user)">{{ t('friendPanel.addFriend') }}</el-button>
                             </div>
                         </div>
                     </el-tab-pane>
 
-                    <el-tab-pane :label="`请求 (${pendingRequests.length})`" name="requests">
+                    <el-tab-pane :label="t('friendPanel.tabRequests', { count: pendingRequests.length })" name="requests">
                         <div class="list-container">
                             <el-empty v-if="pendingRequests.length === 0" description="暂无请求" :image-size="60" />
                             <div v-for="req in pendingRequests" :key="req.requestId" class="friend-item result-item">
@@ -92,34 +92,34 @@
                                 </el-avatar>
                                 <div class="friend-info">
                                     <span class="name">{{ req.senderUsername }}</span>
-                                    <span class="email">请求加为好友</span>
+                                    <span class="email">{{ t('friendPanel.requestSubtitle') }}</span>
                                 </div>
                                 <div class="action-btns" style="display: flex; gap: 8px;">
                                     <el-button size="small" type="success"
-                                        @click="handleRequest(req.requestId, true)">同意</el-button>
+                                        @click="handleRequest(req.requestId, true)">{{ t('friendPanel.approve') }}</el-button>
                                     <el-button size="small" type="danger" plain
-                                        @click="handleRequest(req.requestId, false)">拒绝</el-button>
+                                        @click="handleRequest(req.requestId, false)">{{ t('friendPanel.reject') }}</el-button>
                                 </div>
                             </div>
                         </div>
                     </el-tab-pane>
 
-                    <el-tab-pane v-if="isAdmin" :label="`VIP申请 (${vipPending.length})`" name="vip">
+                    <el-tab-pane v-if="isAdmin" :label="t('friendPanel.tabVip', { count: vipPending.length })" name="vip">
                         <div class="list-container">
-                            <el-empty v-if="vipPending.length === 0" description="暂无 VIP 升级申请" :image-size="60" />
+                            <el-empty v-if="vipPending.length === 0" :description="t('friendPanel.noVipRequests')" :image-size="60" />
                             <div v-for="row in vipPending" :key="row.id" class="friend-item result-item vip-req-row">
                                 <el-avatar :size="40" style="background:#F56C6C">
                                     {{ row.username.charAt(0).toUpperCase() }}
                                 </el-avatar>
                                 <div class="friend-info">
                                     <span class="name">{{ row.username }}</span>
-                                    <span class="email">申请升级 VIP · ID {{ row.applicantId }}</span>
+                                    <span class="email">{{ t('friendPanel.vipRequestSubtitle', { id: row.applicantId }) }}</span>
                                 </div>
                                 <div class="action-btns" style="display: flex; gap: 8px; flex-shrink: 0;">
                                     <el-button size="small" type="success" :loading="vipActionId === row.id"
-                                        @click="handleVipApprove(row.id)">同意</el-button>
+                                        @click="handleVipApprove(row.id)">{{ t('friendPanel.approve') }}</el-button>
                                     <el-button size="small" type="danger" plain :loading="vipActionId === -row.id"
-                                        @click="handleVipReject(row.id)">拒绝</el-button>
+                                        @click="handleVipReject(row.id)">{{ t('friendPanel.reject') }}</el-button>
                                 </div>
                             </div>
                         </div>
@@ -131,7 +131,7 @@
             <div v-else class="chat-container">
                 <div class="chat-history" ref="chatHistoryRef">
                     <div v-if="chatMessages.length === 0" class="empty-chat">
-                        <span style="color:#909399; font-size:13px;">暂无聊天记录，打个招呼吧</span>
+                        <span style="color:#909399; font-size:13px;">{{ t('friendPanel.emptyChat') }}</span>
                     </div>
                     <div v-for="msg in chatMessages" :key="msg.id" class="message-row"
                         :class="{ 'is-mine': msg.senderId === myUserId }">
@@ -149,7 +149,7 @@
                                         :loading="vipChatActionId === msg.senderId"
                                         @click="handleVipChatApprove(msg.senderId)"
                                     >
-                                        同意
+                                        {{ t('friendPanel.approve') }}
                                     </el-button>
                                     <el-button
                                         size="small"
@@ -158,7 +158,7 @@
                                         :loading="vipChatActionId === -msg.senderId"
                                         @click="handleVipChatReject(msg.senderId)"
                                     >
-                                        拒绝
+                                        {{ t('friendPanel.reject') }}
                                     </el-button>
                                 </div>
                             </div>
@@ -170,12 +170,12 @@
                                 </el-icon>
                                 <div class="file-info">
                                     <div class="file-name">{{ msg.file.fileName }}</div>
-                                    <div class="file-meta">保存到网盘</div>
+                                    <div class="file-meta">{{ t('friendPanel.saveToDrive') }}</div>
                                 </div>
                             </div>
                             <!-- 异常文件类型处理 -->
                             <div v-else class="text-content">
-                                [不支持的消息或文件已被删除] : {{ msg.content }}
+                                {{ t('friendPanel.unsupportedMessage', { content: msg.content }) }}
                             </div>
                             <div class="msg-time">{{ formatTime(msg.createdAt) }}</div>
                         </div>
@@ -184,25 +184,25 @@
 
                 <div class="chat-input-area">
                     <div class="toolbar">
-                        <el-button link type="primary" icon="FolderOpened" @click="openFilePicker">分享文件</el-button>
+                        <el-button link type="primary" icon="FolderOpened" @click="openFilePicker">{{ t('friendPanel.shareFile') }}</el-button>
                     </div>
                     <div class="input-box">
                         <el-input v-model="messageText" type="textarea" :rows="3" resize="none"
-                            placeholder="输入消息，回车发送..." @keydown.enter.prevent="handleSendMessage" />
+                            :placeholder="t('friendPanel.messagePlaceholder')" @keydown.enter.prevent="handleSendMessage" />
                     </div>
                     <div class="action-bar">
-                        <el-button type="primary" size="small" @click="handleSendMessage">发送</el-button>
+                        <el-button type="primary" size="small" @click="handleSendMessage">{{ t('friendPanel.send') }}</el-button>
                     </div>
                 </div>
             </div>
         </el-drawer>
 
         <!-- 分享文件选择器弹窗 -->
-        <el-dialog v-model="filePickerVisible" title="选择文件分享" width="600px" destroy-on-close>
+        <el-dialog v-model="filePickerVisible" :title="t('friendPanel.pickFileTitle')" width="600px" destroy-on-close>
             <div class="file-picker-container" v-loading="loadingFiles">
                 <!-- 简单文件列表层级导航 -->
                 <el-breadcrumb separator="/" style="margin-bottom:15px;">
-                    <el-breadcrumb-item @click="pickFolder()" style="cursor: pointer;">根目录</el-breadcrumb-item>
+                    <el-breadcrumb-item @click="pickFolder()" style="cursor: pointer;">{{ t('friendPanel.root') }}</el-breadcrumb-item>
                     <el-breadcrumb-item v-for="f in pickBreadcrumbs" :key="f.id" @click="pickFolder(f.id)"
                         style="cursor: pointer;">
                         {{ f.name }}
@@ -210,7 +210,7 @@
                 </el-breadcrumb>
 
                 <el-table :data="pickFiles" height="300" style="width: 100%" @row-click="handlePickFileRow">
-                    <el-table-column label="名称">
+                    <el-table-column :label="t('friendPanel.colName')">
                         <template #default="{ row }">
                             <div style="display:flex; align-items:center; gap:8px;">
                                 <el-icon size="18" :color="row.fileType === 'folder' ? '#ffd04b' : '#909399'">
@@ -224,9 +224,9 @@
                     <el-table-column width="100">
                         <template #default="{ row }">
                             <el-button v-if="row.fileType === 'file'" type="primary" link
-                                @click.stop="confirmShareFile(row)">分享</el-button>
+                                @click.stop="confirmShareFile(row)">{{ t('friendPanel.share') }}</el-button>
                             <el-button v-else type="info" link
-                                @click.stop="pickFolder(row.id, row.fileName)">进入</el-button>
+                                @click.stop="pickFolder(row.id, row.fileName)">{{ t('friendPanel.enter') }}</el-button>
                         </template>
                     </el-table-column>
                 </el-table>
@@ -234,11 +234,11 @@
         </el-dialog>
 
         <!-- 保存文件选择器弹窗 -->
-        <el-dialog v-model="savePickerVisible" title="选择要保存到的目标文件夹" width="600px" destroy-on-close>
+        <el-dialog v-model="savePickerVisible" :title="t('friendPanel.savePickerTitle')" width="600px" destroy-on-close>
             <div class="file-picker-container" v-loading="loadingFiles">
                 <!-- 简单文件列表层级导航 -->
                 <el-breadcrumb separator="/" style="margin-bottom:15px;">
-                    <el-breadcrumb-item @click="pickFolder()" style="cursor: pointer;">根目录</el-breadcrumb-item>
+                    <el-breadcrumb-item @click="pickFolder()" style="cursor: pointer;">{{ t('friendPanel.root') }}</el-breadcrumb-item>
                     <el-breadcrumb-item v-for="f in pickBreadcrumbs" :key="f.id" @click="pickFolder(f.id)"
                         style="cursor: pointer;">
                         {{ f.name }}
@@ -246,7 +246,7 @@
                 </el-breadcrumb>
 
                 <el-table :data="onlyFolders" height="300" style="width: 100%" @row-click="handlePickFileRow">
-                    <el-table-column label="名称">
+                    <el-table-column :label="t('friendPanel.colName')">
                         <template #default="{ row }">
                             <div style="display:flex; align-items:center; gap:8px;">
                                 <el-icon size="18" color="#ffd04b">
@@ -258,16 +258,16 @@
                     </el-table-column>
                     <el-table-column width="100">
                         <template #default="{ row }">
-                            <el-button type="info" link @click.stop="pickFolder(row.id, row.fileName)">进入</el-button>
+                            <el-button type="info" link @click.stop="pickFolder(row.id, row.fileName)">{{ t('friendPanel.enter') }}</el-button>
                         </template>
                     </el-table-column>
                 </el-table>
             </div>
             <template #footer>
                 <span class="dialog-footer">
-                    <el-button @click="savePickerVisible = false">取消</el-button>
+                    <el-button @click="savePickerVisible = false">{{ t('common.cancel') }}</el-button>
                     <el-button type="primary" @click="confirmSaveFileHere" :loading="savingFile">
-                        保存到当前文件夹
+                        {{ t('friendPanel.saveToCurrentFolder') }}
                     </el-button>
                 </span>
             </template>
@@ -322,6 +322,13 @@ const searchPushed = ref(false)
 
 // 聊天
 const currentChatFriend = ref<any>(null)
+/** 抽屉标题：列表页为通讯录文案；聊天中为对方用户名 */
+const panelHeaderTitle = computed(() => {
+    if (currentChatFriend.value) {
+        return currentChatFriend.value.username
+    }
+    return t('sidebar.contactsAndMessages')
+})
 const chatMessages = ref<any[]>([])
 const messageText = ref('')
 const chatHistoryRef = ref<HTMLElement | null>(null)
@@ -420,11 +427,11 @@ const handleVipApprove = async (id: number) => {
     vipActionId.value = id
     try {
         await vipApi.approve(id)
-        ElMessage.success('已同意该用户升级为 VIP')
+        ElMessage.success(t('friendPanel.msg.vipApproved'))
         await fetchVipPending()
     } catch (e: unknown) {
         const ax = e as { response?: { data?: { message?: string } } }
-        ElMessage.error(ax.response?.data?.message || '操作失败')
+        ElMessage.error(ax.response?.data?.message || t('friendPanel.msg.operationFailed'))
     } finally {
         vipActionId.value = 0
     }
@@ -434,11 +441,11 @@ const handleVipReject = async (id: number) => {
     vipActionId.value = -id
     try {
         await vipApi.reject(id)
-        ElMessage.success('已拒绝该申请')
+        ElMessage.success(t('friendPanel.msg.vipRejected'))
         await fetchVipPending()
     } catch (e: unknown) {
         const ax = e as { response?: { data?: { message?: string } } }
-        ElMessage.error(ax.response?.data?.message || '操作失败')
+        ElMessage.error(ax.response?.data?.message || t('friendPanel.msg.operationFailed'))
     } finally {
         vipActionId.value = 0
     }
@@ -455,12 +462,12 @@ async function handleVipChatApprove(applicantId: number) {
     vipChatActionId.value = applicantId
     try {
         await vipApi.approveByApplicant(applicantId)
-        ElMessage.success('已同意该用户的 VIP 升级')
+        ElMessage.success(t('friendPanel.msg.vipApprovedInChat'))
         await fetchVipPending()
         await loadChatHistory()
     } catch (e: unknown) {
         const ax = e as { response?: { data?: { message?: string } } }
-        ElMessage.error(ax.response?.data?.message || '操作失败')
+        ElMessage.error(ax.response?.data?.message || t('friendPanel.msg.operationFailed'))
     } finally {
         vipChatActionId.value = 0
     }
@@ -470,12 +477,12 @@ async function handleVipChatReject(applicantId: number) {
     vipChatActionId.value = -applicantId
     try {
         await vipApi.rejectByApplicant(applicantId)
-        ElMessage.success('已拒绝该申请')
+        ElMessage.success(t('friendPanel.msg.vipRejected'))
         await fetchVipPending()
         await loadChatHistory()
     } catch (e: unknown) {
         const ax = e as { response?: { data?: { message?: string } } }
-        ElMessage.error(ax.response?.data?.message || '操作失败')
+        ElMessage.error(ax.response?.data?.message || t('friendPanel.msg.operationFailed'))
     } finally {
         vipChatActionId.value = 0
     }
@@ -525,7 +532,7 @@ const handleSearchUser = async () => {
         const friendIds = friends.value.map(f => f.friendId)
         searchResults.value = rawUsers.filter((u: any) => !friendIds.includes(u.id))
     } catch (error: any) {
-        ElMessage.error('搜索失败')
+        ElMessage.error(t('friendPanel.msg.searchFailed'))
     } finally {
         searching.value = false
     }
@@ -534,11 +541,11 @@ const handleSearchUser = async () => {
 const sendFriendRequest = async (user: any) => {
     try {
         await friendshipApi.sendRequest({ friendId: user.id })
-        ElMessage.success('请求发送成功')
+        ElMessage.success(t('friendPanel.msg.requestSent'))
         // 将该用户从搜索结果中移除
         searchResults.value = searchResults.value.filter(u => u.id !== user.id)
     } catch (error: any) {
-        ElMessage.error(error.response?.data?.message || '发送失败')
+        ElMessage.error(error.response?.data?.message || t('friendPanel.msg.sendFailed'))
     }
 }
 
@@ -593,15 +600,15 @@ const handleRequest = async (requestId: number, accept: boolean) => {
     try {
         if (accept) {
             await friendshipApi.acceptRequest(requestId)
-            ElMessage.success('已添加好友')
+            ElMessage.success(t('friendPanel.msg.friendAdded'))
         } else {
             await friendshipApi.rejectRequest(requestId)
-            ElMessage.success('已拒绝')
+            ElMessage.success(t('friendPanel.msg.friendRejectShort'))
         }
         await fetchPendingRequests()
         await fetchFriends()
     } catch (error: any) {
-        ElMessage.error(error.response?.data?.message || '操作失败')
+        ElMessage.error(error.response?.data?.message || t('friendPanel.msg.operationFailed'))
     }
 }
 
@@ -651,7 +658,7 @@ const handleSendMessage = async () => {
         })
         loadChatHistory(true)
     } catch (e) {
-        ElMessage.error('发送留言失败')
+        ElMessage.error(t('friendPanel.msg.sendMessageFailed'))
     }
 }
 
@@ -682,7 +689,7 @@ const pickFolder = async (folderId?: number, folderName?: string) => {
         const res = await fileApiService.getFiles({ parentId: folderId })
         pickFiles.value = res
     } catch (e) {
-        ElMessage.error('获取文件失败')
+        ElMessage.error(t('friendPanel.msg.loadFilesFailed'))
     } finally {
         loadingFiles.value = false
     }
@@ -702,11 +709,11 @@ const confirmShareFile = async (item: FileItem) => {
             messageType: 'file',
             fileId: item.id
         })
-        ElMessage.success('文件分享成功')
+        ElMessage.success(t('friendPanel.msg.fileShared'))
         filePickerVisible.value = false
         loadChatHistory(true)
     } catch (e: any) {
-        ElMessage.error('分享失败')
+        ElMessage.error(t('friendPanel.msg.shareFailed'))
     }
 }
 
@@ -729,10 +736,10 @@ const confirmSaveFileHere = async () => {
             currentSavingSourceFileId.value,
             currentPickFolderId.value
         )
-        ElMessage.success('成功存入网盘')
+        ElMessage.success(t('friendPanel.msg.savedToDrive'))
         savePickerVisible.value = false
     } catch (e: any) {
-        ElMessage.error(e.response?.data?.message || '保存失败')
+        ElMessage.error(e.response?.data?.message || t('friendPanel.msg.saveFailed'))
     } finally {
         savingFile.value = false
     }

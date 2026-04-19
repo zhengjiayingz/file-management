@@ -112,11 +112,15 @@ const handleAuth = async () => {
       console.log('🔵 [9] 检查 store.isLoggedIn:', authStore.isLoggedIn)
 
       console.log('🔵 [10] 准备跳转')
-      const redirect = typeof route.query.redirect === 'string' ? route.query.redirect.trim() : ''
-      if (redirect.startsWith('/')) {
-        await router.push(redirect)
+      if (res.user.mustChangePassword) {
+        await router.push('/force-change-password')
       } else {
-        await router.push('/')
+        const redirect = typeof route.query.redirect === 'string' ? route.query.redirect.trim() : ''
+        if (redirect.startsWith('/')) {
+          await router.push(redirect)
+        } else {
+          await router.push('/')
+        }
       }
     }
 
@@ -124,8 +128,18 @@ const handleAuth = async () => {
     console.error('❌ [登录错误]', error)
     console.error('❌ [错误详情] response:', error.response)
     console.error('❌ [错误详情] message:', error.message)
-    const msg = error.response?.data?.message || error.message || 'Error'
-    ElMessage.error((isRegister.value ? t('login.register') : t('login.login')) + ' Failed: ' + msg)
+    if (isRegister.value) {
+      const msg = error.response?.data?.message || error.message || 'Error'
+      ElMessage.error(t('login.register') + ' Failed: ' + msg)
+    } else {
+      const status = error.response?.status
+      if (status === 401) {
+        ElMessage.error(t('login.wrongCredentials'))
+      } else {
+        const msg = error.response?.data?.message || error.message || t('login.wrongCredentials')
+        ElMessage.error(msg)
+      }
+    }
   } finally {
     loading.value = false
   }

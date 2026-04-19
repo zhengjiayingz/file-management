@@ -50,8 +50,21 @@ request.interceptors.response.use(
       return Promise.reject(error)
     }
 
-    // 如果是 401 错误，且不是刷新 token 的请求本身
-    if (error.response.status === 401 && !originalRequest.url?.includes('/auth/refresh') && !originalRequest._retry) {
+    const reqUrl = originalRequest.url || ''
+
+    // 登录 / 注册 / 忘记密码 的 401 为业务错误（如账密错误），不得走刷新 Token，否则会 logout + 整页跳转，登录页 Toast 无法展示
+    const isPublicAuthFailure =
+      reqUrl.includes('auth/login') ||
+      reqUrl.includes('auth/register') ||
+      reqUrl.includes('auth/forgot-password')
+
+    // 如果是 401 错误，且不是刷新 token 的请求本身，也不是未登录类接口的业务 401
+    if (
+      error.response.status === 401 &&
+      !reqUrl.includes('/auth/refresh') &&
+      !originalRequest._retry &&
+      !isPublicAuthFailure
+    ) {
       const authStore = useAuthStore()
 
       if (isRefreshing) {
@@ -123,6 +136,19 @@ request.interceptors.response.use(
       authStore.logout()
       window.location.href = '/login'
       return Promise.reject(error)
+    }
+
+    // 使用临时密码：除白名单外接口返回 MUST_CHANGE_PASSWORD
+    if (error.response.status === 403) {
+      const body = error.response.data as { code?: string } | undefined
+      if (body?.code === 'MUST_CHANGE_PASSWORD') {
+        const authStore = useAuthStore()
+        authStore.updateUser({ mustChangePassword: true })
+        if (!window.location.pathname.includes('/force-change-password')) {
+          window.location.href = '/force-change-password'
+        }
+        return Promise.reject(error)
+      }
     }
 
     return Promise.reject(error)

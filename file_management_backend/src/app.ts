@@ -21,6 +21,7 @@ import shareRoutes from './routes/share.routes.js';
 // 导入中间件
 import { errorHandler } from './middleware/error.middleware.js';
 import { notFound } from './middleware/notFound.middleware.js';
+import { blockIfMustChangePassword } from './middleware/mustChangePassword.middleware.js';
 import { setupSwagger } from './config/swagger.config.js';
 
 // 配置环境变量
@@ -67,6 +68,8 @@ app.get('/health', (_req, res) => {
 
 // 配置 Swagger API 文档
 setupSwagger(app);
+
+app.use(blockIfMustChangePassword);
 
 // API 路由
 app.use('/api/auth', authRoutes);

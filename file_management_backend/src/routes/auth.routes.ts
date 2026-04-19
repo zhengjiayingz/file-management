@@ -5,7 +5,8 @@ import {
   getCurrentUser,
   refreshToken,
   logout,
-  forgotPasswordRequest
+  forgotPasswordRequest,
+  changePassword
 } from '../controllers/auth.controller.js';
 import { authenticate } from '../middleware/auth.middleware.js';
 
@@ -180,6 +181,8 @@ router.post('/refresh', refreshToken);
  *                   example: Logout successful
  */
 router.post('/logout', logout);
+
+router.post('/change-password', authenticate, changePassword);
 
 /**
  * @swagger
