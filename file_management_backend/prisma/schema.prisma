@@ -167,7 +167,7 @@ model FileShare {
   expireAt         DateTime? @map("expire_at")
   /// 是否将提取码附加在分享 URL 查询参数中（访客端解析用）
   autoFillExtract  Boolean  @default(false) @map("auto_fill_extract")
-  /// 访问人数上限；null 表示不限制（访客端校验待实现）
+  /// 访问人数上限；null 表示不限制（按独立访客 IP 计数，见 share.controller）
   maxVisitors      Int?     @map("max_visitors")
   viewCount        Int      @default(0) @map("view_count")
   downloadCount    Int      @default(0) @map("download_count")
@@ -390,6 +390,7 @@ enum ShareStatus {
 enum AccessAction {
   view
   download
+  save
 }
 
 enum FriendshipStatus {

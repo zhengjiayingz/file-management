@@ -1,7 +1,12 @@
 import path from 'path';
 import { Response } from 'express';
 import prisma from '../../lib/prisma.js';
-import { verifySharedFileForSave } from '../share.controller.js';
+import {
+  verifySharedFileForSave,
+  clientIp,
+  ensureVisitorAllowedInTx,
+  isVisitorLimitError
+} from '../share.controller.js';
 import { AuthRequest } from '../../types/index.js';
 import { logOperation, LogOperationType, LogResourceType } from '../../services/logger.service.js';
 import {
@@ -1321,30 +1326,57 @@ export const saveSharedFile = async (req: AuthRequest, res: Response): Promise<v
       counter++;
     }
 
-    const newFile = await prisma.$transaction(async (tx) => {
-      // 更新用户容量
-      await tx.user.update({
-        where: { id: req.user!.id },
-        data: { storageUsed: { increment: fileSize } }
-      });
+    const shareRow = shareCodeStr
+      ? await prisma.fileShare.findFirst({
+          where: { shareCode: shareCodeStr, status: 'active' }
+        })
+      : null;
 
-      // 更新源文件存储引用
-      await tx.fileStorage.update({
-        where: { id: sourceFile.storageId! },
-        data: { referenceCount: { increment: 1 } }
-      });
-
-      // 创建新的UserFile指向同一个资源
-      return await tx.userFile.create({
-        data: {
-          userId: req.user!.id,
-          storageId: sourceFile.storageId,
-          parentId: parentId ?? null,
-          fileName: finalFileName,
-          fileType: 'file'
+    let newFile;
+    try {
+      newFile = await prisma.$transaction(async (tx) => {
+        if (shareRow) {
+          await ensureVisitorAllowedInTx(tx, shareRow, clientIp(req), req.user!.id);
+          await tx.shareAccessLog.create({
+            data: {
+              shareId: shareRow.id,
+              visitorId: req.user!.id,
+              ipAddress: clientIp(req),
+              userAgent: (req.headers['user-agent'] || '').slice(0, 500) || null,
+              action: 'save'
+            }
+          });
         }
+        // 更新用户容量
+        await tx.user.update({
+          where: { id: req.user!.id },
+          data: { storageUsed: { increment: fileSize } }
+        });
+
+        // 更新源文件存储引用
+        await tx.fileStorage.update({
+          where: { id: sourceFile.storageId! },
+          data: { referenceCount: { increment: 1 } }
+        });
+
+        // 创建新的UserFile指向同一个资源
+        return await tx.userFile.create({
+          data: {
+            userId: req.user!.id,
+            storageId: sourceFile.storageId,
+            parentId: parentId ?? null,
+            fileName: finalFileName,
+            fileType: 'file'
+          }
+        });
       });
-    });
+    } catch (e) {
+      if (isVisitorLimitError(e)) {
+        res.status(403).json({ success: false, message: '分享访问人数已达上限' });
+        return;
+      }
+      throw e;
+    }
 
     await logOperation({
       req,

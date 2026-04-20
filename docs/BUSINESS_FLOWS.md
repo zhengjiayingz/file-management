@@ -4,7 +4,7 @@
 
 本文档详细描述了文件管理系统各个功能模块的业务流程，包括每个步骤涉及的数据表操作。
 
-**与需求文档对齐**：验收口径与权限/回收策略以 [REQUIREMENTS.md](./REQUIREMENTS.md) 为准。**2026-04-18**：§7.3 已改为「仅定时任务回收无引用物理文件」，废止原「管理员手动清理」流程描述；VIP 完整申请与审核见 REQUIREMENTS「VIP 升级与审核流程」及本节 **6.2** 说明。**2026-04-19**：补充 **§9.3** 个人信息与资料更新（弹窗 + `GET/PUT /api/user/profile`、`POST /api/user/avatar`），与 REQUIREMENTS「其他需求」（3）（4）一致。**2026-04-20**：与 §5(2) 对齐——**Token 强失效**采用 **`users.session_version` + JWT `sv`** 与 **Refresh `is_revoked`**；**不**实现逐枚 Access（`jti`）黑名单；管理员踢会话见 **§7.1**。**工程**：Prisma Client 生成与 Windows 环境问题见 [DEVELOPMENT.md](./DEVELOPMENT.md)。
+**与需求文档对齐**：验收口径与权限/回收策略以 [REQUIREMENTS.md](./REQUIREMENTS.md) 为准。**2026-04-18**：§7.3 已改为「仅定时任务回收无引用物理文件」，废止原「管理员手动清理」流程描述；VIP 完整申请与审核见 REQUIREMENTS「VIP 升级与审核流程」及本节 **6.2** 说明。**2026-04-19**：补充 **§9.3** 个人信息与资料更新（弹窗 + `GET/PUT /api/user/profile`、`POST /api/user/avatar`），与 REQUIREMENTS「其他需求」（3）（4）一致。**2026-04-20**：与 §5(2) 对齐——**Token 强失效**采用 **`users.session_version` + JWT `sv`** 与 **Refresh `is_revoked`**；**不**实现逐枚 Access（`jti`）黑名单；管理员踢会话见 **§7.1**。**2026-04-20（§3）**：链接分享 **访问人数上限** `max_visitors`（创建时可选 1～10 或不限）：**未登录**打开列表/下载按 **IP** 计数；**转存须登录**，仅按 **用户 ID** 计数（无匿名转存）；实现见 `share.controller.ts` `ensureVisitorAllowedInTx`；`share_access_logs.action` 含 `view` / `download` / `save`。**工程**：Prisma Client 生成与 Windows 环境问题见 [DEVELOPMENT.md](./DEVELOPMENT.md)。
 
 ---
 
@@ -833,13 +833,14 @@ WHERE fh.id = ? AND fh.user_file_id = ?;
    - 检查用户是否拥有该文件
 
 2. **生成分享信息**
-   - 生成唯一的 share_code（32位随机字符串）
-   - 如果是私密分享，生成 extract_code（6位提取码）
+   - 生成唯一的 share_code（实现为 16 位十六进制等，见后端 `genShareCode`）
+   - 如果是私密分享，生成 extract_code（4 位字母数字，见后端）
    - `permission` 以 **`download`** 向与 [REQUIREMENTS.md](./REQUIREMENTS.md) §3（3）一致；**不**做「仅查看 / 可编辑」分档
-   - 设置过期时间
+   - 设置过期时间（`validity` 映射 `expire_at`）
+   - 可选 **访问人数上限** `max_visitors`：1～10 或 `NULL` 不限制
 
 3. **创建分享记录**
-   - 在 file_shares 表创建记录
+   - 在 `file_shares` 表创建记录（含 `max_visitors`、`user_file_ids` 等，与 [DATABASE_DESIGN.md](./DATABASE_DESIGN.md) 一致）
 
 4. **返回分享链接**
    - 返回分享码和提取码
@@ -880,18 +881,14 @@ VALUES (?, 'share', 'file', ?, '创建分享链接', ?)
 2. **验证提取码（私密分享）**
    - 如果有 extract_code，验证用户输入的提取码
 
-3. **获取文件信息**
-   - 通过 user_file_id 查询文件信息
-   - 通过 storage_id 获取物理文件信息
+3. **访问人数上限（若 `max_visitors` 非空）**
+   - 在事务内对 `file_shares` 行加锁（`SELECT … FOR UPDATE`），按 **未登录访客** 统计：`share_access_logs` 中 `visitor_id IS NULL` 的 **独立 IP** 数；若当前 IP 已出现过则放行；否则若已达上限则返回 403（与 `ensureVisitorAllowedInTx` 一致）
 
-4. **更新访问统计**
-   - view_count + 1
+4. **事务内更新统计并写访问日志**
+   - 人数校验通过后：`view_count + 1`，`share_access_logs` 插入 `action = 'view'`（`visitor_id` 一般为 NULL；与步骤 3 同一事务）
 
-5. **记录访问日志**
-   - 在 share_access_logs 表记录访问
-
-6. **返回文件信息**
-   - 根据权限返回相应操作（查看/下载）
+5. **查询并返回文件列表**
+   - 查询 `user_files` / `storage`，返回列表 JSON（与后端 `accessPublicShare` 一致）
 
 **涉及的表操作：**
 
@@ -933,16 +930,17 @@ VALUES (?, ?, ?, ?, 'view')
 **流程步骤：**
 
 1. **验证分享权限**
-   - 检查 permission 是否包含 download
+   - 校验分享码、未过期、`extract_code`（查询参数或 URL）等（与访问列表一致）
 
-2. **获取文件**
+2. **访问人数上限（若 `max_visitors` 非空）**
+   - 与 **3.2** 相同规则：未登录按 **IP** 计数；在写入响应体/文件流**之前**完成事务内校验（避免 403 时已设置下载响应头）
+
+3. **获取文件**
    - 返回文件流
 
-3. **更新下载统计**
-   - download_count + 1
-
-4. **记录下载日志**
-   - 在 share_access_logs 表记录
+4. **更新下载统计与日志（与上一步同事务）**
+   - `download_count + 1`
+   - `share_access_logs` 插入 `action = 'download'`
 
 **涉及的表操作：**
 
@@ -967,7 +965,37 @@ VALUES (?, ?, ?, ?, 'download')
 
 ---
 
-### 3.4 取消分享流程
+### 3.4 转存分享文件到个人网盘（须登录）
+
+**说明**：转存**无匿名路径**，须先登录再调用接口。
+
+**流程步骤：**
+
+1. **认证**
+   - 请求携带 Bearer Token（`AuthRequest`）
+
+2. **校验分享与文件**
+   - `POST /api/files/:id/save-to-my-drive`（见 `file.routes.ts` `saveSharedFile`）
+   - Body：`shareCode`、`extractCode`、`parentId` 等；校验文件属于该分享、提取码正确（`verifySharedFileForSave`）
+
+3. **访问人数上限（若 `max_visitors` 非空）**
+   - 在**同一事务**内（与容量、引用计数、`user_files` 插入）：对 `file_shares` 行加锁；仅统计 `share_access_logs` 中 **`visitor_id` 非空** 的**不同用户 ID** 数（与未登录 IP **分开计数**）；当前用户已存在则放行；否则若已达上限则 403
+
+4. **落库**
+   - 写入 `share_access_logs`：`action = 'save'`，`visitor_id` = 当前用户
+   - 更新用户已用容量、源 `file_storage.reference_count`、新建 `user_files` 引用同一存储（与业务实现一致）
+
+**涉及的表操作：**
+
+| 表名 | 操作类型 | 说明 |
+|------|---------|------|
+| file_shares | SELECT / 行锁 | 校验分享、`max_visitors` |
+| share_access_logs | INSERT | `action = save`，`visitor_id` 必填 |
+| users / file_storage / user_files | UPDATE / INSERT | 容量与引用、新文件行 |
+
+---
+
+### 3.5 取消分享流程
 
 **流程步骤：**
 

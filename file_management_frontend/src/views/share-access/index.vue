@@ -174,8 +174,12 @@ async function tryAccess() {
       const status = e.response?.status
       const msg = (e.response?.data as { message?: string })?.message
       if (status === 403) {
-        errorMsg.value = msg || '提取码错误'
-        needExtractHint.value = true
+        if (msg?.includes('人数') || msg?.includes('已达上限')) {
+          errorMsg.value = msg || '分享访问人数已达上限'
+        } else {
+          errorMsg.value = msg || '提取码错误'
+          needExtractHint.value = true
+        }
       } else {
         errorMsg.value = msg || '无法打开分享'
       }

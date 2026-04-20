@@ -153,7 +153,7 @@
 | permission | ENUM('view', 'download', 'edit') | NOT NULL, DEFAULT 'download' | 库表枚举保留兼容；**产品**仅规范 **可下载** 向链接分享，不要求 `view`/`edit` 语义（见 [REQUIREMENTS.md](./REQUIREMENTS.md) §3（3）） |
 | expire_at | DATETIME | NULL | 过期时间（NULL 表示永久） |
 | auto_fill_extract | TINYINT(1) / BOOLEAN | NOT NULL, DEFAULT FALSE | 是否在分享链接查询参数中带提取码（`?e=`） |
-| max_visitors | INT | NULL | 访问人数上限；NULL 不限制（访客侧校验以实现为准） |
+| max_visitors | INT | NULL | 访问人数上限；NULL 不限制；未登录列表/下载按 IP；转存须登录、按 `visitor_id`（`share_access_logs`） |
 | view_count | INT | NOT NULL, DEFAULT 0 | 访问次数（展示/统计） |
 | download_count | INT | NOT NULL, DEFAULT 0 | 下载次数（展示/统计） |
 | status | ENUM('active', 'expired', 'cancelled') | NOT NULL, DEFAULT 'active' | 状态；过期可在访问时更新，也可由定时任务清理记录 |
@@ -183,7 +183,7 @@
 | visitor_id | INT | NULL | 访问者ID（未登录为NULL） |
 | ip_address | VARCHAR(45) | NOT NULL | IP地址 |
 | user_agent | VARCHAR(500) | NULL | 浏览器信息 |
-| action | ENUM('view', 'download') | NOT NULL | 操作类型 |
+| action | ENUM('view', 'download', 'save') | NOT NULL | 操作类型；`save` 为登录用户转存到个人网盘 |
 | created_at | DATETIME | NOT NULL, DEFAULT CURRENT_TIMESTAMP | 访问时间 |
 
 **索引：**
@@ -803,7 +803,7 @@ WHERE uf.user_id = ? AND uf.is_deleted = FALSE AND uf.file_type = 'file'
 
 ### 5.5 链接分享与过期清理
 
-1. 分享创建后写入 `file_shares`；访客校验提取码（若有）并访问时写入 `share_access_logs`（`action` 为 view / download）。
+1. 分享创建后写入 `file_shares`（可选 `max_visitors`，1～10 或 NULL 表示不限制）。访客校验提取码（若有）后：**查看列表**、**下载** 在未登录场景写入 `share_access_logs`（`visitor_id` 多为 NULL，`action` 为 `view` / `download`）；**转存到网盘**须登录，写入 `action = save` 且 `visitor_id` 为当前用户。访问人数上限在服务端用事务 + 行锁校验（未登录按 IP、转存按用户 ID，二者分开计数），见 `ensureVisitorAllowedInTx`。
 2. `expire_at` 早于当前时间的分享在访问逻辑中可标记为 `expired`；定时任务可删除 `expire_at` 已过的行以回收数据，并级联删除其访问日志。
 
 ### 5.6 好友关系管理

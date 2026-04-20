@@ -45,12 +45,68 @@ function genRandomExtract(): string {
   return s;
 }
 
-function clientIp(req: Request): string {
+/** 访客限流等场景复用（与访问日志中的 ip 一致） */
+export function clientIp(req: Request): string {
   const xf = req.headers['x-forwarded-for'];
   if (typeof xf === 'string' && xf.length > 0) {
     return xf.split(',')[0]!.trim().slice(0, 45);
   }
   return (req.socket.remoteAddress || '0.0.0.0').slice(0, 45);
+}
+
+const VISITOR_LIMIT_CODE = 'VISITOR_LIMIT';
+
+export function isVisitorLimitError(e: unknown): boolean {
+  return e instanceof Error && (e as NodeJS.ErrnoException).code === VISITOR_LIMIT_CODE;
+}
+
+function throwVisitorLimitError(): never {
+  const e = new Error('分享访问人数已达上限');
+  (e as NodeJS.ErrnoException).code = VISITOR_LIMIT_CODE;
+  throw e;
+}
+
+/**
+ * maxVisitors（须在事务内调用，且先锁 file_shares 行防并发超员）
+ *
+ * **未登录访客**（打开列表、下载）：仅能走公开接口；按 `visitorId == null` 的日志、**独立 IP** 计人数。
+ *
+ * **转存到网盘**：接口要求已登录，**不存在匿名转存**；仅按 `visitorId` 计人数（与同 IP 上的未登录访问 **分开统计**，
+ * 避免先打开分享页产生 ip 日志后，首次转存被误判超员）。
+ */
+export async function ensureVisitorAllowedInTx(
+  tx: Prisma.TransactionClient,
+  share: { id: number; maxVisitors: number | null },
+  ip: string,
+  visitorUserId?: number | null
+): Promise<void> {
+  if (share.maxVisitors == null) return;
+  await tx.$executeRawUnsafe(`SELECT id FROM file_shares WHERE id = ? FOR UPDATE`, share.id);
+
+  const logs = await tx.shareAccessLog.findMany({
+    where: { shareId: share.id },
+    select: { visitorId: true, ipAddress: true }
+  });
+
+  if (visitorUserId != null && visitorUserId !== undefined) {
+    const loggedInIds = new Set(
+      logs.filter((l) => l.visitorId != null).map((l) => l.visitorId as number)
+    );
+    if (loggedInIds.has(visitorUserId)) return;
+    if (loggedInIds.size >= share.maxVisitors) {
+      throwVisitorLimitError();
+    }
+    return;
+  }
+
+  const ipKeys = new Set(
+    logs.filter((l) => l.visitorId == null).map((l) => `ip:${l.ipAddress}`)
+  );
+  const currentIpKey = `ip:${ip}`;
+  if (ipKeys.has(currentIpKey)) return;
+  if (ipKeys.size >= share.maxVisitors) {
+    throwVisitorLimitError();
+  }
 }
 
 /** 分享包含的 user_files.id（兼容旧数据仅 userFileId） */
@@ -101,6 +157,7 @@ export async function verifySharedFileForSave(
   if (!idsFromShare(found.share).includes(userFileId)) {
     return { ok: false, status: 403, message: '文件不在该分享中' };
   }
+  // 人数上限在 saveSharedFile 的事务内与写 save 日志原子完成
   return { ok: true };
 }
 
@@ -169,6 +226,32 @@ export const accessPublicShare = async (req: Request, res: Response): Promise<vo
       return;
     }
 
+    const ip = clientIp(req);
+    try {
+      await prisma.$transaction(async (tx) => {
+        await ensureVisitorAllowedInTx(tx, share, ip);
+        await tx.fileShare.update({
+          where: { id: share.id },
+          data: { viewCount: { increment: 1 } }
+        });
+        await tx.shareAccessLog.create({
+          data: {
+            shareId: share.id,
+            visitorId: null,
+            ipAddress: ip,
+            userAgent: (req.headers['user-agent'] || '').slice(0, 500) || null,
+            action: 'view'
+          }
+        });
+      });
+    } catch (e) {
+      if (isVisitorLimitError(e)) {
+        res.status(403).json({ success: false, message: '分享访问人数已达上限' });
+        return;
+      }
+      throw e;
+    }
+
     const ids = idsFromShare(share);
     const rows = await prisma.userFile.findMany({
       where: { id: { in: ids }, userId: share.userId, isDeleted: false },
@@ -176,21 +259,6 @@ export const accessPublicShare = async (req: Request, res: Response): Promise<vo
         storage: { select: { fileSize: true, mimeType: true } }
       },
       orderBy: [{ fileType: 'desc' }, { fileName: 'asc' }]
-    });
-
-    await prisma.fileShare.update({
-      where: { id: share.id },
-      data: { viewCount: { increment: 1 } }
-    });
-
-    await prisma.shareAccessLog.create({
-      data: {
-        shareId: share.id,
-        visitorId: null,
-        ipAddress: clientIp(req),
-        userAgent: (req.headers['user-agent'] || '').slice(0, 500) || null,
-        action: 'view'
-      }
     });
 
     const owner = await prisma.user.findUnique({
@@ -283,6 +351,32 @@ export const downloadSharedFile = async (req: Request, res: Response): Promise<v
       return;
     }
 
+    const ip = clientIp(req);
+    try {
+      await prisma.$transaction(async (tx) => {
+        await ensureVisitorAllowedInTx(tx, share, ip);
+        await tx.fileShare.update({
+          where: { id: share.id },
+          data: { downloadCount: { increment: 1 } }
+        });
+        await tx.shareAccessLog.create({
+          data: {
+            shareId: share.id,
+            visitorId: null,
+            ipAddress: ip,
+            userAgent: (req.headers['user-agent'] || '').slice(0, 500) || null,
+            action: 'download'
+          }
+        });
+      });
+    } catch (e) {
+      if (isVisitorLimitError(e)) {
+        res.status(403).json({ success: false, message: '分享访问人数已达上限' });
+        return;
+      }
+      throw e;
+    }
+
     let contentType = userFile.storage.mimeType;
     const ext = path.extname(userFile.fileName).toLowerCase();
     const mimeMap: Record<string, string> = {
@@ -296,21 +390,6 @@ export const downloadSharedFile = async (req: Request, res: Response): Promise<v
       `attachment; filename="${encodeURIComponent(userFile.fileName)}"`
     );
     res.setHeader('Content-Type', contentType);
-
-    await prisma.fileShare.update({
-      where: { id: share.id },
-      data: { downloadCount: { increment: 1 } }
-    });
-
-    await prisma.shareAccessLog.create({
-      data: {
-        shareId: share.id,
-        visitorId: null,
-        ipAddress: clientIp(req),
-        userAgent: (req.headers['user-agent'] || '').slice(0, 500) || null,
-        action: 'download'
-      }
-    });
 
     res.sendFile(physicalPath);
   } catch (error) {
