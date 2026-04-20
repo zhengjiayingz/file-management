@@ -453,3 +453,120 @@ export const createShare = async (req: AuthRequest, res: Response): Promise<void
     });
   }
 };
+
+/**
+ * 分享者：我创建的链接分享列表（含汇总次数）
+ */
+export const listMyShares = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      res.status(401).json({ success: false, message: '未认证' });
+      return;
+    }
+
+    const shares = await prisma.fileShare.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+      include: {
+        userFile: { select: { fileName: true, fileType: true } }
+      }
+    });
+
+    const data = shares.map((s) => {
+      const ids = idsFromShare(s);
+      const itemCount = ids.length;
+      const firstName = s.userFile.fileName;
+      const summary = itemCount <= 1 ? firstName : `${firstName} 等 ${itemCount} 项`;
+
+      return {
+        id: s.id,
+        shareCode: s.shareCode,
+        extractCode: s.extractCode,
+        autoFillExtract: s.autoFillExtract,
+        expireAt: s.expireAt ? s.expireAt.toISOString() : null,
+        status: s.status,
+        viewCount: s.viewCount,
+        downloadCount: s.downloadCount,
+        createdAt: s.createdAt.toISOString(),
+        itemCount,
+        summaryLabel: summary,
+        primaryFileType: s.userFile.fileType
+      };
+    });
+
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error('listMyShares error:', error);
+    res.status(500).json({ success: false, message: '获取分享列表失败' });
+  }
+};
+
+/**
+ * 分享者：单条分享的访问记录（分页）
+ */
+export const getShareAccessLogs = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      res.status(401).json({ success: false, message: '未认证' });
+      return;
+    }
+
+    const shareId = parseInt(String(req.params.shareId), 10);
+    if (!Number.isInteger(shareId) || shareId <= 0) {
+      res.status(400).json({ success: false, message: '无效的分享 ID' });
+      return;
+    }
+
+    const owned = await prisma.fileShare.findFirst({
+      where: { id: shareId, userId },
+      select: { id: true }
+    });
+    if (!owned) {
+      res.status(404).json({ success: false, message: '分享不存在或无权查看' });
+      return;
+    }
+
+    const page = Math.max(1, parseInt(String(req.query.page ?? '1'), 10) || 1);
+    const pageSize = Math.min(100, Math.max(1, parseInt(String(req.query.pageSize ?? '20'), 10) || 20));
+
+    const where = { shareId };
+    const [total, rows] = await Promise.all([
+      prisma.shareAccessLog.count({ where }),
+      prisma.shareAccessLog.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        select: {
+          id: true,
+          action: true,
+          ipAddress: true,
+          userAgent: true,
+          createdAt: true
+        }
+      })
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        list: rows.map((r) => ({
+          id: r.id,
+          action: r.action,
+          ipAddress: r.ipAddress,
+          userAgent: r.userAgent,
+          createdAt: r.createdAt.toISOString()
+        })),
+        total,
+        page,
+        pageSize
+      }
+    });
+  } catch (error) {
+    console.error('getShareAccessLogs error:', error);
+    res.status(500).json({ success: false, message: '获取访问记录失败' });
+  }
+};

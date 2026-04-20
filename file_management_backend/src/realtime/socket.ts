@@ -39,10 +39,15 @@ export function initSocket(httpServer: HttpServer): Server {
       const decoded = jwt.verify(token, process.env.JWT_SECRET!) as JwtPayload;
       const user = await prisma.user.findUnique({
         where: { id: decoded.id },
-        select: { id: true, status: true, mustChangePassword: true },
+        select: { id: true, status: true, mustChangePassword: true, sessionVersion: true },
       });
       if (!user || user.status !== 'active') {
         next(new Error('认证无效'));
+        return;
+      }
+      const tokenSv = decoded.sv ?? 0;
+      if (tokenSv !== user.sessionVersion) {
+        next(new Error('登录会话已失效'));
         return;
       }
       if (user.mustChangePassword) {

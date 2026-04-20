@@ -114,6 +114,19 @@
                     />
                   </template>
                 </el-table-column>
+                <el-table-column :label="t('admin.userManagement.loginSession')" width="148" align="center">
+                  <template #default="{ row }">
+                    <el-switch
+                      :model-value="isLoginSessionOn(row)"
+                      :disabled="isKickSwitchDisabled(row)"
+                      inline-prompt
+                      size="small"
+                      :active-text="t('admin.userManagement.sessionOnline')"
+                      :inactive-text="t('admin.userManagement.sessionKicked')"
+                      @change="(val: string | number | boolean) => onLoginSessionSwitch(row, Boolean(val))"
+                    />
+                  </template>
+                </el-table-column>
                 <el-table-column :label="t('admin.userManagement.storage')" min-width="140">
                   <template #default="{ row }">
                     {{ formatSize(row.storage_used) }} / {{ formatSize(row.storage_quota) }}
@@ -287,6 +300,37 @@ function isStatusSwitchDisabled(row: AdminUserRow) {
   return false
 }
 
+function isKickSwitchDisabled(row: AdminUserRow) {
+  return row.id === authStore.user?.id
+}
+
+function isLoginSessionOn(row: AdminUserRow) {
+  return !row.last_session_kick_at
+}
+
+async function onLoginSessionSwitch(row: AdminUserRow, nextOn: boolean) {
+  if (row.id === authStore.user?.id) {
+    ElMessage.warning(t('admin.userManagement.cannotKickSelf'))
+    return
+  }
+  try {
+    if (!nextOn) {
+      await adminApi.kickUserSessions(row.id)
+      row.last_session_kick_at = new Date().toISOString()
+      row.session_version = (row.session_version ?? 0) + 1
+      ElMessage.success(t('admin.userManagement.kickSessionsSuccess'))
+    } else {
+      await adminApi.clearUserSessionKickMarker(row.id)
+      row.last_session_kick_at = null
+      ElMessage.success(t('admin.userManagement.sessionKickAckSuccess'))
+    }
+  } catch (e: unknown) {
+    const err = e as { response?: { data?: { message?: string } } }
+    ElMessage.error(err.response?.data?.message || t('admin.loadErrorUnknown'))
+    await loadUsers()
+  }
+}
+
 async function onUserStatusChange(row: AdminUserRow, active: boolean) {
   const next = active ? 'active' : 'disabled'
   if (row.id === authStore.user?.id && next === 'disabled') {
@@ -300,6 +344,9 @@ async function onUserStatusChange(row: AdminUserRow, active: boolean) {
   try {
     await adminApi.updateUserStatus(row.id, next)
     row.status = next
+    if (next === 'active') {
+      row.last_session_kick_at = null
+    }
     ElMessage.success(t('admin.userManagement.statusUpdated'))
   } catch {
     await loadUsers()

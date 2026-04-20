@@ -66,6 +66,13 @@ request.interceptors.response.use(
       !isPublicAuthFailure
     ) {
       const authStore = useAuthStore()
+      const data = error.response.data as { code?: string } | undefined
+      if (data?.code === 'SESSION_REVOKED') {
+        processQueue(new Error('Session revoked'), null)
+        authStore.logout()
+        window.location.href = '/login'
+        return Promise.reject(error)
+      }
 
       if (isRefreshing) {
         // 如果正在刷新，将请求加入队列

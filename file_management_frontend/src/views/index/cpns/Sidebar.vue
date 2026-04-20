@@ -61,6 +61,12 @@
                 </el-icon>
                 <span>{{ t('sidebar.transferRecords') }}</span>
             </el-menu-item>
+            <el-menu-item index="my-shares" @click="openMyShares">
+                <el-icon>
+                    <Share />
+                </el-icon>
+                <span>{{ t('sidebar.myShares') }}</span>
+            </el-menu-item>
             <el-menu-item index="admin" v-if="authStore.user?.role === 'admin'" @click="router.push('/admin')">
                 <el-icon>
                     <Setting />
@@ -87,7 +93,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { Folder, Delete, List, Upload, Picture, VideoPlay, Headset, Document, Collection, Setting, ChatDotRound } from '@element-plus/icons-vue'
+import { Folder, Delete, List, Upload, Picture, VideoPlay, Headset, Document, Collection, Setting, ChatDotRound, Share } from '@element-plus/icons-vue'
 import { useI18n } from 'vue-i18n'
 import { useThemeStore } from '@stores/theme'
 import { useAuthStore } from '@stores/auth'
@@ -102,6 +108,10 @@ const messageUnreadStore = useMessageUnreadStore()
 
 const openFriendPanel = () => {
     window.dispatchEvent(new CustomEvent('open-friend-panel'))
+}
+
+const openMyShares = () => {
+    window.dispatchEvent(new CustomEvent('open-my-shares'))
 }
 
 const activeMenu = computed(() => {

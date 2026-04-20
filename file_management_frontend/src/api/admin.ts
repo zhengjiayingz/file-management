@@ -47,6 +47,8 @@ export interface AdminUserRow {
     storage_quota: number;
     storage_used: number;
     created_at: string;
+    session_version: number;
+    last_session_kick_at: string | null;
 }
 
 export const adminApi = {
@@ -79,5 +81,13 @@ export const adminApi = {
 
     async resetUserPassword(userId: number): Promise<void> {
         await request.post(`/admin/users/${userId}/reset-password`, {});
+    },
+
+    async kickUserSessions(userId: number): Promise<void> {
+        await request.post(`/admin/users/${userId}/kick-sessions`, {});
+    },
+
+    async clearUserSessionKickMarker(userId: number): Promise<void> {
+        await request.post(`/admin/users/${userId}/clear-session-kick-marker`, {});
     }
 };

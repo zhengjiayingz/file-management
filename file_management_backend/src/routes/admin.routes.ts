@@ -6,7 +6,9 @@ import {
     syncFriendshipsWithAdmin,
     listUsers,
     updateUserStatus,
-    resetUserPassword
+    resetUserPassword,
+    kickUserSessions,
+    clearUserSessionKickMarker
 } from '../controllers/admin.controller.js';
 
 const router: Router = Router();
@@ -21,5 +23,7 @@ router.post('/sync-friendships', syncFriendshipsWithAdmin);
 router.get('/users', listUsers);
 router.patch('/users/:id/status', updateUserStatus);
 router.post('/users/:id/reset-password', resetUserPassword);
+router.post('/users/:id/kick-sessions', kickUserSessions);
+router.post('/users/:id/clear-session-kick-marker', clearUserSessionKickMarker);
 
 export default router;

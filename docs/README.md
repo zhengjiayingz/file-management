@@ -1,6 +1,6 @@
 # 文档索引
 
-> **最后整理**：2026-04-19
+> **最后整理**：2026-04-20。安全相关验收口径（§5(2) Token 强失效：`session_version`/`sv` + Refresh 撤销，**不**做逐枚 Access 黑名单）以 [REQUIREMENTS.md](./REQUIREMENTS.md) 为准；库表字段见 [DATABASE_DESIGN.md](./DATABASE_DESIGN.md)。
 
 | 文档 | 说明 |
 |------|------|

@@ -126,8 +126,11 @@ properties:
 ### Q: Token 过期后怎么办？
 **A**: 
 1. 使用 `POST /api/auth/refresh` 接口刷新 token
-2. 或重新登录获取新 token
+2. 或重新登录获取新的 token
 3. 在 Swagger UI 中重新点击 **Authorize** 更新 token
+
+### Q: 接口返回 401 且 `code` 为 `SESSION_REVOKED`？
+**A**：表示当前 Access Token 已被 **会话版本**机制作废（例如管理员踢会话、账号被禁用、重置密码等）。应**清除本地登录态并重新登录**；不要继续用 Refresh 盲重试（若 Refresh 也已撤销，刷新会失败）。详见 [REQUIREMENTS.md](./REQUIREMENTS.md) §5 与 [DATABASE_DESIGN.md](./DATABASE_DESIGN.md) §5.1。
 
 ## 用户资料与头像（补充索引）
 

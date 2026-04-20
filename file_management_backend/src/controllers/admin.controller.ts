@@ -1,8 +1,25 @@
 import { Response } from 'express';
+import { Prisma } from '@prisma/client';
 import prisma from '../lib/prisma.js';
 import { AuthRequest } from '../types/index.js';
 import { ensureFriendshipWithAdmin, getPrimaryAdminId } from '../services/adminFriend.service.js';
 import { hashPassword, ADMIN_TEMP_RESET_PASSWORD } from '../services/passwordPolicy.service.js';
+
+/** listUsers 查询参数：由 Prisma 校验并与 UserGetPayload 联动，无需类型断言 */
+const adminUserListArgs = Prisma.validator<Prisma.UserDefaultArgs>()({
+    select: {
+        id: true,
+        username: true,
+        email: true,
+        role: true,
+        status: true,
+        storageQuota: true,
+        storageUsed: true,
+        createdAt: true,
+        sessionVersion: true,
+        lastSessionKickAt: true
+    }
+});
 
 export const getDashboardStats = async (_req: AuthRequest, res: Response): Promise<void> => {
     try {
@@ -174,16 +191,7 @@ export const listUsers = async (_req: AuthRequest, res: Response): Promise<void>
     try {
         const users = await prisma.user.findMany({
             orderBy: { id: 'asc' },
-            select: {
-                id: true,
-                username: true,
-                email: true,
-                role: true,
-                status: true,
-                storageQuota: true,
-                storageUsed: true,
-                createdAt: true
-            }
+            ...adminUserListArgs
         });
 
         res.json({
@@ -196,7 +204,11 @@ export const listUsers = async (_req: AuthRequest, res: Response): Promise<void>
                 status: u.status,
                 storage_quota: Number(u.storageQuota),
                 storage_used: Number(u.storageUsed),
-                created_at: u.createdAt
+                created_at: u.createdAt,
+                session_version: u.sessionVersion,
+                last_session_kick_at: u.lastSessionKickAt
+                    ? u.lastSessionKickAt.toISOString()
+                    : null
             }))
         });
     } catch (error) {
@@ -244,7 +256,12 @@ export const updateUserStatus = async (req: AuthRequest, res: Response): Promise
         await prisma.$transaction(async (tx) => {
             await tx.user.update({
                 where: { id },
-                data: { status: status as 'active' | 'disabled' }
+                data: {
+                    status: status as 'active' | 'disabled',
+                    ...(status === 'disabled'
+                        ? { sessionVersion: { increment: 1 }, lastSessionKickAt: new Date() }
+                        : { lastSessionKickAt: null })
+                }
             });
             if (status === 'disabled') {
                 await tx.refreshToken.updateMany({
@@ -282,7 +299,12 @@ export const resetUserPassword = async (req: AuthRequest, res: Response): Promis
         await prisma.$transaction(async (tx) => {
             await tx.user.update({
                 where: { id },
-                data: { password: hashed, mustChangePassword: true },
+                data: {
+                    password: hashed,
+                    mustChangePassword: true,
+                    sessionVersion: { increment: 1 },
+                    lastSessionKickAt: new Date()
+                },
             });
             await tx.refreshToken.updateMany({
                 where: { userId: id },
@@ -297,5 +319,80 @@ export const resetUserPassword = async (req: AuthRequest, res: Response): Promis
     } catch (error) {
         console.error('Reset user password error:', error);
         res.status(500).json({ success: false, message: '重置密码失败' });
+    }
+};
+
+/**
+ * 踢出用户所有登录会话（Access + Refresh 一并失效）
+ */
+export const kickUserSessions = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const id = parseInt(req.params.id, 10);
+        if (Number.isNaN(id)) {
+            res.status(400).json({ success: false, message: '无效的用户 ID' });
+            return;
+        }
+        if (!req.user) {
+            res.status(401).json({ success: false, message: '未认证' });
+            return;
+        }
+        if (id === req.user.id) {
+            res.status(400).json({ success: false, message: '不能踢出当前登录的管理员会话' });
+            return;
+        }
+
+        const target = await prisma.user.findUnique({ where: { id }, select: { id: true } });
+        if (!target) {
+            res.status(404).json({ success: false, message: '用户不存在' });
+            return;
+        }
+
+        await prisma.$transaction(async (tx) => {
+            await tx.user.update({
+                where: { id },
+                data: {
+                    sessionVersion: { increment: 1 },
+                    lastSessionKickAt: new Date()
+                }
+            });
+            await tx.refreshToken.updateMany({
+                where: { userId: id },
+                data: { isRevoked: true }
+            });
+        });
+
+        res.json({ success: true, message: '已踢出该用户所有会话' });
+    } catch (error) {
+        console.error('kickUserSessions error:', error);
+        res.status(500).json({ success: false, message: '踢出会话失败' });
+    }
+};
+
+/**
+ * 清除「踢出」展示标记（不恢复旧 Token；用户需重新登录）
+ */
+export const clearUserSessionKickMarker = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const id = parseInt(req.params.id, 10);
+        if (Number.isNaN(id)) {
+            res.status(400).json({ success: false, message: '无效的用户 ID' });
+            return;
+        }
+
+        const target = await prisma.user.findUnique({ where: { id }, select: { id: true } });
+        if (!target) {
+            res.status(404).json({ success: false, message: '用户不存在' });
+            return;
+        }
+
+        await prisma.user.update({
+            where: { id },
+            data: { lastSessionKickAt: null }
+        });
+
+        res.json({ success: true, message: '已恢复登录状态展示为正常' });
+    } catch (error) {
+        console.error('clearUserSessionKickMarker error:', error);
+        res.status(500).json({ success: false, message: '更新失败' });
     }
 };

@@ -41,7 +41,8 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
         id: true,
         username: true,
         status: true,
-        role: true
+        role: true,
+        sessionVersion: true
       }
     });
 
@@ -49,6 +50,16 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
       res.status(401).json({
         success: false,
         message: '用户不存在或认证无效'
+      });
+      return;
+    }
+
+    const tokenSv = decoded.sv ?? 0;
+    if (tokenSv !== user.sessionVersion) {
+      res.status(401).json({
+        success: false,
+        message: '登录会话已失效，请重新登录',
+        code: 'SESSION_REVOKED'
       });
       return;
     }
@@ -112,11 +123,13 @@ export const optionalAuth = async (req: AuthRequest, _res: Response, next: NextF
         select: {
           id: true,
           username: true,
-          status: true
+          status: true,
+          sessionVersion: true
         }
       });
 
-      if (user && user.status === 'active') {
+      const tokenSv = decoded.sv ?? 0;
+      if (user && user.status === 'active' && tokenSv === user.sessionVersion) {
         req.user = decoded;
       }
     }

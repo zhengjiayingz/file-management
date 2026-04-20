@@ -23,6 +23,10 @@ model User {
   status         Status   @default(active)
   /// 管理员重置为临时密码后，为 true；用户修改为符合策略的密码后为 false
   mustChangePassword Boolean @default(false) @map("must_change_password")
+  /// 会话版本：递增后此前签发的 Access Token 全部失效（踢人、改密、禁用等）
+  sessionVersion Int @default(0) @map("session_version")
+  /// 管理员「踢出登录」标记时间；登录成功会清空，供管理端「登录状态」开关展示
+  lastSessionKickAt DateTime? @map("last_session_kick_at")
   vipExpireAt    DateTime? @map("vip_expire_at")
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")

@@ -4,7 +4,7 @@
 
 本文档详细描述了文件管理系统各个功能模块的业务流程，包括每个步骤涉及的数据表操作。
 
-**与需求文档对齐**：验收口径与权限/回收策略以 [REQUIREMENTS.md](./REQUIREMENTS.md) 为准。**2026-04-18**：§7.3 已改为「仅定时任务回收无引用物理文件」，废止原「管理员手动清理」流程描述；VIP 完整申请与审核见 REQUIREMENTS「VIP 升级与审核流程」及本节 **6.2** 说明。**2026-04-19**：补充 **§9.3** 个人信息与资料更新（弹窗 + `GET/PUT /api/user/profile`、`POST /api/user/avatar`），与 REQUIREMENTS「其他需求」（3）（4）一致。**工程**：Prisma Client 生成与 Windows 环境问题见 [DEVELOPMENT.md](./DEVELOPMENT.md)。
+**与需求文档对齐**：验收口径与权限/回收策略以 [REQUIREMENTS.md](./REQUIREMENTS.md) 为准。**2026-04-18**：§7.3 已改为「仅定时任务回收无引用物理文件」，废止原「管理员手动清理」流程描述；VIP 完整申请与审核见 REQUIREMENTS「VIP 升级与审核流程」及本节 **6.2** 说明。**2026-04-19**：补充 **§9.3** 个人信息与资料更新（弹窗 + `GET/PUT /api/user/profile`、`POST /api/user/avatar`），与 REQUIREMENTS「其他需求」（3）（4）一致。**2026-04-20**：与 §5(2) 对齐——**Token 强失效**采用 **`users.session_version` + JWT `sv`** 与 **Refresh `is_revoked`**；**不**实现逐枚 Access（`jti`）黑名单；管理员踢会话见 **§7.1**。**工程**：Prisma Client 生成与 Windows 环境问题见 [DEVELOPMENT.md](./DEVELOPMENT.md)。
 
 ---
 
@@ -76,24 +76,27 @@ VALUES (?, ?, ?, 'user', 1073741824, 0, 'active')
    - 检查账户状态
 
 3. **生成双Token**
-   - 生成 Access Token（JWT，15分钟有效）
-   - 生成 Refresh Token（随机字符串，7天有效）
+   - 生成 Access Token（JWT，15 分钟有效，载荷含 **`sv`** = 当前 `users.session_version`）
+   - 生成 Refresh Token（随机字符串，7 天有效）
 
 4. **存储 Refresh Token**
    - 保存到 refresh_tokens 表
-   - 记录设备信息、IP地址
+   - 记录设备信息、IP 地址
 
-5. **记录登录日志**
+5. **（实现）清空踢人展示标记**
+   - 登录事务内 `users.last_session_kick_at = NULL`
+
+6. **记录登录日志**
    - 保存登录记录到 login_logs 表
 
-6. **返回Token**
+7. **返回Token**
    - 返回 Access Token 和 Refresh Token 给前端
 
 **涉及的表操作：**
 
 | 表名 | 操作类型 | 说明 |
 |------|---------|------|
-| users | SELECT | 查询用户信息并验证密码 |
+| users | SELECT / UPDATE | 验证密码；登录成功可更新 `last_session_kick_at` |
 | refresh_tokens | INSERT | 存储 Refresh Token |
 | login_logs | INSERT | 记录登录日志 |
 
@@ -131,7 +134,7 @@ VALUES (?, ?, ?, ?, 'success')
    - 检查是否过期（expires_at）
 
 4. **生成新的 Access Token**
-   - 生成新的 JWT Token
+   - 生成新的 JWT（载荷 **`sv`** 与当前 `users.session_version` 一致）
 
 5. **更新使用时间**
    - 更新 last_used_at 字段
@@ -185,11 +188,29 @@ UPDATE refresh_tokens SET is_revoked = TRUE WHERE token = ?
 
 ---
 
-### 1.5 多设备会话管理流程
+### 1.5 Token 强失效（会话版本，与需求 §5(2) 一致）
+
+**说明**：需求中的「黑名单」验收为 **Refresh 表内撤销** + **Access 与 `session_version`/`sv` 绑定**；**不**引入逐枚 Access（`jti`/Redis）存储。
+
+**API / Socket 校验（摘要）：**
+
+1. `jwt.verify` 成功后读取载荷中的 **`sv`**（旧 token 可无该字段，按 **0** 与库比较）。
+2. 查询 `users.session_version`，若 **`sv` ≠ `session_version`** → **401**（如 `code: SESSION_REVOKED`），前端应登出并引导重新登录。
+3. Socket.IO 握手使用同一 JWT 规则。
+
+**会使 `session_version` 递增的典型场景**（与实现对齐）：用户修改密码；管理员禁用用户、重置密码、**踢出会话**；等。
+
+**涉及的表：** `users`（`session_version`、`last_session_kick_at`）；`refresh_tokens`（批量 `is_revoked`，视场景而定）。
+
+---
+
+### 1.6 多设备会话管理流程
+
+> **产品状态（§5(7)）**：终端用户侧「会话列表 + 按设备撤销」**尚未**作为完整功能交付；管理员看板已支持 **踢出指定用户全部会话**（见 **§7.1.3**）。本节描述可作为后续扩展的表级操作参考。
 
 **流程步骤：**
 
-#### 1.5.1 查看所有活跃会话
+#### 1.6.1 查看所有活跃会话
 
 1. **查询用户的所有未撤销Token**
    - 查询 refresh_tokens 表
@@ -216,7 +237,7 @@ WHERE user_id = ? AND is_revoked = FALSE AND expires_at > NOW()
 ORDER BY last_used_at DESC
 ```
 
-#### 1.5.2 远程登出指定设备
+#### 1.6.2 远程登出指定设备
 
 1. **验证会话所有权**
    - 检查 token 是否属于当前用户
@@ -248,7 +269,7 @@ INSERT INTO operation_logs (user_id, operation_type, resource_type, resource_id,
 VALUES (?, 'remote_logout', 'session', ?, '远程登出设备', ?)
 ```
 
-#### 1.5.3 登出所有其他设备
+#### 1.6.3 登出所有其他设备
 
 1. **撤销除当前设备外的所有 Token**
    - 保留当前使用的 token
@@ -277,47 +298,40 @@ VALUES (?, 'logout_all_devices', 'session', '登出所有其他设备', ?)
 
 ---
 
-### 1.6 修改密码流程
+### 1.7 修改密码流程
 
 **流程步骤：**
 
-1. **验证原密码**
+1. **验证原密码**（强制改密场景可免填当前密码，以实现为准）
    - 查询用户记录
    - 验证原密码正确性
 
 2. **更新密码**
    - 新密码 SHA256 加密
-   - 更新 users 表
+   - 更新 `users` 表，**`session_version = session_version + 1`**（旧 Access 全部作废）
 
-3. **撤销所有 Refresh Token**
-   - 强制所有设备重新登录
+3. **Refresh Token（以实现为准）**
+   - 当前实现**不**批量撤销 Refresh；客户端可用 Refresh 换取带新 `sv` 的 Access
 
-4. **记录操作日志**
-   - 记录密码修改操作
+4. **返回新 Access Token**（载荷 `sv` 已更新）
+
+5. **（可选）记录操作日志**
 
 **涉及的表操作：**
 
 | 表名 | 操作类型 | 说明 |
 |------|---------|------|
 | users | SELECT | 验证原密码 |
-| users | UPDATE | 更新新密码 |
-| refresh_tokens | UPDATE | 撤销所有该用户的 Token |
-| operation_logs | INSERT | 记录操作日志 |
+| users | UPDATE | 更新新密码并递增 `session_version` |
+| operation_logs | INSERT | 可选，记录密码修改 |
 
-**SQL 示例：**
+**SQL 示例（逻辑示意）：**
 ```sql
 -- 验证原密码
-SELECT password FROM users WHERE id = ?
+SELECT password, session_version FROM users WHERE id = ?
 
--- 更新密码
-UPDATE users SET password = ?, updated_at = NOW() WHERE id = ?
-
--- 撤销所有 Token
-UPDATE refresh_tokens SET is_revoked = TRUE WHERE user_id = ?
-
--- 记录日志
-INSERT INTO operation_logs (user_id, operation_type, resource_type, description, ip_address)
-VALUES (?, 'password_change', 'user', '修改密码', ?)
+-- 更新密码并递增会话版本
+UPDATE users SET password = ?, session_version = session_version + 1, updated_at = NOW() WHERE id = ?
 ```
 
 ---
@@ -821,7 +835,7 @@ WHERE fh.id = ? AND fh.user_file_id = ?;
 2. **生成分享信息**
    - 生成唯一的 share_code（32位随机字符串）
    - 如果是私密分享，生成 extract_code（6位提取码）
-   - 设置分享权限（view/download/edit）
+   - `permission` 以 **`download`** 向与 [REQUIREMENTS.md](./REQUIREMENTS.md) §3（3）一致；**不**做「仅查看 / 可编辑」分档
    - 设置过期时间
 
 3. **创建分享记录**
@@ -1394,7 +1408,7 @@ UPDATE users SET storage_used = ? WHERE id = ?
    - 检查当前用户 role = 'admin'
 
 2. **查询用户列表**
-   - 获取所有用户信息
+   - 获取所有用户信息（含 `session_version`、`last_session_kick_at` 等，以实现为准）
 
 **涉及的表操作：**
 
@@ -1404,10 +1418,11 @@ UPDATE users SET storage_used = ? WHERE id = ?
 
 **SQL 示例：**
 ```sql
--- 查询所有用户
-SELECT id, username, email, role, storage_quota, storage_used, status, created_at
+-- 查询所有用户（字段以实现 / Prisma select 为准）
+SELECT id, username, email, role, storage_quota, storage_used, status,
+       session_version, last_session_kick_at, created_at
 FROM users
-ORDER BY created_at DESC
+ORDER BY id ASC
 ```
 
 #### 7.1.2 禁用/启用用户
@@ -1417,31 +1432,49 @@ ORDER BY created_at DESC
 1. **验证管理员权限**
 
 2. **更新用户状态**
-   - 设置 status = 'disabled' 或 'active'
+   - 设置 `status = 'disabled'` 或 `'active'`
 
-3. **撤销所有Token（禁用时）**
-   - 强制用户下线
+3. **禁用时：强失效会话**
+   - `users.session_version` 递增，`last_session_kick_at` 写入当前时间
+   - 将该用户所有 `refresh_tokens.is_revoked = TRUE`
+
+4. **重新启用时（以实现为准）**
+   - 可清除 `last_session_kick_at`，便于管理端「登录状态」展示恢复为在线
 
 **涉及的表操作：**
 
 | 表名 | 操作类型 | 说明 |
 |------|---------|------|
-| users | UPDATE | 更新用户状态 |
-| refresh_tokens | UPDATE | 撤销Token |
+| users | UPDATE | 更新状态、`session_version`、`last_session_kick_at` |
+| refresh_tokens | UPDATE | 禁用时撤销 Token |
 | operation_logs | INSERT | 记录操作 |
 
-**SQL 示例：**
+**SQL 示例（逻辑示意）：**
 ```sql
--- 禁用用户
-UPDATE users SET status = 'disabled', updated_at = NOW() WHERE id = ?
+-- 禁用用户并踢出所有会话
+UPDATE users SET
+  status = 'disabled',
+  session_version = session_version + 1,
+  last_session_kick_at = NOW(),
+  updated_at = NOW()
+WHERE id = ?
 
--- 撤销所有Token
 UPDATE refresh_tokens SET is_revoked = TRUE WHERE user_id = ?
 
--- 记录操作
-INSERT INTO operation_logs (user_id, operation_type, resource_type, resource_id, description, ip_address)
-VALUES (?, 'disable_user', 'user', ?, '禁用用户', ?)
+-- 重新启用（示例：仅恢复状态与展示标记，不自动恢复旧 JWT）
+UPDATE users SET status = 'active', last_session_kick_at = NULL, updated_at = NOW() WHERE id = ?
 ```
+
+#### 7.1.3 管理员踢出用户会话
+
+**流程步骤：**
+
+1. **验证管理员权限**，且不能踢出当前登录管理员本人（以实现为准）。
+2. **`users.session_version` 递增**，`last_session_kick_at = NOW()`。
+3. **该用户所有** `refresh_tokens` **标记** `is_revoked = TRUE`。
+4. （可选）管理员将「登录状态」开关拨回「在线」仅清除 `last_session_kick_at`，**不**回退 `session_version`。
+
+**接口（以实现为准）**：`POST /api/admin/users/:id/kick-sessions`；清除展示标记：`POST /api/admin/users/:id/clear-session-kick-marker`。
 
 ---
 

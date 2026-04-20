@@ -68,3 +68,54 @@ export function buildShareFileDownloadUrl(
   const qs = q.toString()
   return `${base}/api/shares/public/${encodeURIComponent(shareCode)}/file/${userFileId}/download${qs ? `?${qs}` : ''}`
 }
+
+/** 分享者：我的分享列表项 */
+export interface MyShareItem {
+  id: number
+  shareCode: string
+  extractCode: string | null
+  autoFillExtract: boolean
+  expireAt: string | null
+  status: string
+  viewCount: number
+  downloadCount: number
+  createdAt: string
+  itemCount: number
+  summaryLabel: string
+  primaryFileType: string
+}
+
+export async function listMyShares(): Promise<MyShareItem[]> {
+  const res = await request.get<{ success: boolean; data: MyShareItem[] }>('/shares/mine')
+  return res.data.data ?? []
+}
+
+export interface ShareAccessLogRow {
+  id: number
+  action: string
+  ipAddress: string
+  userAgent: string | null
+  createdAt: string
+}
+
+export async function getShareAccessLogs(
+  shareId: number,
+  page = 1,
+  pageSize = 20
+): Promise<{ list: ShareAccessLogRow[]; total: number; page: number; pageSize: number }> {
+  const res = await request.get<{
+    success: boolean
+    data: { list: ShareAccessLogRow[]; total: number; page: number; pageSize: number }
+  }>(`/shares/${shareId}/access-logs`, { params: { page, pageSize } })
+  return res.data.data
+}
+
+/** 构建访客打开的分享页链接（与 ShareLinkDialog 规则一致） */
+export function buildSharePageUrl(shareCode: string, extractCode: string | null, autoFillExtract: boolean): string {
+  const origin = typeof window !== 'undefined' ? window.location.origin : ''
+  let url = `${origin}/share/${encodeURIComponent(shareCode)}`
+  if (autoFillExtract && extractCode) {
+    url += `?e=${encodeURIComponent(extractCode)}`
+  }
+  return url
+}

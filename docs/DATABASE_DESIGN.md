@@ -1,7 +1,7 @@
 # 文件管理系统数据库设计文档
 
 > **与代码对齐**：本文档以 `file_management_backend/prisma/schema.prisma` 及 Prisma 迁移生成的表结构为准。  
-> **最后更新**：2026-04-19。
+> **最后更新**：2026-04-20。
 >
 > **Prisma Client**：修改 schema 后须执行 `prisma generate`；`npm install` / `npm run build` 已在后端包内配置自动生成（详见 [DEVELOPMENT.md](./DEVELOPMENT.md)）。Windows 若遇 `query_engine` 的 EPERM，请先停止 `npm run dev` 再生成。
 
@@ -35,6 +35,8 @@
 | storage_used | BIGINT | NOT NULL, DEFAULT 0 | 已使用存储（字节） |
 | status | ENUM('active', 'disabled') | NOT NULL, DEFAULT 'active' | 账户状态 |
 | must_change_password | BOOLEAN | NOT NULL, DEFAULT FALSE | 管理员重置临时密码后为 TRUE，用户改为强密码后为 FALSE |
+| session_version | INT | NOT NULL, DEFAULT 0 | 会话版本；递增后此前签发的 Access Token（JWT 内 `sv`）全部失效，见 §5.1 |
+| last_session_kick_at | DATETIME | NULL | 管理员踢会话标记时间；登录成功会清空，供管理端「登录状态」展示 |
 | vip_expire_at | DATETIME | NULL | VIP过期时间 |
 | created_at | DATETIME | NOT NULL, DEFAULT CURRENT_TIMESTAMP | 创建时间 |
 | updated_at | DATETIME | NOT NULL, DEFAULT CURRENT_TIMESTAMP ON UPDATE | 更新时间 |
@@ -148,7 +150,7 @@
 | user_file_ids | JSON | NULL | 批量分享时全部 `user_files.id` 的 JSON 数组；与 `user_file_id` 同时写入 |
 | share_code | VARCHAR(32) | UNIQUE, NOT NULL | 分享码（URL 路径段，唯一） |
 | extract_code | VARCHAR(6) | NULL | 提取码；库列为 6 字符以内，**业务规则为固定 4 位**字母数字；无提取码表示公开访问 |
-| permission | ENUM('view', 'download', 'edit') | NOT NULL, DEFAULT 'download' | 分享权限（当前实现创建时多为 download，可扩展） |
+| permission | ENUM('view', 'download', 'edit') | NOT NULL, DEFAULT 'download' | 库表枚举保留兼容；**产品**仅规范 **可下载** 向链接分享，不要求 `view`/`edit` 语义（见 [REQUIREMENTS.md](./REQUIREMENTS.md) §3（3）） |
 | expire_at | DATETIME | NULL | 过期时间（NULL 表示永久） |
 | auto_fill_extract | TINYINT(1) / BOOLEAN | NOT NULL, DEFAULT FALSE | 是否在分享链接查询参数中带提取码（`?e=`） |
 | max_visitors | INT | NULL | 访问人数上限；NULL 不限制（访客侧校验以实现为准） |
@@ -487,6 +489,8 @@ erDiagram
         bigint storage_quota
         bigint storage_used
         enum status
+        int session_version
+        datetime last_session_kick_at
         datetime vip_expire_at
         datetime created_at
         datetime updated_at
@@ -719,43 +723,51 @@ file_shares (文件分享)
 
 **登录流程：**
 1. 用户提交用户名和密码
-2. 验证成功后，生成 Access Token（15分钟有效）和 Refresh Token（7天有效）
+2. 验证成功后，生成 Access Token（JWT，15 分钟有效，载荷含 **`sv`** = 当前 `users.session_version`）和 Refresh Token（7 天有效）
 3. 将 Refresh Token 存入 `refresh_tokens` 表
-4. 记录登录日志到 `login_logs` 表
-5. 返回两个token给前端
-6. 前端将 Access Token 存储在内存，Refresh Token 存储在 HttpOnly Cookie 或 LocalStorage
+4. （实现）登录事务内将 `users.last_session_kick_at` 置空，便于管理端展示「在线」
+5. 记录登录日志到 `login_logs` 表
+6. 返回两个 token 给前端
+7. 前端将 Access Token 存储在内存（或等价位置），Refresh Token 常见为 LocalStorage（以实现为准）
 
-**API请求流程：**
-1. 前端在请求头中携带 Access Token
-2. 后端验证 Access Token 是否有效
-3. 如果有效，处理请求
-4. 如果过期，返回 401 状态码
+**API 请求流程：**
+1. 前端在请求头中携带 Access Token（`Authorization: Bearer`）
+2. 后端 `jwt.verify` 后校验 JWT 内 **`sv`** 与库中 **`users.session_version`** 一致；不一致则 **401**（如 `SESSION_REVOKED`），旧 Access 立即作废
+3. 校验用户 `status` 等后继续处理请求
+4. 若 JWT 过期或无效，返回 401
 
-**Token刷新流程：**
-1. 前端收到 401 状态码，自动调用刷新接口
+**Token 强失效（与需求 §5(2)「黑名单」验收口径一致）：**
+- **不**维护逐枚 Access Token（`jti`/Redis）黑名单。
+- **Refresh**：登出、禁用用户、管理员踢会话、重置密码等场景将相关 `refresh_tokens.is_revoked = TRUE`。
+- **Access**：依赖 **`session_version` 自增**（改密、禁用、踢会话、重置密码等），使已签发 JWT 的 `sv` 失效；Socket.IO 握手同样校验 `sv`。
+
+**Token 刷新流程：**
+1. 前端收到 401 状态码（且非 `SESSION_REVOKED` 等业务码时），自动调用刷新接口
 2. 携带 Refresh Token 请求新的 Access Token
 3. 后端验证 Refresh Token：
    - 检查是否存在于 `refresh_tokens` 表
    - 检查是否已撤销（is_revoked）
    - 检查是否过期（expires_at）
-4. 验证通过，生成新的 Access Token
+4. 验证通过，生成新的 Access Token（**`sv`** 与当前 `session_version` 一致）
 5. 更新 `refresh_tokens.last_used_at`
 6. 返回新的 Access Token
-7. 前端使用新token重试原请求
+7. 前端使用新 token 重试原请求
 
 **登出流程：**
 1. 用户主动登出
 2. 将对应的 Refresh Token 标记为已撤销（is_revoked = TRUE）
-3. 前端清除所有token
+3. 前端清除所有 token（当前 Access 在过期前仍可能短期有效，除非另行引入逐枚黑名单；产品不要求）
 
-**修改密码/安全操作：**
-1. 执行安全操作后，撤销该用户所有 Refresh Token
-2. 强制所有设备重新登录
+**修改密码（以实现为准）：**
+1. 更新密码并将 **`users.session_version` + 1**，此前所有 Access 立即失效
+2. **不**批量撤销 Refresh：当前端仍可用 Refresh 换新 Access（与现网一致）
 
-**多设备管理：**
-1. 查询用户的所有未撤销的 Refresh Token
-2. 显示设备列表（设备名称、登录时间、最后使用时间、IP）
-3. 用户可以选择撤销指定设备的token
+**禁用 / 管理员重置密码 / 管理员踢会话：**
+1. **`session_version` 递增**，并批量 `refresh_tokens.is_revoked = TRUE`（踢会话、重置密码、禁用等场景按实现组合）
+2. 禁用等场景可写入 `last_session_kick_at` 供管理端展示
+
+**多设备列表与按设备撤销（需求 §5(7)）：**
+- **当前版本**：终端用户侧**未**提供完整会话列表 UI；管理员看板支持 **踢出用户所有会话**（`POST /api/admin/users/:id/kick-sessions`）。以下「查询 refresh 列表、按行撤销」仍可作为后续产品扩展参考。
 
 ### 5.2 文件上传流程
 
@@ -840,11 +852,11 @@ WHERE uf.user_id = ? AND uf.is_deleted = FALSE AND uf.file_type = 'file'
 4. **分享链接**：使用随机生成的 share_code
 5. **敏感信息**：不在日志中记录密码等敏感信息
 6. **Token安全**：
-   - Access Token 短期有效（15分钟）
-   - Refresh Token 长期有效（7天）
-   - Refresh Token 存储加密
-   - 支持token撤销和黑名单机制
-   - HttpOnly Cookie 防止XSS攻击
+   - Access Token 短期有效（15分钟），载荷含 **`sv`** 与 **`session_version`** 绑定
+   - Refresh Token 长期有效（7天）；表内 **`is_revoked`** 支持撤销
+   - **强失效**：会话版本递增 + Refresh 撤销；**不**要求独立 Access 逐枚黑名单（与 [REQUIREMENTS.md](./REQUIREMENTS.md) §5 一致）
+   - Refresh Token 存储方式与是否加密以实现为准
+   - HttpOnly Cookie 可降低 XSS 风险（若前端采用 Cookie 方案）
 7. **CSRF防护**：使用CSRF Token或SameSite Cookie
 8. **异常检测**：监控异地登录、频繁刷新token等异常行为
 
@@ -858,5 +870,5 @@ WHERE uf.user_id = ? AND uf.is_deleted = FALSE AND uf.file_type = 'file'
 
 ---
 
-**文档版本**：v1.1  
-**最后更新**：2026-04-18（与 `prisma/schema.prisma` 对齐）
+**文档版本**：v1.2  
+**最后更新**：2026-04-20（与 `prisma/schema.prisma` 对齐，含 `session_version` / `last_session_kick_at`）

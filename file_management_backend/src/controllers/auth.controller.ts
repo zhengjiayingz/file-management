@@ -15,9 +15,14 @@ dotenv.config();
 /**
  * 生成 Access Token (15分钟)
  */
-const generateAccessToken = (userId: number, username: string, mustChangePassword: boolean): string => {
+const generateAccessToken = (
+  userId: number,
+  username: string,
+  mustChangePassword: boolean,
+  sessionVersion: number
+): string => {
   return jwt.sign(
-    { id: userId, username, mustChangePassword },
+    { id: userId, username, mustChangePassword, sv: sessionVersion },
     process.env.JWT_SECRET!,
     { expiresIn: '15m' }
   );
@@ -111,7 +116,7 @@ export const register = async (req: AuthRequest, res: Response): Promise<void> =
       });
 
       // 生成tokens
-      const accessToken = generateAccessToken(newUser.id, newUser.username, false);
+      const accessToken = generateAccessToken(newUser.id, newUser.username, false, newUser.sessionVersion);
       const refreshToken = generateRefreshToken();
 
       // 存储 Refresh Token
@@ -256,8 +261,18 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
 
     // 使用事务处理登录成功的操作
     const result = await prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: user.id },
+        data: { lastSessionKickAt: null },
+      });
+
       // 生成tokens
-      const accessToken = generateAccessToken(user.id, user.username, user.mustChangePassword);
+      const accessToken = generateAccessToken(
+        user.id,
+        user.username,
+        user.mustChangePassword,
+        user.sessionVersion
+      );
       const refreshToken = generateRefreshToken();
 
       // 存储 Refresh Token
@@ -397,6 +412,7 @@ export const refreshToken = async (req: AuthRequest, res: Response): Promise<voi
             username: true,
             status: true,
             mustChangePassword: true,
+            sessionVersion: true,
           },
         },
       },
@@ -434,7 +450,8 @@ export const refreshToken = async (req: AuthRequest, res: Response): Promise<voi
       const newAccessToken = generateAccessToken(
         tokenRecord.user.id,
         tokenRecord.user.username,
-        tokenRecord.user.mustChangePassword
+        tokenRecord.user.mustChangePassword,
+        tokenRecord.user.sessionVersion
       );
       
       return { newAccessToken };
@@ -548,10 +565,20 @@ export const changePassword = async (req: AuthRequest, res: Response): Promise<v
       data: {
         password: hashPassword(newPassword),
         mustChangePassword: false,
+        sessionVersion: { increment: 1 },
       },
     });
 
-    const accessToken = generateAccessToken(user.id, user.username, false);
+    const userAfter = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { sessionVersion: true },
+    });
+    const accessToken = generateAccessToken(
+      user.id,
+      user.username,
+      false,
+      userAfter?.sessionVersion ?? 0
+    );
 
     res.json({
       success: true,

@@ -99,6 +99,7 @@
                     <template #dropdown>
                         <el-dropdown-menu>
                             <el-dropdown-item command="profile">{{ t('common.profile') || '个人信息' }}</el-dropdown-item>
+                            <el-dropdown-item command="myShares">{{ t('header.myShares') }}</el-dropdown-item>
                             <el-dropdown-item command="settings">{{ t('common.settings') || '设置' }}</el-dropdown-item>
                             <el-dropdown-item divided command="logout">{{ t('common.logout') || '退出登录'
                             }}</el-dropdown-item>
@@ -111,11 +112,12 @@
         <VipCenterDialog v-model="vipDialogVisible" />
         <PersonalInfoDialog v-model="profileDialogVisible" @open-vip="openVipFromProfile" />
         <UserSettingsDialog v-model="settingsDialogVisible" />
+        <MySharesDialog v-model="mySharesDialogVisible" />
     </el-header>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { User, ArrowDown, Sunny, Moon, Monitor } from '@element-plus/icons-vue'
@@ -128,6 +130,7 @@ import userPreferenceApi from '@api/user-preference'
 import VipCenterDialog from '@components/VipCenterDialog/index.vue'
 import PersonalInfoDialog from '@components/PersonalInfoDialog/index.vue'
 import UserSettingsDialog from '@components/UserSettingsDialog/index.vue'
+import MySharesDialog from '@components/MySharesDialog/index.vue'
 import { publicAssetUrl } from '@utils/publicAssetUrl'
 
 const router = useRouter()
@@ -138,6 +141,19 @@ const { t, locale } = useI18n()
 const vipDialogVisible = ref(false)
 const profileDialogVisible = ref(false)
 const settingsDialogVisible = ref(false)
+const mySharesDialogVisible = ref(false)
+
+const openMySharesFromSidebar = () => {
+    mySharesDialogVisible.value = true
+}
+
+onMounted(() => {
+    window.addEventListener('open-my-shares', openMySharesFromSidebar)
+})
+
+onUnmounted(() => {
+    window.removeEventListener('open-my-shares', openMySharesFromSidebar)
+})
 
 const userAvatarSrc = computed(() => publicAssetUrl(authStore.user?.avatar))
 
@@ -187,6 +203,9 @@ const handleCommand = async (command: string) => {
     switch (command) {
         case 'profile':
             profileDialogVisible.value = true
+            break
+        case 'myShares':
+            mySharesDialogVisible.value = true
             break
         case 'settings':
             settingsDialogVisible.value = true

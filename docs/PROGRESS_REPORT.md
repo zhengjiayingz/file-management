@@ -1,6 +1,6 @@
 # 文件管理系统 — 需求实现进度报告
 
-> **最后更新时间**: 2026-04-19
+> **最后更新时间**: 2026-04-20
 >
 > **对照文档**: [REQUIREMENTS.md](./REQUIREMENTS.md)、[UNFINISHED_REQUIREMENTS.md](./UNFINISHED_REQUIREMENTS.md)
 >
@@ -65,8 +65,8 @@
 |---|----------|------|------|
 | (1) | 生成分享链接（公开/私密+提取码） | ✅ 已实现 | `POST /api/shares`（`share.controller.ts` `createShare`）；前端 `ShareLinkDialog`；公开访客页 `share-access/index.vue`；无提取码即公开访问、有提取码即私密；支持 URL 查询参数预填提取码（`autoFillExtract`） |
 | (2) | 分享链接有效期设置 | ✅ 已实现 | `validity`：`1d` / `7d` / `30d` / `1y` / `forever` → `expireAt`；访问时 `findActiveShare` 校验过期；`cleanup.job.ts` 定时删除已过期 `file_shares`（`ShareAccessLog` 级联） |
-| (3) | 分享权限控制（仅查看/可下载/可编辑） | ⚠️ 部分实现 | 库表含 `SharePermission`，创建时目前固定 `permission: 'download'`；访客列表对文件有 `downloadable` 等表现，**未**实现三档可选与「可编辑」链路，见 [UNFINISHED_REQUIREMENTS.md](./UNFINISHED_REQUIREMENTS.md) §3 |
-| (4) | 分享记录（访问日志） | ⚠️ 部分实现 | `accessPublicShare` / `downloadSharedFile` 写入 `ShareAccessLog`（IP、UA、view/download）；**分享者侧记录列表** API/页面未做，见 [UNFINISHED_REQUIREMENTS.md](./UNFINISHED_REQUIREMENTS.md) §3 |
+| (3) | 链接分享访客能力（可下载向） | ✅ 已实现 | 与 [REQUIREMENTS.md](./REQUIREMENTS.md) §3（3）一致：**不**做「仅查看 / 可编辑」分档；访客列表、预览、下载、转存等按产品约定；库表 `permission` 以实现为准 |
+| (4) | 分享记录（访问日志，分享者可见） | ✅ 已实现 | 访客访问写入 `ShareAccessLog`；分享者 **顶栏 → 我的分享**：列表（`GET /api/shares/mine`）+ 单条 **访问记录** 分页（`GET /api/shares/:id/access-logs`） |
 
 ---
 
@@ -84,7 +84,7 @@
 | # | 功能需求 | 状态 | 说明 |
 |---|----------|------|------|
 | (1) | 双 Token 认证 | ✅ 已实现 | Access Token + Refresh Token 完整实现 |
-| (2) | Token 管理（刷新、撤销、黑名单） | ⚠️ 部分实现 | 刷新和登出时撤销已实现。但**没有 Token 黑名单机制** |
+| (2) | Token 管理（刷新、撤销、黑名单） | ✅ 已实现 | **Refresh** 刷新与登出撤销（`is_revoked`）。**强失效**：Access 载荷 **`sv`** 与 **`session_version`** 一致校验；改密、禁用、管理员踢会话等递增版本，旧 Access 立即作废（`SESSION_REVOKED`）。**不**另建逐枚 Access（`jti`）黑名单，与需求文档验收口径一致。 |
 | (3) | 登录日志（时间、IP、设备） | ✅ 已实现 | `logOperation` 会记录 IP 和 UserAgent；登录时有 `LOGIN` 类型日志 |
 | (4) | 异常登录/异地登录提醒 | ❌ 未实现 | - |
 | (5) | 文件加密存储（可选） | ❌ 未实现 | - |
@@ -120,12 +120,12 @@
 |------|----------|----------|------------|----------|
 | 1. 用户管理 | 8 | 8 | 0 | 0 |
 | 2. 文件管理 | 17 | 16 | 1 | 0 |
-| 3. 文件分享 | 4 | 2 | 2 | 0 |
+| 3. 文件分享 | 4 | 4 | 0 | 0 |
 | 4. 权限管理 | 2 | 2 | 0 | 0 |
-| 5. 安全性 | 7 | 3 | 1 | 3 |
+| 5. 安全性 | 7 | 4 | 0 | 3 |
 | 6. 管理员功能 | 3 | 2 | 0 | 1 |
 | 7. 其他需求 | 4 | 4 | 0 | 0 |
-| **合计** | **45** | **37 (≈82%)** | **4 (≈9%)** | **4 (≈9%)** |
+| **合计** | **45** | **40 (≈89%)** | **1 (≈2%)** | **4 (≈9%)** |
 
 ---
 
@@ -140,7 +140,7 @@
 - ✅ 存储配额管理和展示
 
 ### 第二阶段 — ⚠️ 部分完成
-- ⚠️ 文件分享（链接分享、有效期、提取码）— **已实现**；**权限三档**与**分享者侧访问记录**仍为部分，见 [UNFINISHED_REQUIREMENTS.md](./UNFINISHED_REQUIREMENTS.md) §3
+- ✅ 文件分享 — 链接分享、**我的分享**与分享者访问记录已实现（§3(3) 三档权限已废止，见 [REQUIREMENTS.md](./REQUIREMENTS.md)）；`max_visitors` 访客端校验见 [UNFINISHED_REQUIREMENTS.md](./UNFINISHED_REQUIREMENTS.md) §3
 - ✅ 好友系统（添加好友、好友列表）
 - ✅ 消息系统（收发消息、已读状态、Socket.IO 实时推送）
 - ✅ 文件预览功能
@@ -161,7 +161,7 @@
 按优先级排序：
 
 ### 🔴 高优先级
-1. **分享权限与记录补全** — §3(3) 三档权限可选 + 全链路校验；§3(4) 分享者侧访问记录列表（API + 前端）；可选：`max_visitors` 访客端 enforcement（[UNFINISHED_REQUIREMENTS.md](./UNFINISHED_REQUIREMENTS.md) §3）
+1. **`max_visitors` 访客端上限** — [UNFINISHED_REQUIREMENTS.md](./UNFINISHED_REQUIREMENTS.md) §3（若产品保留）
 
 ### 🟡 中优先级
 2. **大文件分页预览** — §2(17) 剩余项（[UNFINISHED_REQUIREMENTS.md](./UNFINISHED_REQUIREMENTS.md)）
@@ -169,8 +169,7 @@
 
 ### 🟢 低优先级（可选）
 4. **异常登录检测** — 异地登录提醒
-5. **Token 黑名单机制** — 安全性增强（§5(2)）
-6. **文件加密存储** — 可选功能
-7. **文件审核** — 违规文件检测与处理（§6(3)）
+5. **文件加密存储** — 可选功能
+6. **文件审核** — 违规文件检测与处理（§6(3)）
 
-**已验收 / 不再作为待开发**：VIP 申请与审核、ZIP 在线解压 §2(1-1)、音频/视频播放进度记忆、无引用文件仅依赖定时任务（不提供管理员手动清理）、**链接分享主体**（创建链接、访客访问、转存、过期与定时清理）、**通讯录实时消息与好友同步**（Socket.IO + 抽屉会话状态）。详见 [REQUIREMENTS.md](./REQUIREMENTS.md)。
+**已验收 / 不再作为待开发**：VIP 申请与审核、ZIP 在线解压 §2(1-1)、音频/视频播放进度记忆、无引用文件仅依赖定时任务（不提供管理员手动清理）、**链接分享主体**（创建链接、访客访问、转存、过期与定时清理；**不含**§3 原「仅查看/可编辑」分档，已废止）、**通讯录实时消息与好友同步**（Socket.IO + 抽屉会话状态）、**§5(2) Token 强失效**（`session_version`/`sv` + Refresh 撤销；不引入逐枚 Access 黑名单）。详见 [REQUIREMENTS.md](./REQUIREMENTS.md)。

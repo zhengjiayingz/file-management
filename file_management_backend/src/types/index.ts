@@ -7,6 +7,8 @@ export interface JwtPayload {
   role?: string;
   /** 为 true 时表示临时密码登录，仅允许修改密码等白名单接口 */
   mustChangePassword?: boolean;
+  /** 须与用户表 sessionVersion 一致，否则视为已失效 */
+  sv?: number;
 }
 
 // 扩展 Express Request 类型
