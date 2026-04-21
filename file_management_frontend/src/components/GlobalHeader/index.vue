@@ -254,8 +254,8 @@ const handleCommand = async (command: string) => {
 
 <style lang="scss" scoped>
 .global-header {
-    background: white;
-    border-bottom: 1px solid #e4e7ed;
+    background: var(--el-bg-color);
+    border-bottom: 1px solid var(--el-border-color-light);
     padding: 0 20px;
 
     .header-content {
@@ -269,6 +269,16 @@ const handleCommand = async (command: string) => {
         display: flex;
         align-items: center;
         gap: 12px;
+
+        /* 插槽内容来自父组件，需 :deep 才能应用主题主色（深色模式为浅色字） */
+        :deep(h1),
+        :deep(h2),
+        :deep(h3),
+        :deep(h4) {
+            margin: 0;
+            font-weight: 500;
+            color: var(--el-text-color-primary);
+        }
     }
 
     .header-right {

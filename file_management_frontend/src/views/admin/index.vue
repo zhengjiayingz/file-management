@@ -376,6 +376,8 @@ async function openResetPassword(row: AdminUserRow) {
 const initCharts = () => {
   if (!stats.value) return
 
+  const isDark = document.documentElement.classList.contains('dark')
+
   if (fileTypeChartRef.value) {
     fileTypeChart?.dispose()
     fileTypeChart = echarts.init(fileTypeChartRef.value)
@@ -391,6 +393,8 @@ const initCharts = () => {
       value
     }))
 
+    const pieSliceBorder = isDark ? '#1d1e1f' : '#fff'
+
     fileTypeChart.setOption({
       tooltip: {
         trigger: 'item',
@@ -399,7 +403,8 @@ const initCharts = () => {
       legend: {
         orient: 'vertical',
         left: 'left',
-        top: 'center'
+        top: 'center',
+        textStyle: { color: isDark ? '#cfd3dc' : undefined }
       },
       series: [
         {
@@ -410,7 +415,7 @@ const initCharts = () => {
           avoidLabelOverlap: true,
           itemStyle: {
             borderRadius: 6,
-            borderColor: '#fff',
+            borderColor: pieSliceBorder,
             borderWidth: 2
           },
           label: {
@@ -456,11 +461,15 @@ const initCharts = () => {
       },
       xAxis: {
         type: 'category',
-        data: rankData.map((i) => i.name)
+        data: rankData.map((i) => i.name),
+        axisLabel: { color: isDark ? '#a3a6ad' : undefined }
       },
       yAxis: {
         type: 'value',
-        name: t('admin.charts.storageAxisMB')
+        name: t('admin.charts.storageAxisMB'),
+        axisLabel: { color: isDark ? '#a3a6ad' : undefined },
+        nameTextStyle: { color: isDark ? '#a3a6ad' : undefined },
+        splitLine: { lineStyle: { color: isDark ? 'rgba(255,255,255,0.08)' : undefined } }
       },
       series: [
         {
@@ -468,7 +477,7 @@ const initCharts = () => {
           type: 'bar',
           showBackground: true,
           backgroundStyle: {
-            color: 'rgba(180, 180, 180, 0.2)'
+            color: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(180, 180, 180, 0.2)'
           },
           label: {
             show: true,
@@ -505,19 +514,35 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+/* 使用 Element Plus 变量，避免深色模式下页背仍为浅灰从而在区块间露出「白缝」 */
 .admin-dashboard {
-  background-color: #f5f7fa;
   min-height: 100vh;
+  background-color: var(--el-bg-color-page);
+  color: var(--el-text-color-primary);
+}
+
+.admin-dashboard :deep(.el-container) {
+  background-color: transparent;
+}
+
+.admin-dashboard :deep(.el-main) {
+  background-color: transparent;
 }
 
 .dashboard-header {
-  background-color: #fff;
+  background-color: var(--el-bg-color);
   display: flex;
   justify-content: space-between;
   align-items: center;
   padding: 0 20px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  box-shadow: var(--el-box-shadow-lighter);
   margin-bottom: 20px;
+}
+
+.dashboard-header h2 {
+  color: var(--el-text-color-primary);
+  font-weight: 600;
 }
 
 .overview-cards {
@@ -539,17 +564,17 @@ onUnmounted(() => {
 .card-value {
   font-size: 24px;
   font-weight: bold;
-  color: #303133;
+  color: var(--el-text-color-primary);
   margin: 10px 0;
 }
 
 .card-desc {
   font-size: 14px;
-  color: #909399;
+  color: var(--el-text-color-secondary);
 }
 
 .status-normal {
-  color: #67c23a;
+  color: var(--el-color-success);
 }
 
 .charts-row {

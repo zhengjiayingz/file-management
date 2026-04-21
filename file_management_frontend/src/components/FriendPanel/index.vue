@@ -20,7 +20,7 @@
                     <div style="display: flex; align-items: center; gap: 8px;">
                         <el-button v-if="currentChatFriend" icon="ArrowLeft" circle size="small"
                             @click="currentChatFriend = null; loadData()" />
-                        <h4 :id="titleId" :class="titleClass" style="margin: 0; color: #303133;">
+                        <h4 :id="titleId" :class="titleClass" style="margin: 0; color: var(--el-text-color-primary);">
                             {{ panelHeaderTitle }}
                         </h4>
                     </div>
