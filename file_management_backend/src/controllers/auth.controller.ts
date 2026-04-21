@@ -2,6 +2,7 @@ import { Response } from 'express';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import dotenv from 'dotenv';
+import { Prisma, type Role } from '@prisma/client';
 import prisma from '../lib/prisma.js';
 import { AuthRequest, LoginBody, RegisterBody } from '../types/index.js';
 import { ensureFriendshipWithAdmin, getPrimaryAdminId } from '../services/adminFriend.service.js';
@@ -34,6 +35,60 @@ const generateAccessToken = (
 const generateRefreshToken = (): string => {
   return crypto.randomBytes(64).toString('hex');
 };
+
+/** 管理员不限制；VIP 5；普通用户 2 */
+function getMaxSessionSlots(role: Role): number | null {
+  if (role === 'admin') return null;
+  if (role === 'vip') return 5;
+  return 2;
+}
+
+async function listActiveSessionsForResponse(userId: number) {
+  const rows = await prisma.refreshToken.findMany({
+    where: {
+      userId,
+      isRevoked: false,
+      expiresAt: { gt: new Date() }
+    },
+    orderBy: [{ lastUsedAt: 'desc' }, { createdAt: 'desc' }],
+    select: {
+      id: true,
+      ipAddress: true,
+      userAgent: true,
+      deviceName: true,
+      deviceType: true,
+      createdAt: true,
+      lastUsedAt: true
+    }
+  });
+  return rows.map((r) => ({
+    id: r.id,
+    ipAddress: r.ipAddress,
+    userAgent: r.userAgent,
+    deviceName: r.deviceName,
+    deviceType: r.deviceType,
+    createdAt: r.createdAt.toISOString(),
+    lastUsedAt: r.lastUsedAt ? r.lastUsedAt.toISOString() : null
+  }));
+}
+
+/** 事务内抛出的会话上限（回滚后由外层查询列表再返回 409） */
+class SessionLimitError extends Error {
+  constructor(
+    public readonly uid: number,
+    public readonly role: Role
+  ) {
+    super('SESSION_LIMIT');
+    this.name = 'SessionLimitError';
+  }
+}
+
+class InvalidRevokeSessionError extends Error {
+  constructor() {
+    super('INVALID_REVOKE_SESSION');
+    this.name = 'InvalidRevokeSessionError';
+  }
+}
 
 /**
  * 用户注册
@@ -259,46 +314,121 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
       return;
     }
 
-    // 使用事务处理登录成功的操作
-    const result = await prisma.$transaction(async (tx) => {
-      await tx.user.update({
-        where: { id: user.id },
-        data: { lastSessionKickAt: null },
-      });
+    const { revokeSessionId } = req.body as LoginBody;
+    const limit = getMaxSessionSlots(user.role);
 
-      // 生成tokens
-      const accessToken = generateAccessToken(
-        user.id,
-        user.username,
-        user.mustChangePassword,
-        user.sessionVersion
+    let revokeId: number | undefined;
+    if (revokeSessionId != null) {
+      const rid = Number(revokeSessionId);
+      if (!Number.isInteger(rid) || rid <= 0) {
+        res.status(400).json({ success: false, message: '无效的会话参数' });
+        return;
+      }
+      revokeId = rid;
+    }
+
+    let result: { accessToken: string; refreshToken: string };
+
+    try {
+      result = await prisma.$transaction(
+        async (tx) => {
+          if (revokeId != null) {
+            const revoked = await tx.refreshToken.updateMany({
+              where: { id: revokeId, userId: user.id, isRevoked: false },
+              data: { isRevoked: true }
+            });
+            if (revoked.count === 0) {
+              throw new InvalidRevokeSessionError();
+            }
+          }
+
+          const activeWhere = {
+            userId: user.id,
+            isRevoked: false,
+            expiresAt: { gt: new Date() }
+          };
+          const activeCount = await tx.refreshToken.count({ where: activeWhere });
+
+          if (limit !== null && activeCount >= limit) {
+            throw new SessionLimitError(user.id, user.role);
+          }
+
+          /**
+           * 仅撤销 refresh 行无法立刻让该端下线：Access Token 仍有效至过期。
+           * 与管理员踢人一致：递增 sessionVersion，使旧 JWT 的 sv 与库中不一致，
+           * authenticate 将 401 SESSION_REVOKED；被撤销的 refresh 无法再 refresh。
+           * 其它未踢设备用各自 refresh 换签后可拿到新 sv，保持在线。
+           */
+          const uAfter = await tx.user.update({
+            where: { id: user.id },
+            data: {
+              lastSessionKickAt: null,
+              ...(revokeId != null ? { sessionVersion: { increment: 1 } } : {})
+            },
+            select: { sessionVersion: true }
+          });
+
+          const accessToken = generateAccessToken(
+            user.id,
+            user.username,
+            user.mustChangePassword,
+            uAfter.sessionVersion
+          );
+          const refreshToken = generateRefreshToken();
+
+          await tx.refreshToken.create({
+            data: {
+              userId: user.id,
+              token: refreshToken,
+              deviceType: 'web',
+              ipAddress: req.ip || req.socket?.remoteAddress || 'unknown',
+              userAgent: req.get('User-Agent') || null,
+              expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+            }
+          });
+
+          await tx.loginLog.create({
+            data: {
+              userId: user.id,
+              ipAddress: req.ip || req.socket?.remoteAddress || 'unknown',
+              userAgent: req.get('User-Agent') || null,
+              status: 'success'
+            }
+          });
+
+          return { accessToken, refreshToken };
+        },
+        {
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+          maxWait: 5000,
+          timeout: 10000
+        }
       );
-      const refreshToken = generateRefreshToken();
-
-      // 存储 Refresh Token
-      await tx.refreshToken.create({
-        data: {
-          userId: user.id,
-          token: refreshToken,
-          deviceType: 'web',
-          ipAddress: req.ip || req.socket?.remoteAddress || 'unknown',
-          userAgent: req.get('User-Agent') || null,
-          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7天后过期
-        }
-      });
-
-      // 记录成功登录
-      await tx.loginLog.create({
-        data: {
-          userId: user.id,
-          ipAddress: req.ip || req.socket?.remoteAddress || 'unknown',
-          userAgent: req.get('User-Agent') || null,
-          status: 'success'
-        }
-      });
-
-      return { accessToken, refreshToken };
-    });
+    } catch (err: unknown) {
+      if (err instanceof SessionLimitError) {
+        const sessions = await listActiveSessionsForResponse(err.uid);
+        const lim = getMaxSessionSlots(err.role);
+        res.status(409).json({
+          success: false,
+          code: 'SESSION_LIMIT',
+          message: '会话数达到上限',
+          data: {
+            maxSessions: lim,
+            sessions,
+            showVipLink: err.role === 'user'
+          }
+        });
+        return;
+      }
+      if (err instanceof InvalidRevokeSessionError) {
+        res.status(400).json({
+          success: false,
+          message: '无效的会话或已失效'
+        });
+        return;
+      }
+      throw err;
+    }
 
     res.json({
       success: true,
@@ -662,5 +792,114 @@ export const getCurrentUser = async (req: AuthRequest, res: Response): Promise<v
       success: false,
       message: '获取用户信息失败'
     });
+  }
+};
+
+/**
+ * 当前用户活跃会话列表（顶栏「会话管理」）
+ * POST body 可选 refreshToken：用于标记 currentSessionId（本机）
+ */
+export const postMySessionsList = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user!.id;
+    const clientRt = (req.body as { refreshToken?: string })?.refreshToken;
+
+    const sessions = await listActiveSessionsForResponse(userId);
+
+    let currentSessionId: number | null = null;
+    if (clientRt && typeof clientRt === 'string') {
+      const row = await prisma.refreshToken.findFirst({
+        where: { token: clientRt, userId, isRevoked: false },
+        select: { id: true }
+      });
+      if (row) currentSessionId = row.id;
+    }
+
+    res.json({
+      success: true,
+      data: { sessions, currentSessionId }
+    });
+  } catch (error) {
+    console.error('postMySessionsList error:', error);
+    res.status(500).json({ success: false, message: '获取会话列表失败' });
+  }
+};
+
+/**
+ * 批量撤销所选 refresh 会话并递增 session_version（与登录踢人一致，使被踢端立即失效）
+ */
+export const revokeMySessions = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user!.id;
+    const body = req.body as { ids?: unknown; refreshToken?: string };
+    const { ids, refreshToken: clientRefresh } = body;
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+      res.status(400).json({ success: false, message: '请选择要登出的会话' });
+      return;
+    }
+
+    const uniqueIds = [...new Set(ids.map((x) => Number(x)))].filter(
+      (n) => Number.isInteger(n) && n > 0
+    );
+    if (uniqueIds.length === 0) {
+      res.status(400).json({ success: false, message: '无效的会话参数' });
+      return;
+    }
+
+    let currentSessionId: number | null = null;
+    if (clientRefresh && typeof clientRefresh === 'string') {
+      const row = await prisma.refreshToken.findFirst({
+        where: { token: clientRefresh, userId, isRevoked: false },
+        select: { id: true }
+      });
+      if (row) currentSessionId = row.id;
+    }
+
+    const revokeSelf = currentSessionId !== null && uniqueIds.includes(currentSessionId);
+
+    try {
+      await prisma.$transaction(
+        async (tx) => {
+          const revoked = await tx.refreshToken.updateMany({
+            where: { userId, id: { in: uniqueIds }, isRevoked: false },
+            data: { isRevoked: true }
+          });
+          if (revoked.count !== uniqueIds.length) {
+            throw new InvalidRevokeSessionError();
+          }
+
+          await tx.user.update({
+            where: { id: userId },
+            data: { sessionVersion: { increment: 1 } }
+          });
+        },
+        {
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+          maxWait: 5000,
+          timeout: 10000
+        }
+      );
+    } catch (err: unknown) {
+      if (err instanceof InvalidRevokeSessionError) {
+        res.status(400).json({ success: false, message: '部分会话无效或已失效' });
+        return;
+      }
+      throw err;
+    }
+
+    if (revokeSelf) {
+      res.status(401).json({
+        success: false,
+        code: 'SESSION_REVOKED_SELF',
+        message: '当前设备会话已登出，请重新登录'
+      });
+      return;
+    }
+
+    res.json({ success: true, message: '已登出所选设备' });
+  } catch (error) {
+    console.error('revokeMySessions error:', error);
+    res.status(500).json({ success: false, message: '操作失败，请稍后重试' });
   }
 };

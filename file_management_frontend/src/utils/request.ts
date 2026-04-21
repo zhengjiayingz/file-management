@@ -56,7 +56,9 @@ request.interceptors.response.use(
     const isPublicAuthFailure =
       reqUrl.includes('auth/login') ||
       reqUrl.includes('auth/register') ||
-      reqUrl.includes('auth/forgot-password')
+      reqUrl.includes('auth/forgot-password') ||
+      /** 登出所选设备时若包含本机 refresh，后端 401 SESSION_REVOKED_SELF；不得走刷新否则会误跳转 */
+      reqUrl.includes('auth/sessions/revoke')
 
     // 如果是 401 错误，且不是刷新 token 的请求本身，也不是未登录类接口的业务 401
     if (

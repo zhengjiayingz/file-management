@@ -20,6 +20,8 @@ export interface AuthRequest extends Request {
 export interface LoginBody {
   username: string;
   password: string;
+  /** 会话达上限时，指定要踢下的 refresh_token 记录 id，与密码一起提交 */
+  revokeSessionId?: number;
 }
 
 // 注册请求体

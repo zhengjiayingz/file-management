@@ -130,7 +130,13 @@ properties:
 3. 在 Swagger UI 中重新点击 **Authorize** 更新 token
 
 ### Q: 接口返回 401 且 `code` 为 `SESSION_REVOKED`？
-**A**：表示当前 Access Token 已被 **会话版本**机制作废（例如管理员踢会话、账号被禁用、重置密码等）。应**清除本地登录态并重新登录**；不要继续用 Refresh 盲重试（若 Refresh 也已撤销，刷新会失败）。详见 [REQUIREMENTS.md](./REQUIREMENTS.md) §5 与 [DATABASE_DESIGN.md](./DATABASE_DESIGN.md) §5.1。
+**A**：表示当前 Access Token 已被 **会话版本**机制作废（例如管理员踢会话、账号被禁用、重置密码、**本账号在别处以 `revokeSessionId` 踢掉本会话**等）。应**清除本地登录态并重新登录**；不要继续用 Refresh 盲重试（若 Refresh 也已撤销，刷新会失败）。详见 [REQUIREMENTS.md](./REQUIREMENTS.md) §5 与 [DATABASE_DESIGN.md](./DATABASE_DESIGN.md) §5.1。
+
+### Q: `POST /api/auth/login` 返回 409 且 `code` 为 `SESSION_LIMIT`？
+**A**：表示当前活跃 **`refresh_tokens` 条数已达角色上限**（普通 2 / VIP 5 / 管理员不限）。响应 `data` 中含 `maxSessions`、`sessions`（含 `id` / IP / UA / 时间等）、`showVipLink`。前端应弹窗让用户选一条会话，再带 **`revokeSessionId`**（对应 `sessions[].id`）与密码**重新**调用登录。详见 [REQUIREMENTS.md](./REQUIREMENTS.md) §1(8)、[BUSINESS_FLOWS.md](./BUSINESS_FLOWS.md) §1.2。
+
+### Q: `POST /api/auth/login` 请求体里的 `revokeSessionId`？
+**A**：可选整数。与 **409** 响应里某条会话的 **`id`** 一致时，服务端在事务内撤销该 `refresh_tokens` 行、**`session_version` 递增**，再为本机签发新双 Token。完整契约以 Swagger **`/api-docs`** 与 `auth.routes.ts` / `auth.controller.ts` 为准。
 
 ## 用户资料与头像（补充索引）
 

@@ -59,10 +59,23 @@ export default {
   header: {
     memberCenter: '会员中心',
     myShares: '我的分享',
+    sessionManage: '会话管理',
     quotaUsedUnlimited: '已用 {used} / 无限制',
     langZhCN: '简体中文',
     langZhTW: '繁體中文',
     langEn: 'English'
+  },
+  sessionManage: {
+    title: '会话管理',
+    empty: '暂无活跃会话',
+    currentDevice: '当前设备',
+    logoutSelected: '登出',
+    logoutSuccess: '已登出所选设备',
+    selectAtLeastOne: '请至少选择一个会话',
+    loadFailed: '加载会话列表失败',
+    noRefresh: '无法操作：缺少刷新令牌',
+    revokeFailed: '登出失败',
+    selfRevoked: '当前设备已登出，请重新登录'
   },
   myShares: {
     title: '我的分享',
@@ -102,7 +115,17 @@ export default {
     hasAccount: '已有账号？去登录',
     forgotPassword: '忘记密码？',
     forgotPasswordNeedUsername: '请先填写用户名',
-    wrongCredentials: '用户名或密码错误'
+    wrongCredentials: '用户名或密码错误',
+    sessionLimitTitle: '会话数达到上限',
+    sessionLimitHint: '当前账号同时在线会话数已达上限（普通用户最多 {n} 个，VIP 最多 5 个，管理员不限制）。请选择要踢出的会话后再登录本设备，或取消登录。',
+    sessionLimitMax: '上限：{n} 个',
+    sessionLimitColIp: 'IP',
+    sessionLimitColDevice: '设备',
+    sessionLimitColLast: '最近使用',
+    sessionLimitKickAndLogin: '踢出所选会话并登录',
+    sessionLimitCancel: '取消登录',
+    upgradeVip: '升级为 VIP',
+    sessionLimitKickSuccess: '已登录'
   },
   forceChangePassword: {
     title: '请修改密码',

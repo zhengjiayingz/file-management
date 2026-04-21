@@ -1,6 +1,6 @@
 # 文档索引
 
-> **最后整理**：2026-04-20。安全相关验收口径（§5(2) Token 强失效：`session_version`/`sv` + Refresh 撤销，**不**做逐枚 Access 黑名单）以 [REQUIREMENTS.md](./REQUIREMENTS.md) 为准；库表字段见 [DATABASE_DESIGN.md](./DATABASE_DESIGN.md)。链接分享 **访问人数上限**（`max_visitors`）与 `ShareAccessLog`（含 `save`）见 [REQUIREMENTS.md](./REQUIREMENTS.md) 实现状态总览 §3、[BUSINESS_FLOWS.md](./BUSINESS_FLOWS.md) §3。
+> **最后整理**：2026-04-21。安全相关验收口径（§5(2) Token 强失效：`session_version`/`sv` + Refresh 撤销，**不**做逐枚 Access 黑名单）以 [REQUIREMENTS.md](./REQUIREMENTS.md) 为准；**并发会话**（普通 2 / VIP 5 / 管理员不限）、登录 **409** `SESSION_LIMIT` 与 **`revokeSessionId`** 踢设备见 [REQUIREMENTS.md](./REQUIREMENTS.md) §1(8)、[BUSINESS_FLOWS.md](./BUSINESS_FLOWS.md) §1.2。库表字段见 [DATABASE_DESIGN.md](./DATABASE_DESIGN.md)。链接分享 **访问人数上限**（`max_visitors`）与 `ShareAccessLog`（含 `save`）见 [REQUIREMENTS.md](./REQUIREMENTS.md) 实现状态总览 §3、[BUSINESS_FLOWS.md](./BUSINESS_FLOWS.md) §3。
 
 | 文档 | 说明 |
 |------|------|

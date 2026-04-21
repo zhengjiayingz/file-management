@@ -100,6 +100,7 @@
                         <el-dropdown-menu>
                             <el-dropdown-item command="profile">{{ t('common.profile') || '个人信息' }}</el-dropdown-item>
                             <el-dropdown-item command="myShares">{{ t('header.myShares') }}</el-dropdown-item>
+                            <el-dropdown-item command="sessionManage">{{ t('header.sessionManage') }}</el-dropdown-item>
                             <el-dropdown-item command="settings">{{ t('common.settings') || '设置' }}</el-dropdown-item>
                             <el-dropdown-item divided command="logout">{{ t('common.logout') || '退出登录'
                             }}</el-dropdown-item>
@@ -113,12 +114,13 @@
         <PersonalInfoDialog v-model="profileDialogVisible" @open-vip="openVipFromProfile" />
         <UserSettingsDialog v-model="settingsDialogVisible" />
         <MySharesDialog v-model="mySharesDialogVisible" />
+        <SessionManageDialog v-model="sessionManageDialogVisible" />
     </el-header>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onMounted, onUnmounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, ref, onMounted, onUnmounted, watch } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { User, ArrowDown, Sunny, Moon, Monitor } from '@element-plus/icons-vue'
 import { useAuthStore } from '@stores/auth'
@@ -131,9 +133,11 @@ import VipCenterDialog from '@components/VipCenterDialog/index.vue'
 import PersonalInfoDialog from '@components/PersonalInfoDialog/index.vue'
 import UserSettingsDialog from '@components/UserSettingsDialog/index.vue'
 import MySharesDialog from '@components/MySharesDialog/index.vue'
+import SessionManageDialog from '@components/SessionManageDialog/index.vue'
 import { publicAssetUrl } from '@utils/publicAssetUrl'
 
 const router = useRouter()
+const route = useRoute()
 const authStore = useAuthStore()
 const themeStore = useThemeStore()
 const { t, locale } = useI18n()
@@ -142,10 +146,24 @@ const vipDialogVisible = ref(false)
 const profileDialogVisible = ref(false)
 const settingsDialogVisible = ref(false)
 const mySharesDialogVisible = ref(false)
+const sessionManageDialogVisible = ref(false)
 
 const openMySharesFromSidebar = () => {
     mySharesDialogVisible.value = true
 }
+
+/** 登录页「升级为 VIP」跳转 `/?openVip=1` 后，在此打开会员中心并去掉 query，避免刷新重复弹出 */
+watch(
+    () => [route.query.openVip, authStore.user] as const,
+    () => {
+        if (route.query.openVip !== '1' || !authStore.user) return
+        vipDialogVisible.value = true
+        const next = { ...route.query } as Record<string, string | string[] | undefined>
+        delete next.openVip
+        router.replace({ path: route.path, query: next })
+    },
+    { immediate: true }
+)
 
 onMounted(() => {
     window.addEventListener('open-my-shares', openMySharesFromSidebar)
@@ -206,6 +224,9 @@ const handleCommand = async (command: string) => {
             break
         case 'myShares':
             mySharesDialogVisible.value = true
+            break
+        case 'sessionManage':
+            sessionManageDialogVisible.value = true
             break
         case 'settings':
             settingsDialogVisible.value = true

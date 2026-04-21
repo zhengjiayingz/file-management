@@ -4,7 +4,7 @@
 
 本文档详细描述了文件管理系统各个功能模块的业务流程，包括每个步骤涉及的数据表操作。
 
-**与需求文档对齐**：验收口径与权限/回收策略以 [REQUIREMENTS.md](./REQUIREMENTS.md) 为准。**2026-04-18**：§7.3 已改为「仅定时任务回收无引用物理文件」，废止原「管理员手动清理」流程描述；VIP 完整申请与审核见 REQUIREMENTS「VIP 升级与审核流程」及本节 **6.2** 说明。**2026-04-19**：补充 **§9.3** 个人信息与资料更新（弹窗 + `GET/PUT /api/user/profile`、`POST /api/user/avatar`），与 REQUIREMENTS「其他需求」（3）（4）一致。**2026-04-20**：与 §5(2) 对齐——**Token 强失效**采用 **`users.session_version` + JWT `sv`** 与 **Refresh `is_revoked`**；**不**实现逐枚 Access（`jti`）黑名单；管理员踢会话见 **§7.1**。**2026-04-20（§3）**：链接分享 **访问人数上限** `max_visitors`（创建时可选 1～10 或不限）：**未登录**打开列表/下载按 **IP** 计数；**转存须登录**，仅按 **用户 ID** 计数（无匿名转存）；实现见 `share.controller.ts` `ensureVisitorAllowedInTx`；`share_access_logs.action` 含 `view` / `download` / `save`。**工程**：Prisma Client 生成与 Windows 环境问题见 [DEVELOPMENT.md](./DEVELOPMENT.md)。
+**与需求文档对齐**：验收口径与权限/回收策略以 [REQUIREMENTS.md](./REQUIREMENTS.md) 为准。**2026-04-18**：§7.3 已改为「仅定时任务回收无引用物理文件」，废止原「管理员手动清理」流程描述；VIP 完整申请与审核见 REQUIREMENTS「VIP 升级与审核流程」及本节 **6.2** 说明。**2026-04-19**：补充 **§9.3** 个人信息与资料更新（弹窗 + `GET/PUT /api/user/profile`、`POST /api/user/avatar`），与 REQUIREMENTS「其他需求」（3）（4）一致。**2026-04-20**：与 §5(2) 对齐——**Token 强失效**采用 **`users.session_version` + JWT `sv`** 与 **Refresh `is_revoked`**；**不**实现逐枚 Access（`jti`）黑名单；管理员踢会话见 **§7.1**。**2026-04-20（§3）**：链接分享 **访问人数上限** `max_visitors`（创建时可选 1～10 或不限）：**未登录**打开列表/下载按 **IP** 计数；**转存须登录**，仅按 **用户 ID** 计数（无匿名转存）；实现见 `share.controller.ts` `ensureVisitorAllowedInTx`；`share_access_logs.action` 含 `view` / `download` / `save`。**2026-04-21**：**并发会话**以 `refresh_tokens` 计；普通 **2** / VIP **5** / 管理员不限；达上限时 `POST /api/auth/login` 返回 **409** `SESSION_LIMIT`；带 **`revokeSessionId`** 再登录时在事务内撤销该行、`session_version` **+1** 并插入新 refresh（见 **§1.2**、**§1.5**）。**工程**：Prisma Client 生成与 Windows 环境问题见 [DEVELOPMENT.md](./DEVELOPMENT.md)。
 
 ---
 
@@ -69,27 +69,33 @@ VALUES (?, ?, ?, 'user', 1073741824, 0, 'active')
 
 1. **用户提交登录信息**
    - 用户名/邮箱 + 密码
+   - 可选 **`revokeSessionId`**（正整数）：会话数达上限时，指定要先撤销的 `refresh_tokens.id`，与密码一起提交
 
 2. **验证用户身份**
    - 查询用户记录
    - 验证密码（SHA256）
    - 检查账户状态
 
-3. **生成双Token**
-   - 生成 Access Token（JWT，15 分钟有效，载荷含 **`sv`** = 当前 `users.session_version`）
+3. **（实现）并发会话上限与踢设备**
+   - 在 **Serializable** 事务内：若带 **`revokeSessionId`**，则 `UPDATE refresh_tokens SET is_revoked = TRUE WHERE id = ? AND user_id = ? AND is_revoked = FALSE`（`updateMany` 行数为 0 则 400）
+   - 统计未撤销且未过期的 `refresh_tokens` 条数；若超过角色上限（普通 **2**、VIP **5**、管理员 **null**）则 **409**，响应体含 `code: SESSION_LIMIT` 与当前活跃会话列表（供前端弹窗）
+   - 若带 **`revokeSessionId`** 且撤销成功：同一事务内 **`users.session_version` 递增**，再签发新 JWT（新 `sv`），使被踢设备上旧 Access **立即**在鉴权中间件失败（**401** `SESSION_REVOKED`）；仅撤销 refresh 不足以立刻下线，须配合 **`sv` 校验**（见 **§1.5**）
+
+4. **生成双Token**
+   - 生成 Access Token（JWT，15 分钟有效，载荷含 **`sv`** = **事务内更新后**的 `users.session_version`）
    - 生成 Refresh Token（随机字符串，7 天有效）
 
-4. **存储 Refresh Token**
+5. **存储 Refresh Token**
    - 保存到 refresh_tokens 表
    - 记录设备信息、IP 地址
 
-5. **（实现）清空踢人展示标记**
+6. **（实现）清空踢人展示标记**
    - 登录事务内 `users.last_session_kick_at = NULL`
 
-6. **记录登录日志**
+7. **记录登录日志**
    - 保存登录记录到 login_logs 表
 
-7. **返回Token**
+8. **返回Token**
    - 返回 Access Token 和 Refresh Token 给前端
 
 **涉及的表操作：**
@@ -198,7 +204,7 @@ UPDATE refresh_tokens SET is_revoked = TRUE WHERE token = ?
 2. 查询 `users.session_version`，若 **`sv` ≠ `session_version`** → **401**（如 `code: SESSION_REVOKED`），前端应登出并引导重新登录。
 3. Socket.IO 握手使用同一 JWT 规则。
 
-**会使 `session_version` 递增的典型场景**（与实现对齐）：用户修改密码；管理员禁用用户、重置密码、**踢出会话**；等。
+**会使 `session_version` 递增的典型场景**（与实现对齐）：用户修改密码；管理员禁用用户、重置密码、**踢出会话**；**登录时带 `revokeSessionId` 踢掉一条 refresh 后再登录**；等。
 
 **涉及的表：** `users`（`session_version`、`last_session_kick_at`）；`refresh_tokens`（批量 `is_revoked`，视场景而定）。
 
@@ -206,7 +212,7 @@ UPDATE refresh_tokens SET is_revoked = TRUE WHERE token = ?
 
 ### 1.6 多设备会话管理流程
 
-> **产品状态（§5(7)）**：终端用户侧「会话列表 + 按设备撤销」**尚未**作为完整功能交付；管理员看板已支持 **踢出指定用户全部会话**（见 **§7.1.3**）。本节描述可作为后续扩展的表级操作参考。
+> **产品状态（§5(7)）**：**已实现（登录拦截场景）**：活跃 `refresh_tokens` 达上限时，接口返回会话列表，用户选择踢一条后带 `revokeSessionId` 再登录（见 **§1.2**）。需求原文中的「任意时刻」会话管理（**未**规定须在设置页）**尚未**完整交付。管理员看板已支持 **踢出指定用户全部会话**（见 **§7.1.3**）。下文 **1.6.1～** 仍可作为表级操作参考或后续扩展。
 
 **流程步骤：**
 

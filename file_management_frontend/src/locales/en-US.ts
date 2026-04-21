@@ -59,10 +59,23 @@ export default {
   header: {
     memberCenter: 'Member Center',
     myShares: 'My shares',
+    sessionManage: 'Sessions',
     quotaUsedUnlimited: 'Used {used} / Unlimited',
     langZhCN: '简体中文',
     langZhTW: '繁體中文',
     langEn: 'English'
+  },
+  sessionManage: {
+    title: 'Session management',
+    empty: 'No active sessions',
+    currentDevice: 'This device',
+    logoutSelected: 'Sign out',
+    logoutSuccess: 'Selected sessions signed out',
+    selectAtLeastOne: 'Select at least one session',
+    loadFailed: 'Failed to load sessions',
+    noRefresh: 'Cannot proceed: missing refresh token',
+    revokeFailed: 'Sign out failed',
+    selfRevoked: 'This device was signed out. Please log in again'
   },
   myShares: {
     title: 'My shares',
@@ -102,7 +115,18 @@ export default {
     hasAccount: 'Has account? Login',
     forgotPassword: 'Forgot password?',
     forgotPasswordNeedUsername: 'Please enter your username first',
-    wrongCredentials: 'Incorrect username or password'
+    wrongCredentials: 'Incorrect username or password',
+    sessionLimitTitle: 'Session limit reached',
+    sessionLimitHint:
+      'Your account has reached the maximum concurrent sessions (2 for standard users, 5 for VIP, unlimited for admins). Remove one session to sign in on this device, or cancel.',
+    sessionLimitMax: 'Limit: {n}',
+    sessionLimitColIp: 'IP',
+    sessionLimitColDevice: 'Device',
+    sessionLimitColLast: 'Last used',
+    sessionLimitKickAndLogin: 'Remove selected & sign in',
+    sessionLimitCancel: 'Cancel',
+    upgradeVip: 'Upgrade to VIP',
+    sessionLimitKickSuccess: 'Signed in'
   },
   forceChangePassword: {
     title: 'Change your password',

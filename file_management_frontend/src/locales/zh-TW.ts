@@ -59,10 +59,23 @@ export default {
   header: {
     memberCenter: '會員中心',
     myShares: '我的分享',
+    sessionManage: '工作階段管理',
     quotaUsedUnlimited: '已用 {used} / 無限制',
     langZhCN: '简体中文',
     langZhTW: '繁體中文',
     langEn: 'English'
+  },
+  sessionManage: {
+    title: '工作階段管理',
+    empty: '暫無使用中工作階段',
+    currentDevice: '目前裝置',
+    logoutSelected: '登出',
+    logoutSuccess: '已登出所選裝置',
+    selectAtLeastOne: '請至少選擇一個工作階段',
+    loadFailed: '載入工作階段清單失敗',
+    noRefresh: '無法操作：缺少重新整理權杖',
+    revokeFailed: '登出失敗',
+    selfRevoked: '目前裝置已登出，請重新登入'
   },
   myShares: {
     title: '我的分享',
@@ -102,7 +115,17 @@ export default {
     hasAccount: '已有帳號？去登入',
     forgotPassword: '忘記密碼？',
     forgotPasswordNeedUsername: '請先填寫使用者名稱',
-    wrongCredentials: '使用者名稱或密碼錯誤'
+    wrongCredentials: '使用者名稱或密碼錯誤',
+    sessionLimitTitle: '會話數已達上限',
+    sessionLimitHint: '目前帳號同時在線會話數已達上限（一般用戶最多 {n} 個，VIP 最多 5 個，管理員不限制）。請選擇要踢出的會話後再於本裝置登入，或取消登入。',
+    sessionLimitMax: '上限：{n} 個',
+    sessionLimitColIp: 'IP',
+    sessionLimitColDevice: '裝置',
+    sessionLimitColLast: '最近使用',
+    sessionLimitKickAndLogin: '踢出所選會話並登入',
+    sessionLimitCancel: '取消登入',
+    upgradeVip: '升級為 VIP',
+    sessionLimitKickSuccess: '已登入'
   },
   forceChangePassword: {
     title: '請修改密碼',

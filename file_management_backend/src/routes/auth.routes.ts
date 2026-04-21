@@ -6,7 +6,9 @@ import {
   refreshToken,
   logout,
   forgotPasswordRequest,
-  changePassword
+  changePassword,
+  postMySessionsList,
+  revokeMySessions
 } from '../controllers/auth.controller.js';
 import { authenticate } from '../middleware/auth.middleware.js';
 
@@ -203,5 +205,8 @@ router.post('/change-password', authenticate, changePassword);
  *         $ref: '#/components/responses/UnauthorizedError'
  */
 router.get('/me', authenticate, getCurrentUser);
+
+router.post('/sessions/list', authenticate, postMySessionsList);
+router.post('/sessions/revoke', authenticate, revokeMySessions);
 
 export default router;

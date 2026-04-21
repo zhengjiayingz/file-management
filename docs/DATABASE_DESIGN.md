@@ -722,13 +722,15 @@ file_shares (文件分享)
 ### 5.1 双Token认证流程
 
 **登录流程：**
-1. 用户提交用户名和密码
-2. 验证成功后，生成 Access Token（JWT，15 分钟有效，载荷含 **`sv`** = 当前 `users.session_version`）和 Refresh Token（7 天有效）
-3. 将 Refresh Token 存入 `refresh_tokens` 表
-4. （实现）登录事务内将 `users.last_session_kick_at` 置空，便于管理端展示「在线」
-5. 记录登录日志到 `login_logs` 表
-6. 返回两个 token 给前端
-7. 前端将 Access Token 存储在内存（或等价位置），Refresh Token 常见为 LocalStorage（以实现为准）
+1. 用户提交用户名和密码；可选 **`revokeSessionId`**（`refresh_tokens.id`），用于达会话上限时先撤销一条再登录
+2. 在事务内校验并发上限（未撤销且未过期的 `refresh_tokens` 条数：普通 **≤2**、VIP **≤5**、管理员不限）；超限则 **409** `SESSION_LIMIT` 并返回会话列表
+3. 若带 **`revokeSessionId`**：先撤销该行，且 **`users.session_version` 递增**，再签发新 JWT（新 `sv`），否则仅撤销 refresh 无法立刻使该端旧 Access 失效
+4. 验证成功后，生成 Access Token（JWT，15 分钟有效，载荷含 **`sv`** = **更新后** `users.session_version`）和 Refresh Token（7 天有效）
+5. 将 Refresh Token 存入 `refresh_tokens` 表
+6. （实现）登录事务内将 `users.last_session_kick_at` 置空，便于管理端展示「在线」
+7. 记录登录日志到 `login_logs` 表
+8. 返回两个 token 给前端
+9. 前端将 Access Token 存储在内存（或等价位置），Refresh Token 常见为 LocalStorage（以实现为准）
 
 **API 请求流程：**
 1. 前端在请求头中携带 Access Token（`Authorization: Bearer`）
@@ -739,7 +741,7 @@ file_shares (文件分享)
 **Token 强失效（与需求 §5(2)「黑名单」验收口径一致）：**
 - **不**维护逐枚 Access Token（`jti`/Redis）黑名单。
 - **Refresh**：登出、禁用用户、管理员踢会话、重置密码等场景将相关 `refresh_tokens.is_revoked = TRUE`。
-- **Access**：依赖 **`session_version` 自增**（改密、禁用、踢会话、重置密码等），使已签发 JWT 的 `sv` 失效；Socket.IO 握手同样校验 `sv`。
+- **Access**：依赖 **`session_version` 自增**（改密、禁用、踢会话、重置密码、**登录时 `revokeSessionId` 踢设备等**），使已签发 JWT 的 `sv` 失效；Socket.IO 握手同样校验 `sv`。
 
 **Token 刷新流程：**
 1. 前端收到 401 状态码（且非 `SESSION_REVOKED` 等业务码时），自动调用刷新接口
@@ -767,7 +769,7 @@ file_shares (文件分享)
 2. 禁用等场景可写入 `last_session_kick_at` 供管理端展示
 
 **多设备列表与按设备撤销（需求 §5(7)）：**
-- **当前版本**：终端用户侧**未**提供完整会话列表 UI；管理员看板支持 **踢出用户所有会话**（`POST /api/admin/users/:id/kick-sessions`）。以下「查询 refresh 列表、按行撤销」仍可作为后续产品扩展参考。
+- **当前版本**：**登录**时若会话数达上限，接口返回活跃 `refresh_tokens` 列表，用户选择一条后带 **`revokeSessionId`** 再登录；与 **§5(2)** 一致，踢除时 **`session_version` 递增**。需求 §5(7) 中「任意时刻」查看/管理会话、远程登出（**未**规定入口）**未**在本版完整交付。管理员看板支持 **踢出用户所有会话**（`POST /api/admin/users/:id/kick-sessions`）。
 
 ### 5.2 文件上传流程
 
@@ -871,4 +873,4 @@ WHERE uf.user_id = ? AND uf.is_deleted = FALSE AND uf.file_type = 'file'
 ---
 
 **文档版本**：v1.2  
-**最后更新**：2026-04-20（与 `prisma/schema.prisma` 对齐，含 `session_version` / `last_session_kick_at`）
+**最后更新**：2026-04-21（与 `prisma/schema.prisma` 对齐，含并发会话上限、`revokeSessionId` 登录踢设备、`session_version` / `last_session_kick_at`）

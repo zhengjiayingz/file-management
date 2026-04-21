@@ -32,6 +32,56 @@
         </el-link>
       </div>
     </div>
+
+    <el-dialog
+      v-model="sessionLimitOpen"
+      :title="t('login.sessionLimitTitle')"
+      width="560px"
+      :close-on-click-modal="false"
+      destroy-on-close
+      @closed="onSessionDialogClosed"
+    >
+      <p class="session-hint">
+        {{ t('login.sessionLimitHint', { n: sessionLimitPayload?.maxSessions ?? 2 }) }}
+      </p>
+      <p v-if="sessionLimitPayload" class="session-max muted">
+        {{ t('login.sessionLimitMax', { n: sessionLimitPayload.maxSessions }) }}
+      </p>
+      <el-radio-group v-model="selectedSessionId" class="session-list">
+        <div v-for="s in sessionLimitPayload?.sessions ?? []" :key="s.id" class="session-row">
+          <el-radio :label="s.id">
+            <span class="session-meta">
+              <strong>{{ s.ipAddress }}</strong>
+              <span class="ua" :title="s.userAgent || ''">{{ shortUa(s.userAgent) }}</span>
+            </span>
+            <span class="session-time">{{ formatSessionTime(s.lastUsedAt || s.createdAt) }}</span>
+          </el-radio>
+        </div>
+      </el-radio-group>
+      <template #footer>
+        <div class="dialog-footer-col">
+          <el-link
+            v-if="sessionLimitPayload?.showVipLink"
+            type="primary"
+            class="vip-link"
+            @click="goVipApply"
+          >
+            {{ t('login.upgradeVip') }}
+          </el-link>
+          <div class="dialog-actions">
+            <el-button @click="sessionLimitOpen = false">{{ t('login.sessionLimitCancel') }}</el-button>
+            <el-button
+              type="primary"
+              :loading="loading"
+              :disabled="!selectedSessionId"
+              @click="confirmKickAndLogin"
+            >
+              {{ t('login.sessionLimitKickAndLogin') }}
+            </el-button>
+          </div>
+        </div>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -39,10 +89,21 @@
 import { ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import axios from 'axios'
 import { User, Lock, Message } from '@element-plus/icons-vue'
 import { useAuthStore } from '@stores/auth'
 import { authApi } from '@api/auth'
 import { useI18n } from 'vue-i18n'
+
+export interface SessionListItem {
+  id: number
+  ipAddress: string
+  userAgent: string | null
+  deviceName: string | null
+  deviceType: string | null
+  createdAt: string
+  lastUsedAt: string | null
+}
 
 const router = useRouter()
 const route = useRoute()
@@ -58,6 +119,84 @@ const loginForm = ref({
 
 const loading = ref(false)
 
+const sessionLimitOpen = ref(false)
+const sessionLimitPayload = ref<{
+  maxSessions: number
+  sessions: SessionListItem[]
+  showVipLink: boolean
+} | null>(null)
+const selectedSessionId = ref<number | undefined>(undefined)
+
+function shortUa(ua: string | null | undefined): string {
+  if (!ua) return '—'
+  return ua.length > 48 ? ua.slice(0, 45) + '…' : ua
+}
+
+function formatSessionTime(iso: string) {
+  try {
+    return new Date(iso).toLocaleString()
+  } catch {
+    return iso
+  }
+}
+
+function onSessionDialogClosed() {
+  sessionLimitPayload.value = null
+  selectedSessionId.value = undefined
+}
+
+function goVipApply() {
+  sessionLimitOpen.value = false
+  router.push({ path: '/', query: { openVip: '1' } })
+}
+
+async function afterLoginSuccess(
+  res: Awaited<ReturnType<typeof authApi.login>>,
+  options?: { successMessage?: string }
+) {
+  ElMessage.success(options?.successMessage ?? t('login.login') + ' Success')
+  await authStore.login({
+    user: res.user,
+    token: res.token,
+    refreshToken: res.refreshToken
+  })
+  if (res.user.mustChangePassword) {
+    await router.push('/force-change-password')
+  } else {
+    const redirect = typeof route.query.redirect === 'string' ? route.query.redirect.trim() : ''
+    if (redirect.startsWith('/')) {
+      await router.push(redirect)
+    } else {
+      await router.push('/')
+    }
+  }
+}
+
+async function confirmKickAndLogin() {
+  if (!selectedSessionId.value || !sessionLimitPayload.value) return
+  loading.value = true
+  try {
+    const res = await authApi.login({
+      username: loginForm.value.username,
+      password: loginForm.value.password,
+      revokeSessionId: Number(selectedSessionId.value)
+    })
+    sessionLimitOpen.value = false
+    sessionLimitPayload.value = null
+    await afterLoginSuccess(res, { successMessage: t('login.sessionLimitKickSuccess') })
+  } catch (error: unknown) {
+    if (axios.isAxiosError(error)) {
+      const data = error.response?.data
+      const msg = (data as { message?: string })?.message || error.message
+      ElMessage.error(msg || t('login.wrongCredentials'))
+    } else {
+      ElMessage.error(t('login.wrongCredentials'))
+    }
+  } finally {
+    loading.value = false
+  }
+}
+
 const handleAuth = async () => {
   if (!loginForm.value.username || !loginForm.value.password) {
     ElMessage.warning(t('login.username') + ' / ' + t('login.password'))
@@ -68,11 +207,21 @@ const handleAuth = async () => {
     // Optional
   }
 
+  /**
+   * 会话上限弹窗打开时，密码框回车 / 主「登录」仍会走本函数。
+   * 若继续发未带 revokeSessionId 的登录，会多一次 409（与「踢出并登录」并发，易误判为踢人失败）。
+   */
+  if (!isRegister.value && sessionLimitOpen.value) {
+    if (selectedSessionId.value) {
+      await confirmKickAndLogin()
+    }
+    return
+  }
+
   try {
     loading.value = true
 
     if (isRegister.value) {
-      // 注册流程
       await authApi.register({
         username: loginForm.value.username,
         password: loginForm.value.password,
@@ -80,64 +229,47 @@ const handleAuth = async () => {
       })
 
       ElMessage.success(t('login.register') + ' Success')
-
-      // 注册成功后切换到登录模式
       toggleMode()
-      // 保留用户名密码方便登录
-      // loginForm.value.email = '' // 清理不需要的字段
     } else {
-      // 登录流程
-      console.log('🔵 [1] 开始登录,用户名:', loginForm.value.username)
-
       const res = await authApi.login({
         username: loginForm.value.username,
         password: loginForm.value.password
       })
-      console.log('🔵 [2] API 返回数据:', res)
-      console.log('🔵 [3] 检查 token:', res.token)
-      console.log('🔵 [4] 检查 refreshToken:', res.refreshToken)
-      console.log('🔵 [5] 检查 user:', res.user)
-
-      ElMessage.success(t('login.login') + ' Success')
-
-      // 登录成功
-      console.log('🔵 [6] 准备保存到 store')
-      await authStore.login({
-        user: res.user,
-        token: res.token,
-        refreshToken: res.refreshToken
-      })
-      console.log('🔵 [7] Store 保存完成')
-      console.log('🔵 [8] 检查 localStorage token:', localStorage.getItem('token'))
-      console.log('🔵 [9] 检查 store.isLoggedIn:', authStore.isLoggedIn)
-
-      console.log('🔵 [10] 准备跳转')
-      if (res.user.mustChangePassword) {
-        await router.push('/force-change-password')
-      } else {
-        const redirect = typeof route.query.redirect === 'string' ? route.query.redirect.trim() : ''
-        if (redirect.startsWith('/')) {
-          await router.push(redirect)
-        } else {
-          await router.push('/')
-        }
+      await afterLoginSuccess(res)
+    }
+  } catch (error: unknown) {
+    if (axios.isAxiosError(error) && error.response?.status === 409) {
+      const body = error.response.data as {
+        code?: string
+        data?: { maxSessions: number; sessions: SessionListItem[]; showVipLink: boolean }
+      }
+      if (body?.code === 'SESSION_LIMIT' && body.data?.sessions) {
+        sessionLimitPayload.value = body.data
+        selectedSessionId.value = body.data.sessions[0]?.id
+        sessionLimitOpen.value = true
+        return
       }
     }
-
-  } catch (error: any) {
-    console.error('❌ [登录错误]', error)
-    console.error('❌ [错误详情] response:', error.response)
-    console.error('❌ [错误详情] message:', error.message)
     if (isRegister.value) {
-      const msg = error.response?.data?.message || error.message || 'Error'
-      ElMessage.error(t('login.register') + ' Failed: ' + msg)
+      const msg =
+        axios.isAxiosError(error) && error.response?.data
+          ? (error.response.data as { message?: string }).message
+          : error instanceof Error
+            ? error.message
+            : 'Error'
+      ElMessage.error(t('login.register') + ' Failed: ' + (msg || ''))
     } else {
-      const status = error.response?.status
+      const status = axios.isAxiosError(error) ? error.response?.status : undefined
       if (status === 401) {
         ElMessage.error(t('login.wrongCredentials'))
       } else {
-        const msg = error.response?.data?.message || error.message || t('login.wrongCredentials')
-        ElMessage.error(msg)
+        const msg =
+          axios.isAxiosError(error) && error.response?.data
+            ? (error.response.data as { message?: string }).message
+            : error instanceof Error
+              ? error.message
+              : t('login.wrongCredentials')
+        ElMessage.error(msg || t('login.wrongCredentials'))
       }
     }
   } finally {
@@ -159,8 +291,14 @@ const handleForgotPassword = async () => {
   try {
     const r = await authApi.forgotPassword({ username: name })
     ElMessage.info(r.message || '请等待管理员重置密码')
-  } catch (error: any) {
-    ElMessage.error(error.response?.data?.message || error.message || 'Error')
+  } catch (error: unknown) {
+    const msg =
+      axios.isAxiosError(error) && error.response?.data
+        ? (error.response.data as { message?: string }).message
+        : error instanceof Error
+          ? error.message
+          : 'Error'
+    ElMessage.error(msg || 'Error')
   }
 }
 </script>
@@ -196,20 +334,74 @@ const handleForgotPassword = async () => {
     margin-top: 20px;
     text-align: center;
   }
+}
 
-  .test-accounts {
-    margin-top: 20px;
-    text-align: center;
+.session-hint {
+  margin: 0 0 12px;
+  line-height: 1.6;
+  color: var(--el-text-color-regular);
+}
 
-    p {
-      margin-bottom: 10px;
-      color: #606266;
-      font-size: 14px;
-    }
+.session-max.muted {
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+  margin-bottom: 12px;
+}
 
-    .el-button {
-      margin: 0 5px;
-    }
+.session-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  align-items: stretch;
+}
+
+.session-row {
+  :deep(.el-radio) {
+    width: 100%;
+    height: auto;
+    margin-right: 0;
+    align-items: flex-start;
+    white-space: normal;
   }
+  :deep(.el-radio__label) {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 8px;
+    width: 100%;
+  }
+}
+
+.session-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  .ua {
+    font-size: 12px;
+    color: var(--el-text-color-secondary);
+  }
+}
+
+.session-time {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+.dialog-footer-col {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+}
+
+.vip-link {
+  align-self: flex-start;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 </style>

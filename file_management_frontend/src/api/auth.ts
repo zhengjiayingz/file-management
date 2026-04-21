@@ -30,8 +30,13 @@ function mapAuthUser(backendUser: {
 
 // 认证相关API
 export const authApi = {
-  // 用户登录
-  async login(data: { username: string; password: string }): Promise<LoginResult> {
+  /** 会话达上限时后端返回的列表项 */
+  async login(data: {
+    username: string
+    password: string
+    /** 踢掉指定 refresh_token 记录后再登录 */
+    revokeSessionId?: number
+  }): Promise<LoginResult> {
     const res = await request.post<{
       success: boolean;
       data: {
@@ -140,6 +145,42 @@ export const authApi = {
   async forgotPassword(data: { username: string }): Promise<{ message: string }> {
     const res = await request.post<{ success: boolean; message: string }>('/auth/forgot-password', data)
     return { message: res.data.message }
+  },
+
+  /** 活跃会话列表（可选传 refreshToken 以标记本机会话 id） */
+  async listSessions(refreshToken?: string): Promise<{
+    sessions: Array<{
+      id: number
+      ipAddress: string
+      userAgent: string | null
+      deviceName: string | null
+      deviceType: string | null
+      createdAt: string
+      lastUsedAt: string | null
+    }>
+    currentSessionId: number | null
+  }> {
+    const res = await request.post<{
+      success: boolean
+      data: {
+        sessions: Array<{
+          id: number
+          ipAddress: string
+          userAgent: string | null
+          deviceName: string | null
+          deviceType: string | null
+          createdAt: string
+          lastUsedAt: string | null
+        }>
+        currentSessionId: number | null
+      }
+    }>('/auth/sessions/list', { refreshToken: refreshToken ?? undefined })
+    return res.data.data
+  },
+
+  /** 登出所选设备（撤销 refresh 并递增 session_version） */
+  async revokeSessions(ids: number[], refreshToken: string): Promise<void> {
+    await request.post<{ success: boolean }>('/auth/sessions/revoke', { ids, refreshToken })
   },
 
   // 获取当前用户信息
