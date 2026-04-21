@@ -368,7 +368,7 @@ export default {
       storageRanking: '儲存使用排行 (Top 5)',
       storageAxisMB: '儲存使用 (MB)',
       pieSeriesName: '檔案類型',
-      pieTooltip: '{b}: {c} 個 ({d}%)'
+      pieTooltipFmt: '{name}: {count} 個 ({percent}%)'
     },
     recentLogs: '最近操作紀錄',
     table: {

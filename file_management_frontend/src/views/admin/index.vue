@@ -398,7 +398,25 @@ const initCharts = () => {
     fileTypeChart.setOption({
       tooltip: {
         trigger: 'item',
-        formatter: t('admin.charts.pieTooltip')
+        // ECharts 的 {b}{c}{d} 不能放在 i18n 字符串里，会被 vue-i18n 当成插值吃掉
+        formatter: (params: { name?: string; value?: number | number[] | string; percent?: number }) => {
+          const p = params
+          const raw = p.value
+          const val =
+            typeof raw === 'number'
+              ? raw
+              : Array.isArray(raw)
+                ? Number(raw[0])
+                : Number(raw)
+          const count = Number.isFinite(val) ? Math.round(val) : 0
+          const pct =
+            p.percent != null && typeof p.percent === 'number' ? p.percent.toFixed(2) : ''
+          return t('admin.charts.pieTooltipFmt', {
+            name: String(p.name ?? ''),
+            count,
+            percent: pct
+          })
+        }
       },
       legend: {
         orient: 'vertical',

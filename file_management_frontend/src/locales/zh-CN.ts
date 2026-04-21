@@ -368,7 +368,7 @@ export default {
       storageRanking: '存储使用排行 (Top 5)',
       storageAxisMB: '存储使用 (MB)',
       pieSeriesName: '文件类型',
-      pieTooltip: '{b}: {c} 个 ({d}%)'
+      pieTooltipFmt: '{name}: {count} 个 ({percent}%)'
     },
     recentLogs: '最近操作日志',
     table: {

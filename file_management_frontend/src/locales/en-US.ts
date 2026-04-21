@@ -370,7 +370,7 @@ export default {
       storageRanking: 'Storage usage (Top 5)',
       storageAxisMB: 'Storage (MB)',
       pieSeriesName: 'File types',
-      pieTooltip: '{b}: {c} ({d}%)'
+      pieTooltipFmt: '{name}: {count} ({percent}%)'
     },
     recentLogs: 'Recent activity',
     table: {
