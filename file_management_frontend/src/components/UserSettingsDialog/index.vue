@@ -55,7 +55,7 @@
       class="change-pwd-nested-dialog"
       @closed="resetPasswordForm"
     >
-      <p class="hint nested-hint">{{ t('settingsDialog.passwordStrengthHint') }}</p>
+      <p class="hint nested-hint">{{ passwordHintLine }}</p>
       <el-form label-position="top" class="pwd-form" @submit.prevent="submitChangePassword">
         <el-form-item :label="t('settingsDialog.currentPassword')">
           <el-input
@@ -95,6 +95,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { checkPasswordStrength, buildPasswordPolicyHint, type PasswordPolicyClient } from '@utils/passwordStrength'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import type { UploadRequestOptions } from 'element-plus'
@@ -102,7 +103,6 @@ import { useAuthStore } from '@stores/auth'
 import { userApi } from '@api/user'
 import { authApi } from '@api/auth'
 import { publicAssetUrl } from '@utils/publicAssetUrl'
-import { checkPasswordStrength } from '@utils/passwordStrength'
 
 const props = defineProps<{
   modelValue: boolean
@@ -132,6 +132,14 @@ const pwdCurrent = ref('')
 const pwdNew = ref('')
 const pwdConfirm = ref('')
 const changingPassword = ref(false)
+const passwordPolicyForDialog = ref<PasswordPolicyClient | null>(null)
+
+const passwordHintLine = computed(() => {
+  if (passwordPolicyForDialog.value) {
+    return buildPasswordPolicyHint(passwordPolicyForDialog.value, t)
+  }
+  return t('settingsDialog.passwordStrengthHint')
+})
 
 const avatarPreview = computed(() => {
   const p = avatarPath.value ?? authStore.user?.avatar ?? null
@@ -146,8 +154,13 @@ function resetPasswordForm() {
   pwdConfirm.value = ''
 }
 
-function openChangePasswordDialog() {
+async function openChangePasswordDialog() {
   resetPasswordForm()
+  try {
+    passwordPolicyForDialog.value = await authApi.getPasswordPolicy()
+  } catch {
+    passwordPolicyForDialog.value = null
+  }
   changePwdDialogVisible.value = true
 }
 
@@ -209,9 +222,19 @@ async function submitChangePassword() {
     ElMessage.warning(t('settingsDialog.passwordMismatch'))
     return
   }
-  const strength = checkPasswordStrength(pwdNew.value)
+  let pol = passwordPolicyForDialog.value
+  if (!pol) {
+    try {
+      pol = await authApi.getPasswordPolicy()
+      passwordPolicyForDialog.value = pol
+    } catch {
+      ElMessage.error(t('settingsDialog.passwordFailed'))
+      return
+    }
+  }
+  const strength = checkPasswordStrength(pwdNew.value, pol)
   if (strength === 'short') {
-    ElMessage.error(t('settingsDialog.passwordStrengthShort'))
+    ElMessage.error(t('settingsDialog.passwordStrengthShort', { min: pol.minLength }))
     return
   }
   if (strength === 'weak') {

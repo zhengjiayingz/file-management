@@ -88,6 +88,32 @@ model UserPreference {
   @@map("user_preferences")
 }
 
+/// 全局系统配置（单行 id=1）：密码策略、按角色默认空间、标签上限等
+model SystemSettings {
+  id Int @id @default(1)
+
+  /// 密码最短长度
+  passwordMinLength     Int @default(8) @map("password_min_length")
+  /// 须同时满足的字符类别（JSON 数组，元素为 digit | lower | upper | special）
+  passwordRequiredCategories Json @default("[\"digit\",\"lower\",\"upper\",\"special\"]") @map("password_required_categories")
+  /// 在已勾选的类别中，密码至少须满足其中几类（1～勾选数量，可与勾选数相等表示全部须满足）
+  passwordMinCategoriesInPool Int @default(4) @map("password_min_categories_in_pool")
+
+  /// 普通用户默认空间（字节）
+  storageQuotaUserBytes  BigInt @default(1073741824) @map("storage_quota_user_bytes")
+  /// VIP 用户默认/升级后空间（字节）
+  storageQuotaVipBytes   BigInt @default(2147483648) @map("storage_quota_vip_bytes")
+  /// 管理员默认空间（字节）
+  storageQuotaAdminBytes BigInt @default(107374182400) @map("storage_quota_admin_bytes")
+
+  maxTagsUser Int @default(2) @map("max_tags_user")
+  maxTagsVip  Int @default(5) @map("max_tags_vip")
+
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("system_settings")
+}
+
 model FileStorage {
   id              Int      @id @default(autoincrement())
   fileHash        String   @unique @map("file_hash") @db.VarChar(64)

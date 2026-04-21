@@ -1,4 +1,7 @@
 import request from '@utils/request';
+import type { PasswordCategoryKey } from '@utils/passwordStrength';
+
+export type { PasswordCategoryKey };
 
 // 仪表盘统计数据接口
 export interface DashboardStats {
@@ -36,6 +39,19 @@ export interface DashboardStats {
             };
         }>;
     };
+}
+
+export interface SystemSettingsDTO {
+    passwordMinLength: number;
+    passwordRequiredCategories: PasswordCategoryKey[];
+    /** 在已勾选类别中至少须满足几类 */
+    passwordMinCategoriesInPool: number;
+    storageQuotaUserBytes: string;
+    storageQuotaVipBytes: string;
+    storageQuotaAdminBytes: string;
+    maxTagsUser: number;
+    maxTagsVip: number;
+    updatedAt: string;
 }
 
 export interface AdminUserRow {
@@ -89,5 +105,15 @@ export const adminApi = {
 
     async clearUserSessionKickMarker(userId: number): Promise<void> {
         await request.post(`/admin/users/${userId}/clear-session-kick-marker`, {});
+    },
+
+    async getSystemSettings(): Promise<SystemSettingsDTO> {
+        const res = await request.get<{ success: boolean; data: SystemSettingsDTO }>('/admin/system-settings');
+        return res.data.data;
+    },
+
+    async updateSystemSettings(payload: Partial<SystemSettingsDTO>): Promise<SystemSettingsDTO> {
+        const res = await request.put<{ success: boolean; data: SystemSettingsDTO }>('/admin/system-settings', payload);
+        return res.data.data;
     }
 };

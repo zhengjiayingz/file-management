@@ -2,6 +2,7 @@ import express, { Router } from 'express';
 import {
   login,
   register,
+  getPasswordPolicy,
   getCurrentUser,
   refreshToken,
   logout,
@@ -64,6 +65,8 @@ const router: Router = express.Router();
  *         description: 用户名已存在
  */
 router.post('/register', register);
+
+router.get('/password-policy', getPasswordPolicy);
 
 /**
  * @swagger

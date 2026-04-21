@@ -1,3 +1,5 @@
+import type { PasswordCategoryKey } from '@utils/passwordStrength';
+
 // 用户角色枚举
 export type UserRole = 'user' | 'vip' | 'admin';
 
@@ -23,6 +25,13 @@ export interface LoginResult {
   token: string;
   refreshToken: string;
   user: User;
+  /** 当前密码不符合管理员新策略时，后端返回的策略摘要 */
+  passwordPolicyHint?: string;
+  passwordPolicy?: {
+    minLength: number;
+    requiredCategories: PasswordCategoryKey[];
+    minCategoriesInPool: number;
+  };
 }
 
 // 注册成功响应数据

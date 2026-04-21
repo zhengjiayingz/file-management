@@ -4,7 +4,7 @@
 
 本文档详细描述了文件管理系统各个功能模块的业务流程，包括每个步骤涉及的数据表操作。
 
-**与需求文档对齐**：验收口径与权限/回收策略以 [REQUIREMENTS.md](./REQUIREMENTS.md) 为准。**2026-04-18**：§7.3 已改为「仅定时任务回收无引用物理文件」，废止原「管理员手动清理」流程描述；VIP 完整申请与审核见 REQUIREMENTS「VIP 升级与审核流程」及本节 **6.2** 说明。**2026-04-19**：补充 **§9.3** 个人信息与资料更新（弹窗 + `GET/PUT /api/user/profile`、`POST /api/user/avatar`），与 REQUIREMENTS「其他需求」（3）（4）一致。**2026-04-20**：与 §5(2) 对齐——**Token 强失效**采用 **`users.session_version` + JWT `sv`** 与 **Refresh `is_revoked`**；**不**实现逐枚 Access（`jti`）黑名单；管理员踢会话见 **§7.1**。**2026-04-20（§3）**：链接分享 **访问人数上限** `max_visitors`（创建时可选 1～10 或不限）：**未登录**打开列表/下载按 **IP** 计数；**转存须登录**，仅按 **用户 ID** 计数（无匿名转存）；实现见 `share.controller.ts` `ensureVisitorAllowedInTx`；`share_access_logs.action` 含 `view` / `download` / `save`。**2026-04-21**：**并发会话**以 `refresh_tokens` 计；普通 **2** / VIP **5** / 管理员不限；达上限时 `POST /api/auth/login` 返回 **409** `SESSION_LIMIT`；带 **`revokeSessionId`** 再登录时在事务内撤销该行、`session_version` **+1** 并插入新 refresh（见 **§1.2**、**§1.5**）。**2026-04-22**：顶栏用户菜单 **「会话管理」** — `POST /api/auth/sessions/list`（可选带 refreshToken 标当前会话）、`POST /api/auth/sessions/revoke`（多选 `ids` + `refreshToken`）批量登出所选设备，事务内 `session_version` **+1**（见 **§1.6**）。**工程**：Prisma Client 生成与 Windows 环境问题见 [DEVELOPMENT.md](./DEVELOPMENT.md)。
+**与需求文档对齐**：验收口径与权限/回收策略以 [REQUIREMENTS.md](./REQUIREMENTS.md) 为准。**2026-04-18**：§7.3 已改为「仅定时任务回收无引用物理文件」，废止原「管理员手动清理」流程描述；VIP 完整申请与审核见 REQUIREMENTS「VIP 升级与审核流程」及本节 **6.2** 说明。**2026-04-19**：补充 **§9.3** 个人信息与资料更新（弹窗 + `GET/PUT /api/user/profile`、`POST /api/user/avatar`），与 REQUIREMENTS「其他需求」（3）（4）一致。**2026-04-20**：与 §5(2) 对齐——**Token 强失效**采用 **`users.session_version` + JWT `sv`** 与 **Refresh `is_revoked`**；**不**实现逐枚 Access（`jti`）黑名单；管理员踢会话见 **§7.1**。**2026-04-20（§3）**：链接分享 **访问人数上限** `max_visitors`（创建时可选 1～10 或不限）：**未登录**打开列表/下载按 **IP** 计数；**转存须登录**，仅按 **用户 ID** 计数（无匿名转存）；实现见 `share.controller.ts` `ensureVisitorAllowedInTx`；`share_access_logs.action` 含 `view` / `download` / `save`。**2026-04-21**：**并发会话**以 `refresh_tokens` 计；普通 **2** / VIP **5** / 管理员不限；达上限时 `POST /api/auth/login` 返回 **409** `SESSION_LIMIT`；带 **`revokeSessionId`** 再登录时在事务内撤销该行、`session_version` **+1** 并插入新 refresh（见 **§1.2**、**§1.5**）。**2026-04-22**：顶栏用户菜单 **「会话管理」** — `POST /api/auth/sessions/list`（可选带 refreshToken 标当前会话）、`POST /api/auth/sessions/revoke`（多选 `ids` + `refreshToken`）批量登出所选设备，事务内 `session_version` **+1**（见 **§1.6**）。**2026-04-22（§7.4）**：管理员看板 **系统管理** 维护 **`system_settings`**（密码策略、各角色默认存储、`max_tags_user` / `max_tags_vip`）；注册 / 改密 / 登录策略提示、VIP 通过后配额、标签上限、会员中心对比表等与该表同步（见 [DATABASE_DESIGN.md](./DATABASE_DESIGN.md) §3.17）。**工程**：Prisma Client 生成与 Windows 环境问题见 [DEVELOPMENT.md](./DEVELOPMENT.md)。
 
 ---
 
@@ -16,7 +16,7 @@
 4. [好友系统流程](#4-好友系统流程)
 5. [消息系统流程](#5-消息系统流程)
 6. [存储管理流程](#6-存储管理流程)
-7. [管理员功能流程](#7-管理员功能流程)
+7. [管理员功能流程](#7-管理员功能流程)（含 [7.4 系统管理（全局策略与默认配额）](#74-系统管理全局策略与默认配额)）
 8. [定时任务流程](#8-定时任务流程)
 9. [用户设置流程](#9-用户设置流程)（含 [9.3 个人信息与资料更新](#93-个人信息与资料更新头像--邮箱)）
 
@@ -30,7 +30,7 @@
 
 1. **前端验证**
    - 验证用户名格式（唯一性）
-   - 验证密码强度（8位以上，包含数字/字母/大小写/特殊字符至少3种）
+   - 验证密码强度：拉取 **`GET /api/auth/password-policy`**（或等价缓存），与 **`system_settings`** 中「最短长度 + 勾选类别 + 至少满足几类」一致（非固定「四选三」）
    - 验证邮箱格式
 
 2. **后端处理**
@@ -40,7 +40,7 @@
    - 创建用户记录（`users` 表：`must_change_password`、`avatar_url`、`vip_expire_at` 等由数据库/Prisma 默认值填充，与 [DATABASE_DESIGN.md](./DATABASE_DESIGN.md) §3.1 一致）
 
 3. **初始化配置**
-   - 设置默认存储配额（普通用户 1GB）
+   - **`users.storage_quota`** = 当前 **`system_settings.storage_quota_user_bytes`**
    - 初始化已使用存储为 0
    - 设置用户状态为 active
 
@@ -670,12 +670,12 @@ ORDER BY uf.created_at DESC
 
 ### 2.6 文件标签管理流程
 
-**流程步骤：**
+**流程步骤：** 创建标签前，后端按用户角色与 VIP 是否过期读取 **`system_settings`** 的 **`max_tags_user`** / **`max_tags_vip`**（管理员不限制），超过上限则拒绝。
 
 #### 2.6.1 创建标签
 
 1. **创建标签记录**
-   - 在 file_tags 表创建标签
+   - 校验未超标签上限后，在 `file_tags` 表创建标签
 
 **涉及的表操作：**
 
@@ -1365,8 +1365,8 @@ WHERE id = ?
 
 2. **更新用户角色**
    - 设置 role = 'vip'
-   - 更新 storage_quota = 2GB
-   - 设置 vip_expire_at（如果有期限）
+   - 更新 **`storage_quota`** = 当前 **`system_settings.storage_quota_vip_bytes`**
+   - 设置 vip_expire_at（如果有期限；当前实现可为 NULL 表示不限期）
 
 3. **记录操作日志**
 
@@ -1383,11 +1383,11 @@ WHERE id = ?
 -- 验证用户状态
 SELECT role FROM users WHERE id = ?
 
--- 升级为VIP
+-- 升级为VIP（配额以当时 system_settings.storage_quota_vip_bytes 为准，示意）
 UPDATE users 
 SET role = 'vip', 
-    storage_quota = 2147483648,
-    vip_expire_at = DATE_ADD(NOW(), INTERVAL 1 YEAR),
+    storage_quota = (SELECT storage_quota_vip_bytes FROM system_settings WHERE id = 1),
+    vip_expire_at = NULL,
     updated_at = NOW()
 WHERE id = ?
 
@@ -1562,6 +1562,36 @@ LIMIT 20
 
 ---
 
+### 7.4 系统管理（全局策略与默认配额）
+
+**入口**：管理员登录后，**管理员看板**中的 **「系统管理」** 卡片（前端 `admin/index.vue`）。
+
+**流程步骤：**
+
+1. **加载配置**  
+   - `GET /api/admin/system-settings`  
+   - 返回：`passwordMinLength`、`passwordRequiredCategories`（数组）、`passwordMinCategoriesInPool`、`storageQuota*Bytes`（字符串 BigInt）、`maxTagsUser`、`maxTagsVip` 等。
+
+2. **保存配置**  
+   - `PUT /api/admin/system-settings`，body 字段与上同（存储为字节字符串或表单换算后的字节）。  
+   - 后端更新 **`system_settings`** 主键 `id = 1`。  
+   - 密码策略变更**不**自动改写存量用户密码；已登录用户若当前密码不满足新策略，可在下次登录时被要求改密（以实现为准，见 `auth.controller.ts`）。
+
+3. **消费方（只读）**  
+   - **注册 / 改密 / 登录策略校验**：`passwordPolicy.service.ts` + `GET /api/auth/password-policy`（无需登录，供前端提示）。  
+   - **新用户配额**：注册写入 `storage_quota_user_bytes`。  
+   - **VIP 审核通过**：写入 `storage_quota_vip_bytes`。  
+   - **标签上限**：`tagLimit.service.ts` 读取 `max_tags_user` / `max_tags_vip`。  
+   - **会员中心对比表**：`GET /api/vip/tier-config`（需登录），与表格中普通 / VIP / SVIP（管理员档）展示同步。
+
+**涉及的表操作：**
+
+| 表名 | 操作类型 | 说明 |
+|------|---------|------|
+| system_settings | SELECT / UPDATE | 单行全局配置 |
+
+---
+
 ## 8. 定时任务流程
 
 ### 8.1 清理过期分片任务
@@ -1699,11 +1729,11 @@ WHERE expire_at < NOW() AND status = 'active'
 
 2. **降级为普通用户**
    - 设置 role = 'user'
-   - 更新 storage_quota = 1GB
+   - 更新 **`storage_quota`** = 当前 **`system_settings.storage_quota_user_bytes`**
    - 清空 vip_expire_at
 
 3. **检查存储超限**
-   - 如果 storage_used > 1GB，标记用户需要清理文件
+   - 若 **`storage_used`** 大于新的 **`storage_quota`**，产品侧可提示用户清理（以实现为准）
 
 **涉及的表操作：**
 
@@ -1718,10 +1748,10 @@ WHERE expire_at < NOW() AND status = 'active'
 SELECT id, storage_used FROM users
 WHERE role = 'vip' AND vip_expire_at < NOW()
 
--- 降级为普通用户
+-- 降级为普通用户（配额以 system_settings.storage_quota_user_bytes 为准，示意）
 UPDATE users 
 SET role = 'user', 
-    storage_quota = 1073741824,
+    storage_quota = (SELECT storage_quota_user_bytes FROM system_settings WHERE id = 1),
     vip_expire_at = NULL,
     updated_at = NOW()
 WHERE id = ?
@@ -1819,7 +1849,7 @@ ON DUPLICATE KEY UPDATE locale = VALUES(locale), theme = VALUES(theme), updated_
 
 **设置 — 修改密码（非强制改密场景）**
 
-1. 用户填写当前密码、新密码、确认新密码；前端校验新密码强度（与注册规则一致：至少 8 位，数字 / 小写 / 大写 / 特殊字符至少三种）及两次新密码一致。
+1. 用户填写当前密码、新密码、确认新密码；前端校验新密码强度（与注册规则一致：以 **`GET /api/auth/password-policy`** / **`system_settings`** 为准）及两次新密码一致。
 2. `POST /api/auth/change-password`，body：`currentPassword`、`newPassword`（当用户 `must_change_password` 为 false 时后端校验原密码）。
 3. 成功后返回新 `accessToken`，前端更新本地令牌；`must_change_password` 保持为 false。
 

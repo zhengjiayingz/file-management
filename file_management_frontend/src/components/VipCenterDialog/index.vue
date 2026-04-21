@@ -54,9 +54,15 @@
             <tbody>
               <tr>
                 <td>{{ t('vipCenter.rowStorage') }}</td>
-                <td class="highlight">{{ t('vipCenter.rowStorageSvip') }}</td>
-                <td>{{ t('vipCenter.rowStorageVip') }}</td>
-                <td>{{ t('vipCenter.rowStorageUser') }}</td>
+                <td class="highlight">{{ storageSvip }}</td>
+                <td>{{ storageVip }}</td>
+                <td>{{ storageUser }}</td>
+              </tr>
+              <tr>
+                <td>{{ t('vipCenter.rowTags') }}</td>
+                <td class="highlight">{{ tagsSvip }}</td>
+                <td>{{ tagsVip }}</td>
+                <td>{{ tagsUser }}</td>
               </tr>
               <tr>
                 <td>{{ t('vipCenter.rowDownload') }}</td>
@@ -106,7 +112,8 @@ import { computed, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@stores/auth'
-import { vipApi } from '@api/vip'
+import { vipApi, type VipTierComparisonConfig } from '@api/vip'
+import { formatFileSize } from '@utils/fileUpload'
 
 const { t } = useI18n()
 
@@ -127,6 +134,30 @@ const visible = computed({
 const activeTier = ref('svip')
 const applying = ref(false)
 const hasPending = ref(false)
+const tierConfig = ref<VipTierComparisonConfig | null>(null)
+
+function formatQuotaBytes(s: string | undefined): string {
+  if (!s) return '—'
+  try {
+    const n = Number(s)
+    if (!Number.isFinite(n) || n < 0) return '—'
+    return formatFileSize(n)
+  } catch {
+    return '—'
+  }
+}
+
+const storageSvip = computed(() => formatQuotaBytes(tierConfig.value?.storageQuotaAdminBytes))
+const storageVip = computed(() => formatQuotaBytes(tierConfig.value?.storageQuotaVipBytes))
+const storageUser = computed(() => formatQuotaBytes(tierConfig.value?.storageQuotaUserBytes))
+
+const tagsSvip = computed(() => t('vipCenter.tagsUnlimited'))
+const tagsVip = computed(() =>
+  tierConfig.value ? t('vipCenter.tagsCount', { n: tierConfig.value.maxTagsVip }) : '—'
+)
+const tagsUser = computed(() =>
+  tierConfig.value ? t('vipCenter.tagsCount', { n: tierConfig.value.maxTagsUser }) : '—'
+)
 
 const userInitial = computed(() =>
   (authStore.user?.username || '?').charAt(0).toUpperCase()
@@ -170,14 +201,26 @@ async function refreshStatus() {
   }
 }
 
+async function loadTierConfig() {
+  try {
+    tierConfig.value = await vipApi.getTierComparisonConfig()
+  } catch {
+    tierConfig.value = null
+  }
+}
+
 function onOpen() {
-  refreshStatus()
+  void refreshStatus()
+  void loadTierConfig()
 }
 
 watch(
   () => props.modelValue,
   (v) => {
-    if (v) refreshStatus()
+    if (v) {
+      void refreshStatus()
+      void loadTierConfig()
+    }
   }
 )
 

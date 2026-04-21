@@ -1,5 +1,14 @@
 import request from '@utils/request'
 
+/** 与后端 system_settings 一致，供会员中心对比表展示 */
+export interface VipTierComparisonConfig {
+  storageQuotaUserBytes: string
+  storageQuotaVipBytes: string
+  storageQuotaAdminBytes: string
+  maxTagsUser: number
+  maxTagsVip: number
+}
+
 export interface VipPendingItem {
   id: number
   applicantId: number
@@ -9,6 +18,11 @@ export interface VipPendingItem {
 }
 
 export const vipApi = {
+  async getTierComparisonConfig(): Promise<VipTierComparisonConfig> {
+    const res = await request.get<{ success: boolean; data: VipTierComparisonConfig }>('/vip/tier-config')
+    return res.data.data
+  },
+
   async apply(): Promise<{ message: string }> {
     const res = await request.post<{ success: boolean; message: string }>('/vip/apply')
     return { message: res.data.message }

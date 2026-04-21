@@ -7,6 +7,19 @@
 启动后端开发服务器后，访问：
 > **http://localhost:3000/api-docs**
 
+### 配置与策略类接口（摘要）
+
+以下接口若未在 Swagger 中逐项展开，可对照源码与 [DATABASE_DESIGN.md](./DATABASE_DESIGN.md) §3.17：
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| `GET` | `/api/auth/password-policy` | 当前密码策略（最短长度、`requiredCategories`、`minCategoriesInPool`），无需登录，供注册/改密提示 |
+| `GET` | `/api/admin/system-settings` | 读取 **`system_settings`**（需**管理员** JWT） |
+| `PUT` | `/api/admin/system-settings` | 更新 **`system_settings`**（需管理员 JWT） |
+| `GET` | `/api/vip/tier-config` | 会员中心对比表：与系统管理一致的默认存储与标签上限（需登录） |
+
+完整请求体与响应字段以 **`schema.prisma` 模型 `SystemSettings`** 及对应 controller 为准。
+
 在此页面，你可以：
 - 查看所有可用的 API
 - 查看请求参数和响应结构

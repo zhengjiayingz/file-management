@@ -4,8 +4,27 @@ import { AuthRequest } from '../types/index.js';
 import { logOperation, LogOperationType, LogResourceType } from '../services/logger.service.js';
 import { emitToUser } from '../realtime/socket.js';
 import { loadMessageForEmit } from '../realtime/messagePayload.js';
+import { getSystemSettings } from '../services/systemSettings.service.js';
 
-const VIP_QUOTA_BYTES = BigInt(2 * 1024 * 1024 * 1024); // 2GB
+/** 会员中心对比表：与管理员「系统管理」中的默认配额、标签上限同步（需登录） */
+export const getVipTierComparisonConfig = async (_req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const s = await getSystemSettings();
+    res.json({
+      success: true,
+      data: {
+        storageQuotaUserBytes: s.storageQuotaUserBytes.toString(),
+        storageQuotaVipBytes: s.storageQuotaVipBytes.toString(),
+        storageQuotaAdminBytes: s.storageQuotaAdminBytes.toString(),
+        maxTagsUser: s.maxTagsUser,
+        maxTagsVip: s.maxTagsVip
+      }
+    });
+  } catch (error) {
+    console.error('getVipTierComparisonConfig', error);
+    res.status(500).json({ success: false, message: '获取会员展示配置失败' });
+  }
+};
 
 async function notifyAdminsVipApply(applicantId: number, username: string): Promise<void> {
   const admins = await prisma.user.findMany({
@@ -167,12 +186,13 @@ export const approveVipRequest = async (req: AuthRequest, res: Response): Promis
       return;
     }
 
+    const sys = await getSystemSettings();
     await prisma.$transaction([
       prisma.user.update({
         where: { id: row.applicantId },
         data: {
           role: 'vip',
-          storageQuota: VIP_QUOTA_BYTES,
+          storageQuota: sys.storageQuotaVipBytes,
           vipExpireAt: null
         }
       }),
@@ -278,12 +298,13 @@ export const approveVipByApplicant = async (req: AuthRequest, res: Response): Pr
       return;
     }
 
+    const sysByApplicant = await getSystemSettings();
     await prisma.$transaction([
       prisma.user.update({
         where: { id: row.applicantId },
         data: {
           role: 'vip',
-          storageQuota: VIP_QUOTA_BYTES,
+          storageQuota: sysByApplicant.storageQuotaVipBytes,
           vipExpireAt: null
         }
       }),

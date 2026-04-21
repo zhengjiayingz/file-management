@@ -24,12 +24,12 @@
 
 | # | 功能需求 | 状态 | 说明 |
 |---|----------|------|------|
-| (1) | 用户分为普通/VIP/管理员，支持升级VIP，配额管理 | ✅ 已实现 | `role` 含 `user` / `vip` / `admin`；普通 **1GB**、VIP **2GB** 配额与 `storageQuota` / `storageUsed` 联动；**VIP 申请 + 管理员审核**（通讯录「VIP申请」、会话内申请消息同意/拒绝）与 [REQUIREMENTS.md](./REQUIREMENTS.md) 一致 |
+| (1) | 用户分为普通/VIP/管理员，支持升级VIP，配额管理 | ✅ 已实现 | `role` 含 `user` / `vip` / `admin`；**默认配额**来自 **`system_settings`**（`storage_quota_user_bytes` / `storage_quota_vip_bytes`，管理员看板「系统管理」可改；种子默认约 1GB / 2GB）；与 `storageQuota` / `storageUsed` 联动；**VIP 申请 + 管理员审核**与 [REQUIREMENTS.md](./REQUIREMENTS.md) 一致 |
 | (2) | 已使用配额以进度条百分比展示 | ✅ 已实现 | 主页 `index.vue` 中有存储空间进度条组件 (`el-progress`) |
 | (3) | 好友系统 + 收发消息 + 好友文件分享 | ✅ 已实现 | `FriendPanel`：好友列表、聊天、文件分享（`messageType: file`）。**实时**：后端 Socket.IO（`src/realtime/socket.ts`）推送 `message:new`、`friendship:sync`；前端 `contactsSocket.ts` 订阅。仅**抽屉打开且处于该会话**时对来讯自动 `markAsRead`；**关闭抽屉**清空 `currentChatFriend` 以保留未读提醒。 |
 | (4) | 好友申请审核同意机制 | ✅ 已实现 | `friendship.controller` 有 `sendFriendRequest` / `acceptFriendRequest` / `rejectFriendRequest` |
 | (5) | 消息已读状态显示 | ✅ 已实现 | `markAsRead` 接口 + `isRead` + `readAt` 字段 |
-| (6) | 注册强制密码强度（8位以上，4个要求满足3个） | ✅ 已实现 | 后端注册与前端注册流程已按「四选三」规则校验；**已测试验收**通过 |
+| (6) | 注册强制密码强度 | ✅ 已实现 | 规则由 **`system_settings`** 配置（最短长度 + 字符类别多选 + 至少满足几类）；`GET /api/auth/password-policy` 与前端对齐；默认可覆盖原「四选三」场景 |
 | (7) | SHA256密码存储 + 重置密码 + 修改密码 | ✅ 已实现 | SHA256、管理员重置（统一临时密码 + `must_change_password` + 强制改密）、`POST /api/auth/change-password`（强制改密时免填当前密码；**设置** `UserSettingsDialog` 自助改密须原密码 + 新密码强度 + 确认）、与 [REQUIREMENTS.md](./REQUIREMENTS.md) §1(7) 一致 |
 | (8) | 双 Token 无感登录 | ✅ 已实现 | `generateAccessToken` (15分钟) + `generateRefreshToken` (7天) + `/refresh` + `/logout` 均已实现 |
 
@@ -51,7 +51,7 @@
 | (10) | 批量操作（批量下载、删除、移动） | ✅ 已实现 | 批量 ZIP 下载、软删 `POST /api/files/batch/delete`、移动 `POST /api/files/batch/move` 等与 [REQUIREMENTS.md](./REQUIREMENTS.md) 实现状态总览一致 |
 | (11) | 回收站功能 + 智能归位 | ✅ 已实现 | `deleteFile`(逻辑删除) / `restoreFile`(还原，含原文件夹不存在时还原到根目录) / `permanentDeleteFile`(彻底删除) |
 | (12) | 文件版本管理 | ✅ 已实现 | `version.controller.ts` 有版本列表、回滚、下载历史版本；前端有 `FileHistoryDialog.vue` |
-| (13) | 文件标签/分类 | ✅ 已实现 | 与 [REQUIREMENTS.md](./REQUIREMENTS.md) 实现状态总览一致 |
+| (13) | 文件标签/分类 | ✅ 已实现 | 标签个数上限由 **`system_settings.max_tags_user` / `max_tags_vip`** 控制（管理员不限）；与 [REQUIREMENTS.md](./REQUIREMENTS.md) §2(13) 一致 |
 | (14) | 拖拽上传 | ✅ 已实现 | `FileUpload.vue` 实现了拖拽处理 (`handleDragOver`, `handleDrop`)，主页有拖拽覆盖层 |
 | (15) | 上传队列管理（进度、暂停/继续/取消） | ✅ 已实现 | `FileUpload.vue` 实现了上传队列、进度显示、暂停/开始/移除操作 |
 | (16) | 缩略图（图片和视频） | ✅ 已实现 | 后端 `getFileThumbnail` 接口 + 前端 `FileList.vue` 渲染缩略图 |

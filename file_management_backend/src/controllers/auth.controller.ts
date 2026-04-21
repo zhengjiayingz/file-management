@@ -8,7 +8,14 @@ import { AuthRequest, LoginBody, RegisterBody } from '../types/index.js';
 import { ensureFriendshipWithAdmin, getPrimaryAdminId } from '../services/adminFriend.service.js';
 import { emitToUser } from '../realtime/socket.js';
 import { loadMessageForEmit } from '../realtime/messagePayload.js';
-import { hashPassword, validatePasswordStrength } from '../services/passwordPolicy.service.js';
+import {
+  hashPassword,
+  validatePasswordStrengthWithPolicy,
+  settingsRowToPolicy,
+  describePasswordPolicy,
+  policyToPublicDTO
+} from '../services/passwordPolicy.service.js';
+import { getSystemSettings } from '../services/systemSettings.service.js';
 
 // 确保环境变量被加载
 dotenv.config();
@@ -90,6 +97,18 @@ class InvalidRevokeSessionError extends Error {
   }
 }
 
+/** 公开：当前系统密码强度策略（注册 / 改密表单客户端提示用） */
+export const getPasswordPolicy = async (_req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const settings = await getSystemSettings();
+    const policy = settingsRowToPolicy(settings);
+    res.json({ success: true, data: policyToPublicDTO(policy) });
+  } catch (error) {
+    console.error('getPasswordPolicy error:', error);
+    res.status(500).json({ success: false, message: '获取密码策略失败' });
+  }
+};
+
 /**
  * 用户注册
  */
@@ -115,7 +134,9 @@ export const register = async (req: AuthRequest, res: Response): Promise<void> =
       return;
     }
 
-    const strengthErr = validatePasswordStrength(password);
+    const settings = await getSystemSettings();
+    const regPolicy = settingsRowToPolicy(settings);
+    const strengthErr = validatePasswordStrengthWithPolicy(password, regPolicy);
     if (strengthErr) {
       res.status(400).json({
         success: false,
@@ -164,7 +185,7 @@ export const register = async (req: AuthRequest, res: Response): Promise<void> =
           password: hashedPassword,
           email: email || null,
           role: 'user',
-          storageQuota: BigInt(1073741824), // 1GB
+          storageQuota: settings.storageQuotaUserBytes,
           storageUsed: BigInt(0),
           status: 'active'
         }
@@ -314,6 +335,11 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
       return;
     }
 
+    const settings = await getSystemSettings();
+    const policy = settingsRowToPolicy(settings);
+    const needPolicyChange = validatePasswordStrengthWithPolicy(password, policy) !== null;
+    const finalMustChange = user.mustChangePassword || needPolicyChange;
+
     const { revokeSessionId } = req.body as LoginBody;
     const limit = getMaxSessionSlots(user.role);
 
@@ -363,6 +389,7 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
             where: { id: user.id },
             data: {
               lastSessionKickAt: null,
+              mustChangePassword: finalMustChange,
               ...(revokeId != null ? { sessionVersion: { increment: 1 } } : {})
             },
             select: { sessionVersion: true }
@@ -371,7 +398,7 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
           const accessToken = generateAccessToken(
             user.id,
             user.username,
-            user.mustChangePassword,
+            finalMustChange,
             uAfter.sessionVersion
           );
           const refreshToken = generateRefreshToken();
@@ -441,13 +468,19 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
           role: user.role,
           storage_quota: Number(user.storageQuota),
           storage_used: Number(user.storageUsed),
-          must_change_password: user.mustChangePassword,
+          must_change_password: finalMustChange,
           avatar_url: user.avatarUrl ?? null,
           vip_expire_at: user.vipExpireAt ? user.vipExpireAt.toISOString() : null,
           created_at: user.createdAt.toISOString(),
         },
         accessToken: result.accessToken,
-        refreshToken: result.refreshToken
+        refreshToken: result.refreshToken,
+        ...(needPolicyChange
+          ? {
+              password_policy_hint: describePasswordPolicy(policy),
+              password_policy: policyToPublicDTO(policy)
+            }
+          : {})
       }
     });
   } catch (error) {
@@ -648,7 +681,8 @@ export const changePassword = async (req: AuthRequest, res: Response): Promise<v
       return;
     }
 
-    const strengthErr = validatePasswordStrength(newPassword);
+    const settingsPw = await getSystemSettings();
+    const strengthErr = validatePasswordStrengthWithPolicy(newPassword, settingsRowToPolicy(settingsPw));
     if (strengthErr) {
       res.status(400).json({ success: false, message: strengthErr });
       return;

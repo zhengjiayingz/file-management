@@ -11,6 +11,18 @@ export default {
     settings: '设置',
     logout: '退出登录'
   },
+  passwordPolicy: {
+    hintLengthOnly: '至少 {min} 位',
+    hintAll: '至少 {min} 位，且须同时包含：{cats}',
+    hintPool: '至少 {min} 位；在 {cats} 中至少满足 {m} 类',
+    joiner: '、',
+    categories: {
+      digit: '数字',
+      lower: '小写字母',
+      upper: '大写字母',
+      special: '特殊字符'
+    }
+  },
   filterBar: {
     labelFileName: '文件名',
     labelDateRange: '上传时间',
@@ -125,7 +137,9 @@ export default {
     sessionLimitKickAndLogin: '踢出所选会话并登录',
     sessionLimitCancel: '取消登录',
     upgradeVip: '升级为 VIP',
-    sessionLimitKickSuccess: '已登录'
+    sessionLimitKickSuccess: '已登录',
+    passwordPolicyChanged: '管理员已更新密码策略，请立即修改密码。新要求：{policy}',
+    registerPolicyError: '无法获取密码策略，请稍后重试'
   },
   forceChangePassword: {
     title: '请修改密码',
@@ -173,15 +187,15 @@ export default {
     avatarFailed: '头像上传失败',
     passwordSection: '登录密码',
     changePassword: '修改密码',
-    passwordStrengthHint: '新密码至少 8 位，且须包含数字、大小写字母、特殊字符中至少三种。',
+    passwordStrengthHint: '请设置符合系统要求的密码（长度与字符类别以当前策略为准）。',
     currentPassword: '当前密码',
     newPassword: '新密码',
     confirmNewPassword: '确认新密码',
     submitPassword: '更新密码',
     passwordFillAll: '请填写当前密码、新密码与确认密码',
     passwordMismatch: '两次输入的新密码不一致',
-    passwordStrengthShort: '密码长度至少 8 位',
-    passwordStrengthWeak: '密码须包含数字、大小写字母、特殊字符中至少三种',
+    passwordStrengthShort: '密码长度至少 {min} 位',
+    passwordStrengthWeak: '密码未满足已要求的字符类别',
     passwordSameAsOld: '新密码不能与当前密码相同',
     passwordSuccess: '密码已更新',
     passwordFailed: '修改密码失败'
@@ -370,6 +384,31 @@ export default {
       pieSeriesName: '文件类型',
       pieTooltipFmt: '{name}: {count} 个 ({percent}%)'
     },
+    systemSettings: {
+      title: '系统管理',
+      passwordPolicy: '密码策略',
+      minLength: '最短长度（位）',
+      requiredCategories: '须包含的字符类别',
+      categoryLabels: {
+        digit: '数字',
+        lower: '小写字母',
+        upper: '大写字母',
+        special: '特殊字符'
+      },
+      categoriesHint: '先勾选参与评分的字符类别，再指定密码至少须满足其中几类（可小于勾选数）。',
+      selectOneCategory: '请至少勾选一类字符要求',
+      minCategoriesInPool: '上述类别至少满足（类）',
+      minPoolInvalid: '「至少满足类数」须在 1 与已勾选类别数之间',
+      storageByRole: '各角色默认存储空间',
+      storageUser: '普通用户',
+      storageVip: 'VIP',
+      storageAdmin: '管理员',
+      tagLimits: '标签数量上限',
+      maxTagsUser: '普通用户',
+      maxTagsVip: 'VIP 用户',
+      loadError: '加载系统配置失败',
+      saveSuccess: '系统配置已保存'
+    },
     recentLogs: '最近操作日志',
     table: {
       time: '时间',
@@ -538,15 +577,16 @@ export default {
     vipBenefitsHint: '尊享 VIP 权益',
     tabSvipSubtitle: '尊享特权',
     tabVipSubtitle: '实用扩容',
-    disclaimer: '以下为练习项目对照网盘产品的权益说明，实际以管理员审核为准。',
+    disclaimer:
+      '以下为练习项目对照网盘产品的权益说明。表格中存储配额与标签数量上限与「管理员看板 → 系统管理」中的配置一致，实际以管理员审核为准。',
     colPrivilege: '特权',
     colSvip: 'SVIP',
     colVip: 'VIP',
     colNormalUser: '普通用户',
     rowStorage: '存储配额',
-    rowStorageSvip: '2TB 起（示意）',
-    rowStorageVip: '2GB',
-    rowStorageUser: '1GB',
+    rowTags: '标签数量上限',
+    tagsUnlimited: '无限制',
+    tagsCount: '{n} 个',
     rowDownload: '高速下载',
     rowDownloadSvip: '极速',
     rowDownloadVip: '优先',

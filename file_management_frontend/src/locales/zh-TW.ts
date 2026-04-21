@@ -11,6 +11,18 @@ export default {
     settings: '設置',
     logout: '退出登錄'
   },
+  passwordPolicy: {
+    hintLengthOnly: '至少 {min} 位',
+    hintAll: '至少 {min} 位，且須同時包含：{cats}',
+    hintPool: '至少 {min} 位；在 {cats} 中至少滿足 {m} 類',
+    joiner: '、',
+    categories: {
+      digit: '數字',
+      lower: '小寫字母',
+      upper: '大寫字母',
+      special: '特殊字元'
+    }
+  },
   filterBar: {
     labelFileName: '檔名',
     labelDateRange: '上傳時間',
@@ -125,7 +137,9 @@ export default {
     sessionLimitKickAndLogin: '踢出所選會話並登入',
     sessionLimitCancel: '取消登入',
     upgradeVip: '升級為 VIP',
-    sessionLimitKickSuccess: '已登入'
+    sessionLimitKickSuccess: '已登入',
+    passwordPolicyChanged: '管理員已更新密碼策略，請立即修改密碼。新要求：{policy}',
+    registerPolicyError: '無法取得密碼策略，請稍後再試'
   },
   forceChangePassword: {
     title: '請修改密碼',
@@ -173,15 +187,15 @@ export default {
     avatarFailed: '頭像上傳失敗',
     passwordSection: '登入密碼',
     changePassword: '修改密碼',
-    passwordStrengthHint: '新密碼至少 8 位，且須包含數字、大小寫字母、特殊字元中至少三種。',
+    passwordStrengthHint: '請設定符合系統要求的密碼（長度與字元類別以目前策略為準）。',
     currentPassword: '目前密碼',
     newPassword: '新密碼',
     confirmNewPassword: '確認新密碼',
     submitPassword: '更新密碼',
     passwordFillAll: '請填寫目前密碼、新密碼與確認密碼',
     passwordMismatch: '兩次輸入的新密碼不一致',
-    passwordStrengthShort: '密碼長度至少 8 位',
-    passwordStrengthWeak: '密碼須包含數字、大小寫字母、特殊字元中至少三種',
+    passwordStrengthShort: '密碼長度至少 {min} 位',
+    passwordStrengthWeak: '密碼未滿足已要求的字元類別',
     passwordSameAsOld: '新密碼不能與目前密碼相同',
     passwordSuccess: '密碼已更新',
     passwordFailed: '修改密碼失敗'
@@ -370,6 +384,31 @@ export default {
       pieSeriesName: '檔案類型',
       pieTooltipFmt: '{name}: {count} 個 ({percent}%)'
     },
+    systemSettings: {
+      title: '系統管理',
+      passwordPolicy: '密碼策略',
+      minLength: '最短長度（位）',
+      requiredCategories: '須包含的字元類別',
+      categoryLabels: {
+        digit: '數字',
+        lower: '小寫字母',
+        upper: '大寫字母',
+        special: '特殊字元'
+      },
+      categoriesHint: '先勾選參與評分的字元類別，再指定密碼至少須滿足其中幾類（可小於勾選數）。',
+      selectOneCategory: '請至少勾選一類字元要求',
+      minCategoriesInPool: '上述類別至少滿足（類）',
+      minPoolInvalid: '「至少滿足類數」須在 1 與已勾選類別數之間',
+      storageByRole: '各角色預設儲存空間',
+      storageUser: '一般使用者',
+      storageVip: 'VIP',
+      storageAdmin: '管理員',
+      tagLimits: '標籤數量上限',
+      maxTagsUser: '一般使用者',
+      maxTagsVip: 'VIP 使用者',
+      loadError: '載入系統設定失敗',
+      saveSuccess: '系統設定已儲存'
+    },
     recentLogs: '最近操作紀錄',
     table: {
       time: '時間',
@@ -538,15 +577,16 @@ export default {
     vipBenefitsHint: '尊享 VIP 權益',
     tabSvipSubtitle: '尊享特權',
     tabVipSubtitle: '實用擴容',
-    disclaimer: '以下為練習專案對照網盤產品的權益說明，實際以管理員審核為準。',
+    disclaimer:
+      '以下為練習專案對照網盤產品的權益說明。表格中儲存配額與標籤數量上限與「管理員看板 → 系統管理」中的設定一致，實際以管理員審核為準。',
     colPrivilege: '特權',
     colSvip: 'SVIP',
     colVip: 'VIP',
     colNormalUser: '一般使用者',
     rowStorage: '儲存配額',
-    rowStorageSvip: '2TB 起（示意）',
-    rowStorageVip: '2GB',
-    rowStorageUser: '1GB',
+    rowTags: '標籤數量上限',
+    tagsUnlimited: '無限制',
+    tagsCount: '{n} 個',
     rowDownload: '高速下載',
     rowDownloadSvip: '極速',
     rowDownloadVip: '優先',

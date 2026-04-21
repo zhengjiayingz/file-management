@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import prisma from '../../lib/prisma.js';
 import { AuthRequest } from '../../types/index.js';
+import { getMaxTagsForUser } from '../../services/tagLimit.service.js';
 
 const HEX_COLOR = /^#[0-9A-Fa-f]{6}$/;
 
@@ -57,6 +58,16 @@ export const createTag = async (req: AuthRequest, res: Response): Promise<void> 
     });
     if (existing) {
       res.status(409).json({ success: false, message: '已存在同名标签' });
+      return;
+    }
+
+    const maxTags = await getMaxTagsForUser(req.user.id);
+    const currentCount = await prisma.fileTag.count({ where: { userId: req.user.id } });
+    if (currentCount >= maxTags) {
+      res.status(400).json({
+        success: false,
+        message: `标签数量已达上限（最多 ${maxTags} 个）`
+      });
       return;
     }
 

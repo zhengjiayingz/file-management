@@ -11,6 +11,18 @@ export default {
     settings: 'Settings',
     logout: 'Logout'
   },
+  passwordPolicy: {
+    hintLengthOnly: 'At least {min} characters',
+    hintAll: 'At least {min} characters, and must include all of: {cats}',
+    hintPool: 'At least {min} characters; satisfy at least {m} of: {cats}',
+    joiner: ', ',
+    categories: {
+      digit: 'digits',
+      lower: 'lowercase letters',
+      upper: 'uppercase letters',
+      special: 'special characters'
+    }
+  },
   filterBar: {
     labelFileName: 'Name',
     labelDateRange: 'Upload time',
@@ -126,7 +138,10 @@ export default {
     sessionLimitKickAndLogin: 'Remove selected & sign in',
     sessionLimitCancel: 'Cancel',
     upgradeVip: 'Upgrade to VIP',
-    sessionLimitKickSuccess: 'Signed in'
+    sessionLimitKickSuccess: 'Signed in',
+    passwordPolicyChanged:
+      'The administrator updated the password policy. Please change your password now. New requirements: {policy}',
+    registerPolicyError: 'Could not load password policy. Please try again.'
   },
   forceChangePassword: {
     title: 'Change your password',
@@ -174,16 +189,15 @@ export default {
     avatarFailed: 'Avatar upload failed',
     passwordSection: 'Password',
     changePassword: 'Change password',
-    passwordStrengthHint:
-      'New password: at least 8 characters, and at least 3 of: digits, lowercase, uppercase, special characters.',
+    passwordStrengthHint: 'Choose a password that meets the current system policy (length and character types).',
     currentPassword: 'Current password',
     newPassword: 'New password',
     confirmNewPassword: 'Confirm new password',
     submitPassword: 'Update password',
     passwordFillAll: 'Enter current password, new password, and confirmation',
     passwordMismatch: 'New passwords do not match',
-    passwordStrengthShort: 'Password must be at least 8 characters',
-    passwordStrengthWeak: 'Use at least 3 of: digits, lowercase, uppercase, special characters',
+    passwordStrengthShort: 'Password must be at least {min} characters',
+    passwordStrengthWeak: 'Password does not meet the required character types',
     passwordSameAsOld: 'New password must differ from current password',
     passwordSuccess: 'Password updated',
     passwordFailed: 'Failed to change password'
@@ -372,6 +386,32 @@ export default {
       pieSeriesName: 'File types',
       pieTooltipFmt: '{name}: {count} ({percent}%)'
     },
+    systemSettings: {
+      title: 'System settings',
+      passwordPolicy: 'Password policy',
+      minLength: 'Minimum length (chars)',
+      requiredCategories: 'Required character types',
+      categoryLabels: {
+        digit: 'Digits',
+        lower: 'Lowercase',
+        upper: 'Uppercase',
+        special: 'Special characters'
+      },
+      categoriesHint:
+        'Select which types count toward the rule, then how many of them the password must satisfy (can be less than selected).',
+      selectOneCategory: 'Select at least one character type',
+      minCategoriesInPool: 'At least how many of the above (classes)',
+      minPoolInvalid: 'This value must be between 1 and the number of types selected',
+      storageByRole: 'Default storage per role',
+      storageUser: 'Standard users',
+      storageVip: 'VIP',
+      storageAdmin: 'Administrators',
+      tagLimits: 'Tag count limits',
+      maxTagsUser: 'Standard users',
+      maxTagsVip: 'VIP users',
+      loadError: 'Failed to load system settings',
+      saveSuccess: 'Settings saved'
+    },
     recentLogs: 'Recent activity',
     table: {
       time: 'Time',
@@ -541,15 +581,15 @@ export default {
     tabSvipSubtitle: 'Exclusive perks',
     tabVipSubtitle: 'Extra storage',
     disclaimer:
-      'Feature comparison for this demo vs. typical cloud drives. Actual access is subject to administrator approval.',
+      'Feature comparison for this demo vs. typical cloud drives. Storage and tag limits in the table match Admin dashboard → System settings; approval is still up to your administrator.',
     colPrivilege: 'Feature',
     colSvip: 'SVIP',
     colVip: 'VIP',
     colNormalUser: 'Standard',
     rowStorage: 'Storage quota',
-    rowStorageSvip: 'From 2TB (illustrative)',
-    rowStorageVip: '2GB',
-    rowStorageUser: '1GB',
+    rowTags: 'Tag limit',
+    tagsUnlimited: 'Unlimited',
+    tagsCount: '{n} tags',
     rowDownload: 'Download speed',
     rowDownloadSvip: 'Fastest',
     rowDownloadVip: 'Priority',

@@ -1,6 +1,7 @@
 import request from '@utils/request'
 
 import type { LoginResult, RegisterResult, User, UserRole } from '@typing/user'
+import { normalizePasswordPolicyClient, type PasswordPolicyClient } from '@utils/passwordStrength'
 
 function mapAuthUser(backendUser: {
   id: number
@@ -54,15 +55,20 @@ export const authApi = {
         };
         accessToken: string;
         refreshToken: string;
+        password_policy_hint?: string;
+        password_policy?: PasswordPolicyClient;
       }
     }>('/auth/login', data)
 
     const backendUser = res.data.data.user
+    const d = res.data.data
     return {
       message: '登录成功',
       user: mapAuthUser(backendUser),
-      token: res.data.data.accessToken,
-      refreshToken: res.data.data.refreshToken
+      token: d.accessToken,
+      refreshToken: d.refreshToken,
+      passwordPolicyHint: d.password_policy_hint,
+      passwordPolicy: d.password_policy ? normalizePasswordPolicyClient(d.password_policy) : undefined
     }
   },
 
@@ -100,6 +106,12 @@ export const authApi = {
         mustChangePassword: Boolean(u.must_change_password)
       }
     }
+  },
+
+  /** 当前系统密码策略（无需登录） */
+  async getPasswordPolicy(): Promise<PasswordPolicyClient> {
+    const res = await request.get<{ success: boolean; data: PasswordPolicyClient }>('/auth/password-policy')
+    return normalizePasswordPolicyClient(res.data.data)
   },
 
   // 用户注册

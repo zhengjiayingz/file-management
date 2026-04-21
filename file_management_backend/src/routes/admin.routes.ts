@@ -8,7 +8,9 @@ import {
     updateUserStatus,
     resetUserPassword,
     kickUserSessions,
-    clearUserSessionKickMarker
+    clearUserSessionKickMarker,
+    getAdminSystemSettings,
+    updateAdminSystemSettings
 } from '../controllers/admin.controller.js';
 
 const router: Router = Router();
@@ -17,6 +19,9 @@ const router: Router = Router();
 router.use(authenticate, requireAdmin);
 
 router.get('/dashboard', getDashboardStats);
+
+router.get('/system-settings', getAdminSystemSettings);
+router.put('/system-settings', updateAdminSystemSettings);
 
 router.post('/sync-friendships', syncFriendshipsWithAdmin);
 

@@ -7,10 +7,13 @@ import {
   rejectVipRequest,
   approveVipByApplicant,
   rejectVipByApplicant,
-  getMyVipRequestStatus
+  getMyVipRequestStatus,
+  getVipTierComparisonConfig
 } from '../controllers/vip.controller.js';
 
 const router = Router();
+
+router.get('/tier-config', authenticate, getVipTierComparisonConfig);
 
 router.use(authenticate);
 

@@ -86,13 +86,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import axios from 'axios'
 import { User, Lock, Message } from '@element-plus/icons-vue'
 import { useAuthStore } from '@stores/auth'
 import { authApi } from '@api/auth'
+import { checkPasswordStrength, type PasswordPolicyClient } from '@utils/passwordStrength'
 import { useI18n } from 'vue-i18n'
 
 export interface SessionListItem {
@@ -115,6 +116,18 @@ const loginForm = ref({
   username: '',
   password: '',
   email: ''
+})
+
+const registerPasswordPolicy = ref<PasswordPolicyClient | null>(null)
+
+watch(isRegister, async (reg) => {
+  if (reg) {
+    try {
+      registerPasswordPolicy.value = await authApi.getPasswordPolicy()
+    } catch {
+      registerPasswordPolicy.value = null
+    }
+  }
 })
 
 const loading = ref(false)
@@ -155,6 +168,13 @@ async function afterLoginSuccess(
   options?: { successMessage?: string }
 ) {
   ElMessage.success(options?.successMessage ?? t('login.login') + ' Success')
+  if (res.passwordPolicyHint) {
+    ElMessage.warning(
+      t('login.passwordPolicyChanged', {
+        policy: res.passwordPolicyHint
+      })
+    )
+  }
   await authStore.login({
     user: res.user,
     token: res.token,
@@ -222,6 +242,26 @@ const handleAuth = async () => {
     loading.value = true
 
     if (isRegister.value) {
+      let pol = registerPasswordPolicy.value
+      if (!pol) {
+        try {
+          pol = await authApi.getPasswordPolicy()
+          registerPasswordPolicy.value = pol
+        } catch {
+          ElMessage.error(t('login.registerPolicyError'))
+          return
+        }
+      }
+      const st = checkPasswordStrength(loginForm.value.password, pol)
+      if (st === 'short') {
+        ElMessage.error(t('settingsDialog.passwordStrengthShort', { min: pol.minLength }))
+        return
+      }
+      if (st === 'weak') {
+        ElMessage.error(t('settingsDialog.passwordStrengthWeak'))
+        return
+      }
+
       await authApi.register({
         username: loginForm.value.username,
         password: loginForm.value.password,

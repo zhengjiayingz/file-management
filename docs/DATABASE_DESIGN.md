@@ -1,7 +1,7 @@
 # 文件管理系统数据库设计文档
 
 > **与代码对齐**：本文档以 `file_management_backend/prisma/schema.prisma` 及 Prisma 迁移生成的表结构为准。  
-> **最后更新**：2026-04-20。
+> **最后更新**：2026-04-22（新增 **`system_settings`** 全局配置表；密码策略与默认配额、标签上限以管理员「系统管理」为准）。
 >
 > **Prisma Client**：修改 schema 后须执行 `prisma generate`；`npm install` / `npm run build` 已在后端包内配置自动生成（详见 [DEVELOPMENT.md](./DEVELOPMENT.md)）。Windows 若遇 `query_engine` 的 EPERM，请先停止 `npm run dev` 再生成。
 
@@ -47,9 +47,10 @@
 - UNIQUE INDEX (email)
 
 **说明：**
-- 普通用户 storage_quota = 1GB (1073741824)
-- VIP用户 storage_quota = 2GB (2147483648)
-- 管理员 storage_quota = -1 (不限制)
+- **新用户注册**时 `storage_quota` 取 **`system_settings.storage_quota_user_bytes`**（管理员看板「系统管理」可改，Prisma 默认 1GB）。
+- **VIP 审核通过**时更新为 **`system_settings.storage_quota_vip_bytes`**（默认 2GB，可改）。
+- **管理员**账号的 `storage_quota` 以实现/种子数据为准（常见为极大值；前端可将 `storageQuota === -1` 视为展示上的「不限」）。
+- 各角色**默认空间**与 **标签个数上限**的权威配置见下文 **§3.17 `system_settings`**。
 
 ---
 
@@ -443,6 +444,33 @@
 - INDEX (applicant_id, status)
 - FOREIGN KEY (applicant_id) REFERENCES users(id) ON DELETE CASCADE
 - FOREIGN KEY (processed_by_id) REFERENCES users(id) ON DELETE SET NULL
+
+---
+
+### 3.17 全局系统配置表 (system_settings)
+
+单行表（固定 **`id = 1`**），由管理员在 **管理员看板 → 系统管理** 中维护：全局**密码策略**、**各角色默认存储空间（字节）**、**按角色标签数量上限**。注册、改密、登录策略校验、VIP 审核通过写配额、标签创建上限等均读取此表（详见 `systemSettings.service.ts`、`passwordPolicy.service.ts`、`tagLimit.service.ts`、`auth.controller.ts`、`vip.controller.ts`）。
+
+| 字段名 | 类型 | 约束 | 说明 |
+|--------|------|------|------|
+| id | INT | PRIMARY KEY, DEFAULT 1 | 固定主键 1 |
+| password_min_length | INT | NOT NULL, DEFAULT 8 | 密码最短长度 |
+| password_required_categories | JSON | NOT NULL | 参与评分的字符类别数组，元素为 `digit` / `lower` / `upper` / `special` |
+| password_min_categories_in_pool | INT | NOT NULL, DEFAULT 4 | 在上述已选类别中，密码至少须满足其中几类（1～勾选数量；等于勾选数即「全部须满足」） |
+| storage_quota_user_bytes | BIGINT | NOT NULL | 普通用户默认空间（字节）；注册写入 `users.storage_quota` |
+| storage_quota_vip_bytes | BIGINT | NOT NULL | VIP 默认空间（字节）；审核通过升级时写入 `users.storage_quota` |
+| storage_quota_admin_bytes | BIGINT | NOT NULL | 与管理员默认/展示相关的空间配置（字节）；会员中心对比表 SVIP 列等用于与管理配置同步展示 |
+| max_tags_user | INT | NOT NULL, DEFAULT 2 | 普通用户（非 VIP）可拥有标签个数上限 |
+| max_tags_vip | INT | NOT NULL, DEFAULT 5 | 有效 VIP 用户可拥有标签个数上限 |
+| updated_at | DATETIME(3) | NOT NULL, ON UPDATE | 更新时间 |
+
+**索引：**
+- PRIMARY KEY (id)
+
+**说明：**
+- 表无外键；与 `users` 为逻辑关联（业务读取而非 FK）。
+- **管理员**在标签能力上为「无上限」（`tagLimit.service.ts`），与 `max_tags_*` 仅约束普通 / VIP 一致。
+- 管理接口：`GET` / `PUT /api/admin/system-settings`（需管理员 JWT）。公开策略摘要：`GET /api/auth/password-policy`。会员中心对比表：`GET /api/vip/tier-config`（需登录）。
 
 ---
 

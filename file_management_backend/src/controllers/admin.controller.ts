@@ -3,7 +3,13 @@ import { Prisma } from '@prisma/client';
 import prisma from '../lib/prisma.js';
 import { AuthRequest } from '../types/index.js';
 import { ensureFriendshipWithAdmin, getPrimaryAdminId } from '../services/adminFriend.service.js';
-import { hashPassword, ADMIN_TEMP_RESET_PASSWORD } from '../services/passwordPolicy.service.js';
+import {
+    hashPassword,
+    ADMIN_TEMP_RESET_PASSWORD,
+    parseAdminRequiredCategories,
+    parseRequiredCategoriesFromSettingsJson
+} from '../services/passwordPolicy.service.js';
+import { getSystemSettings } from '../services/systemSettings.service.js';
 
 /** listUsers 查询参数：由 Prisma 校验并与 UserGetPayload 联动，无需类型断言 */
 const adminUserListArgs = Prisma.validator<Prisma.UserDefaultArgs>()({
@@ -394,5 +400,140 @@ export const clearUserSessionKickMarker = async (req: AuthRequest, res: Response
     } catch (error) {
         console.error('clearUserSessionKickMarker error:', error);
         res.status(500).json({ success: false, message: '更新失败' });
+    }
+};
+
+function clampInt(n: unknown, min: number, max: number, fallback: number): number {
+    if (typeof n !== 'number' || !Number.isFinite(n)) return fallback;
+    return Math.max(min, Math.min(max, Math.floor(n)));
+}
+
+function parsePositiveBigInt(v: string | number | undefined | null, fallback: bigint): bigint {
+    if (v === undefined || v === null) return fallback;
+    try {
+        const s = typeof v === 'string' ? v.trim() : String(v);
+        const n = BigInt(s);
+        if (n <= BigInt(0)) return fallback;
+        return n;
+    } catch {
+        return fallback;
+    }
+}
+
+const defaultPasswordCategories = ['digit', 'lower', 'upper', 'special'] as const;
+
+export const getAdminSystemSettings = async (_req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const s = await getSystemSettings();
+        const pool = parseRequiredCategoriesFromSettingsJson(
+            s.passwordRequiredCategories,
+            [...defaultPasswordCategories]
+        );
+        const poolMin = Math.max(1, Math.min(pool.length, s.passwordMinCategoriesInPool));
+
+        res.json({
+            success: true,
+            data: {
+                passwordMinLength: s.passwordMinLength,
+                passwordRequiredCategories: pool,
+                passwordMinCategoriesInPool: poolMin,
+                storageQuotaUserBytes: s.storageQuotaUserBytes.toString(),
+                storageQuotaVipBytes: s.storageQuotaVipBytes.toString(),
+                storageQuotaAdminBytes: s.storageQuotaAdminBytes.toString(),
+                maxTagsUser: s.maxTagsUser,
+                maxTagsVip: s.maxTagsVip,
+                updatedAt: s.updatedAt.toISOString()
+            }
+        });
+    } catch (error) {
+        console.error('getAdminSystemSettings', error);
+        res.status(500).json({ success: false, message: '获取系统配置失败' });
+    }
+};
+
+export const updateAdminSystemSettings = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const body = req.body as {
+            passwordMinLength?: number;
+            passwordRequiredCategories?: unknown;
+            passwordMinCategoriesInPool?: number;
+            storageQuotaUserBytes?: string | number;
+            storageQuotaVipBytes?: string | number;
+            storageQuotaAdminBytes?: string | number;
+            maxTagsUser?: number;
+            maxTagsVip?: number;
+        };
+
+        const current = await getSystemSettings();
+
+        const passwordMinLength = clampInt(body.passwordMinLength, 4, 128, current.passwordMinLength);
+
+        let categoriesJsonSource: Prisma.JsonValue = current.passwordRequiredCategories;
+        if (body.passwordRequiredCategories !== undefined) {
+            const parsed = parseAdminRequiredCategories(body.passwordRequiredCategories);
+            if (!parsed) {
+                res.status(400).json({ success: false, message: '须至少勾选一类有效字符' });
+                return;
+            }
+            categoriesJsonSource = parsed;
+        }
+
+        const poolArr = parseRequiredCategoriesFromSettingsJson(categoriesJsonSource, [...defaultPasswordCategories]);
+        const poolLen = poolArr.length;
+        const prevMin = Math.max(1, Math.min(current.passwordMinCategoriesInPool, poolLen));
+        const passwordMinCategoriesInPool = clampInt(
+            body.passwordMinCategoriesInPool,
+            1,
+            poolLen,
+            prevMin
+        );
+
+        /** 写入 JSON 列：使用已规范化的类别数组，类型为 Prisma 接受的 `InputJsonValue` */
+        const nextPasswordRequiredCategories: Prisma.InputJsonValue = [...poolArr];
+
+        const updated = await prisma.systemSettings.update({
+            where: { id: 1 },
+            data: {
+                passwordMinLength,
+                passwordRequiredCategories: nextPasswordRequiredCategories,
+                passwordMinCategoriesInPool,
+                storageQuotaUserBytes: parsePositiveBigInt(body.storageQuotaUserBytes, current.storageQuotaUserBytes),
+                storageQuotaVipBytes: parsePositiveBigInt(body.storageQuotaVipBytes, current.storageQuotaVipBytes),
+                storageQuotaAdminBytes: parsePositiveBigInt(body.storageQuotaAdminBytes, current.storageQuotaAdminBytes),
+                maxTagsUser: clampInt(body.maxTagsUser, 0, 100000, current.maxTagsUser),
+                maxTagsVip: clampInt(body.maxTagsVip, 0, 100000, current.maxTagsVip)
+            }
+        });
+
+        res.json({
+            success: true,
+            message: '系统配置已保存',
+            data: {
+                passwordMinLength: updated.passwordMinLength,
+                passwordRequiredCategories: parseRequiredCategoriesFromSettingsJson(
+                    updated.passwordRequiredCategories,
+                    [...defaultPasswordCategories]
+                ),
+                passwordMinCategoriesInPool: Math.max(
+                    1,
+                    Math.min(
+                        parseRequiredCategoriesFromSettingsJson(
+                            updated.passwordRequiredCategories,
+                            [...defaultPasswordCategories]
+                        ).length,
+                        updated.passwordMinCategoriesInPool
+                    )
+                ),
+                storageQuotaUserBytes: updated.storageQuotaUserBytes.toString(),
+                storageQuotaVipBytes: updated.storageQuotaVipBytes.toString(),
+                storageQuotaAdminBytes: updated.storageQuotaAdminBytes.toString(),
+                maxTagsUser: updated.maxTagsUser,
+                maxTagsVip: updated.maxTagsVip,
+                updatedAt: updated.updatedAt.toISOString()
+            }
+        });
+    } catch (error) {
+        console.error('updateAdminSystemSettings', error);
+        res.status(500).json({ success: false, message: '保存系统配置失败' });
     }
 };

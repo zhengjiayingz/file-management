@@ -81,6 +81,71 @@
           </el-col>
         </el-row>
 
+        <!-- 系统管理 -->
+        <el-row class="system-settings-row">
+          <el-col :span="24">
+            <el-card shadow="hover" v-loading="settingsLoading">
+              <template #header>
+                <div class="card-header">
+                  <span>{{ t('admin.systemSettings.title') }}</span>
+                  <el-button type="primary" size="small" :loading="settingsSaving" @click="saveSystemSettings">
+                    {{ t('common.save') }}
+                  </el-button>
+                </div>
+              </template>
+              <el-form v-if="systemSettings" label-width="200px" class="system-settings-form">
+                <el-divider content-position="left">{{ t('admin.systemSettings.passwordPolicy') }}</el-divider>
+                <el-form-item :label="t('admin.systemSettings.minLength')">
+                  <el-input-number v-model="systemSettings.passwordMinLength" :min="4" :max="128" />
+                </el-form-item>
+                <el-form-item :label="t('admin.systemSettings.requiredCategories')">
+                  <div class="password-policy-block">
+                    <el-checkbox-group v-model="systemSettings.passwordRequiredCategories" class="password-cat-group">
+                      <el-checkbox
+                        v-for="key in passwordCategoryOrder"
+                        :key="key"
+                        :label="key"
+                      >
+                        {{ t(`admin.systemSettings.categoryLabels.${key}`) }}
+                      </el-checkbox>
+                    </el-checkbox-group>
+                    <div class="password-pool-min-row">
+                      <span class="pool-min-label">{{ t('admin.systemSettings.minCategoriesInPool') }}</span>
+                      <el-input-number
+                        v-model="systemSettings.passwordMinCategoriesInPool"
+                        :min="1"
+                        :max="Math.max(1, systemSettings.passwordRequiredCategories.length)"
+                        :disabled="systemSettings.passwordRequiredCategories.length === 0"
+                      />
+                    </div>
+                    <p class="form-hint categories-hint-block">{{ t('admin.systemSettings.categoriesHint') }}</p>
+                  </div>
+                </el-form-item>
+                <el-divider content-position="left">{{ t('admin.systemSettings.storageByRole') }}</el-divider>
+                <el-form-item :label="t('admin.systemSettings.storageUser')">
+                  <el-input-number v-model="storageGbUser" :min="0.01" :max="999999" :precision="2" :step="0.5" />
+                  <span class="form-hint">GB</span>
+                </el-form-item>
+                <el-form-item :label="t('admin.systemSettings.storageVip')">
+                  <el-input-number v-model="storageGbVip" :min="0.01" :max="999999" :precision="2" :step="0.5" />
+                  <span class="form-hint">GB</span>
+                </el-form-item>
+                <el-form-item :label="t('admin.systemSettings.storageAdmin')">
+                  <el-input-number v-model="storageGbAdmin" :min="0.01" :max="999999" :precision="2" :step="1" />
+                  <span class="form-hint">GB</span>
+                </el-form-item>
+                <el-divider content-position="left">{{ t('admin.systemSettings.tagLimits') }}</el-divider>
+                <el-form-item :label="t('admin.systemSettings.maxTagsUser')">
+                  <el-input-number v-model="systemSettings.maxTagsUser" :min="0" :max="100000" />
+                </el-form-item>
+                <el-form-item :label="t('admin.systemSettings.maxTagsVip')">
+                  <el-input-number v-model="systemSettings.maxTagsVip" :min="0" :max="100000" />
+                </el-form-item>
+              </el-form>
+            </el-card>
+          </el-col>
+        </el-row>
+
         <!-- 用户管理 -->
         <el-row class="user-mgmt-row">
           <el-col :span="24">
@@ -182,12 +247,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import * as echarts from 'echarts'
-import { adminApi, type AdminUserRow, type DashboardStats } from '@api/admin'
+import { adminApi, type AdminUserRow, type DashboardStats, type SystemSettingsDTO } from '@api/admin'
+import { PASSWORD_CATEGORY_ORDER } from '@utils/passwordStrength'
 import { formatFileSize } from '@utils/fileUpload'
 import { useAuthStore } from '@stores/auth'
 
@@ -200,6 +266,89 @@ const stats = ref<DashboardStats | null>(null)
 const usersLoading = ref(false)
 const syncFriendsLoading = ref(false)
 const userList = ref<AdminUserRow[]>([])
+
+const settingsLoading = ref(false)
+const settingsSaving = ref(false)
+const systemSettings = ref<SystemSettingsDTO | null>(null)
+const storageGbUser = ref(1)
+const storageGbVip = ref(2)
+const storageGbAdmin = ref(100)
+
+const passwordCategoryOrder = PASSWORD_CATEGORY_ORDER
+
+watch(
+  () => systemSettings.value?.passwordRequiredCategories,
+  (cats) => {
+    if (!systemSettings.value || !cats?.length) return
+    const max = cats.length
+    if (systemSettings.value.passwordMinCategoriesInPool > max) {
+      systemSettings.value.passwordMinCategoriesInPool = max
+    }
+  },
+  { deep: true }
+)
+
+function bytesToGbString(bytes: string): number {
+  const n = Number(bytes)
+  if (!Number.isFinite(n) || n <= 0) return 0
+  return Math.round((n / 1024 ** 3) * 100) / 100
+}
+
+function gbToBytesString(gb: number): string {
+  return String(Math.round(gb * 1024 * 1024 * 1024))
+}
+
+const loadSystemSettings = async () => {
+  settingsLoading.value = true
+  try {
+    const s = await adminApi.getSystemSettings()
+    systemSettings.value = s
+    storageGbUser.value = bytesToGbString(s.storageQuotaUserBytes)
+    storageGbVip.value = bytesToGbString(s.storageQuotaVipBytes)
+    storageGbAdmin.value = bytesToGbString(s.storageQuotaAdminBytes)
+  } catch {
+    ElMessage.error(t('admin.systemSettings.loadError'))
+  } finally {
+    settingsLoading.value = false
+  }
+}
+
+const saveSystemSettings = async () => {
+  if (!systemSettings.value) return
+  if (!systemSettings.value.passwordRequiredCategories?.length) {
+    ElMessage.warning(t('admin.systemSettings.selectOneCategory'))
+    return
+  }
+  const poolN = systemSettings.value.passwordRequiredCategories.length
+  const poolM = systemSettings.value.passwordMinCategoriesInPool
+  if (poolM < 1 || poolM > poolN) {
+    ElMessage.warning(t('admin.systemSettings.minPoolInvalid'))
+    return
+  }
+  settingsSaving.value = true
+  try {
+    const updated = await adminApi.updateSystemSettings({
+      passwordMinLength: systemSettings.value.passwordMinLength,
+      passwordRequiredCategories: systemSettings.value.passwordRequiredCategories,
+      passwordMinCategoriesInPool: systemSettings.value.passwordMinCategoriesInPool,
+      storageQuotaUserBytes: gbToBytesString(storageGbUser.value),
+      storageQuotaVipBytes: gbToBytesString(storageGbVip.value),
+      storageQuotaAdminBytes: gbToBytesString(storageGbAdmin.value),
+      maxTagsUser: systemSettings.value.maxTagsUser,
+      maxTagsVip: systemSettings.value.maxTagsVip
+    })
+    systemSettings.value = updated
+    storageGbUser.value = bytesToGbString(updated.storageQuotaUserBytes)
+    storageGbVip.value = bytesToGbString(updated.storageQuotaVipBytes)
+    storageGbAdmin.value = bytesToGbString(updated.storageQuotaAdminBytes)
+    ElMessage.success(t('admin.systemSettings.saveSuccess'))
+  } catch (e: unknown) {
+    const err = e as { response?: { data?: { message?: string } } }
+    ElMessage.error(err.response?.data?.message || t('admin.loadErrorUnknown'))
+  } finally {
+    settingsSaving.value = false
+  }
+}
 
 const fileTypeChartRef = ref<HTMLElement | null>(null)
 const storageRankChartRef = ref<HTMLElement | null>(null)
@@ -521,6 +670,7 @@ const handleResize = () => {
 onMounted(() => {
   loadData()
   loadUsers()
+  loadSystemSettings()
   window.addEventListener('resize', handleResize)
 })
 
@@ -602,6 +752,49 @@ onUnmounted(() => {
 .chart-container {
   height: 350px;
   width: 100%;
+}
+
+.system-settings-row {
+  margin-bottom: 20px;
+}
+
+.system-settings-form .form-hint {
+  margin-left: 8px;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+.system-settings-form .password-policy-block {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  max-width: 720px;
+}
+
+.system-settings-form .password-cat-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  align-items: center;
+}
+
+.system-settings-form .password-pool-min-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.system-settings-form .pool-min-label {
+  font-size: 14px;
+  color: var(--el-text-color-regular);
+  white-space: nowrap;
+}
+
+.system-settings-form .categories-hint-block {
+  margin: 0;
+  line-height: 1.5;
 }
 
 .user-mgmt-row {

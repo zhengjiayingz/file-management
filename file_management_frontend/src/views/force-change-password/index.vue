@@ -3,6 +3,7 @@
     <div class="force-pwd-card">
       <h1>{{ t('forceChangePassword.title') }}</h1>
       <p class="hint">{{ t('forceChangePassword.hint') }}</p>
+      <p v-if="policyHintLine" class="hint policy-line">{{ policyHintLine }}</p>
       <el-form @submit.prevent="submit">
         <el-form-item :label="t('forceChangePassword.newPassword')">
           <el-input
@@ -37,21 +38,36 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { computed, reactive, ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@stores/auth'
 import { authApi } from '@api/auth'
+import { checkPasswordStrength, buildPasswordPolicyHint, type PasswordPolicyClient } from '@utils/passwordStrength'
 
 const { t } = useI18n()
 const router = useRouter()
 const authStore = useAuthStore()
 
 const loading = ref(false)
+const passwordPolicy = ref<PasswordPolicyClient | null>(null)
+
+const policyHintLine = computed(() =>
+  passwordPolicy.value ? buildPasswordPolicyHint(passwordPolicy.value, t) : ''
+)
+
 const form = reactive({
   newPassword: '',
   confirmPassword: ''
+})
+
+onMounted(async () => {
+  try {
+    passwordPolicy.value = await authApi.getPasswordPolicy()
+  } catch {
+    passwordPolicy.value = null
+  }
 })
 
 const submit = async () => {
@@ -61,6 +77,25 @@ const submit = async () => {
   }
   if (form.newPassword !== form.confirmPassword) {
     ElMessage.warning(t('forceChangePassword.mismatch'))
+    return
+  }
+  let pol = passwordPolicy.value
+  if (!pol) {
+    try {
+      pol = await authApi.getPasswordPolicy()
+      passwordPolicy.value = pol
+    } catch {
+      ElMessage.error(t('forceChangePassword.failed'))
+      return
+    }
+  }
+  const strength = checkPasswordStrength(form.newPassword, pol)
+  if (strength === 'short') {
+    ElMessage.error(t('settingsDialog.passwordStrengthShort', { min: pol.minLength }))
+    return
+  }
+  if (strength === 'weak') {
+    ElMessage.error(t('settingsDialog.passwordStrengthWeak'))
     return
   }
   loading.value = true
@@ -126,8 +161,14 @@ const handleLogout = async () => {
     color: #606266;
     font-size: 14px;
     line-height: 1.5;
-    margin-bottom: 24px;
+    margin-bottom: 12px;
     text-align: center;
+  }
+
+  .policy-line {
+    margin-bottom: 24px;
+    font-weight: 500;
+    color: #303133;
   }
 
   .footer-actions {
