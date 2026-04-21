@@ -139,7 +139,15 @@
 
 （2）存储统计：查看系统总存储使用情况、用户存储使用排行。
 
-（3）文件审核：违规文件检测和处理功能。
+（3）**系统管理（全局配置）**：管理员在 **管理员看板** 的 **「系统管理」** 中维护数据库表 **`system_settings`**（单行 `id=1`）。保存后立即影响后续业务逻辑（**不改变**已成功登录会话的 Access Token；**已存在用户**的当前 `storage_quota` 仅在 **新用户注册**、**VIP 审核通过** 等事件中按此处配置写入；密码策略变更后，注册/改密/登录侧校验与 **`GET /api/auth/password-policy`** 对外摘要一致，与 [DATABASE_DESIGN.md](./DATABASE_DESIGN.md) §3.17、[BUSINESS_FLOWS.md](./BUSINESS_FLOWS.md) §7.4 一致）。配置项包括：
+
+- **密码策略**：最短长度（`password_min_length`）；须包含的字符类别多选（`password_required_categories`，JSON 数组，取值如 `digit` / `lower` / `upper` / `special`）；在**已勾选**类别中至少满足几类（`password_min_categories_in_pool`，可小于勾选数）。
+- **各角色默认存储空间（字节）**：普通用户（`storage_quota_user_bytes`）、VIP（`storage_quota_vip_bytes`）、管理员档默认（`storage_quota_admin_bytes`，用于会员中心对比展示等）；管理端界面通常以 GB 编辑并换算为字节持久化。
+- **标签数量上限**：普通用户（`max_tags_user`）、VIP 用户（`max_tags_vip`）；**管理员**创建标签不受上述上限约束。
+
+**接口**（均需管理员 JWT）：`GET /api/admin/system-settings`、`PUT /api/admin/system-settings`。会员中心对比表与配置同步展示：`GET /api/vip/tier-config`（需登录）。
+
+（4）文件审核：违规文件检测和处理功能。
 
 
 
@@ -245,4 +253,4 @@
 - 主题切换
 - 国际化支持
 - 操作日志和登录日志
-- 管理员功能完善
+- 管理员功能完善（§6(1)～(3) 用户管理、存储统计、**系统管理**已实现；§6(4) 违规文件审核待实现）
