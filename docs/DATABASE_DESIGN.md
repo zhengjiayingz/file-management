@@ -769,7 +769,7 @@ file_shares (文件分享)
 2. 禁用等场景可写入 `last_session_kick_at` 供管理端展示
 
 **多设备列表与按设备撤销（需求 §5(7)）：**
-- **当前版本**：**登录**时若会话数达上限，接口返回活跃 `refresh_tokens` 列表，用户选择一条后带 **`revokeSessionId`** 再登录；与 **§5(2)** 一致，踢除时 **`session_version` 递增**。需求 §5(7) 中「任意时刻」查看/管理会话、远程登出（**未**规定入口）**未**在本版完整交付。管理员看板支持 **踢出用户所有会话**（`POST /api/admin/users/:id/kick-sessions`）。
+- **当前版本**：（1）**登录达限**：返回活跃 `refresh_tokens`，带 **`revokeSessionId`** 再登录；撤销 + **`session_version` 递增**（与 §5(2) 一致）。（2）**已登录顶栏「会话管理」**：**`POST /api/auth/sessions/list`** 列活跃会话（body 可选 `refreshToken` 以标当前行）；**`POST /api/auth/sessions/revoke`** 批量 **`is_revoked = true`** 并 **`session_version` +1**。行记录**不物理删除**，仅逻辑撤销。管理员看板 **踢出用户所有会话**（`POST /api/admin/users/:id/kick-sessions`）。
 
 ### 5.2 文件上传流程
 
@@ -873,4 +873,4 @@ WHERE uf.user_id = ? AND uf.is_deleted = FALSE AND uf.file_type = 'file'
 ---
 
 **文档版本**：v1.2  
-**最后更新**：2026-04-21（与 `prisma/schema.prisma` 对齐，含并发会话上限、`revokeSessionId` 登录踢设备、`session_version` / `last_session_kick_at`）
+**最后更新**：2026-04-22（与 `prisma/schema.prisma` 对齐；含登录达限 / 顶栏会话管理接口、`revokeSessionId`、`session_version` / `last_session_kick_at`）
