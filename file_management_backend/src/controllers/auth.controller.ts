@@ -1,8 +1,9 @@
 import { Response } from 'express';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
+import { generateSecret, generateURI, verifySync } from 'otplib';
 import dotenv from 'dotenv';
-import { Prisma, type Role } from '@prisma/client';
+import { Prisma, type Role, type User, type Status } from '@prisma/client';
 import prisma from '../lib/prisma.js';
 import { AuthRequest, LoginBody, RegisterBody } from '../types/index.js';
 import { ensureFriendshipWithAdmin, getPrimaryAdminId } from '../services/adminFriend.service.js';
@@ -19,6 +20,19 @@ import { getSystemSettings } from '../services/systemSettings.service.js';
 
 // 确保环境变量被加载
 dotenv.config();
+
+/**
+ * 与 `schema.prisma` 中 `users` 表 TOTP 列一致。若已 `prisma generate`，`User` 已含这些字段；交叉类型在「生成物/IDE 未刷新」时仍可安全读写运行时属性。
+ * `assert*`：在 Stale 的 `UserUpdateInput`/`UserSelect` 不含 `totp_*` 时通过编译（以 schema 为权威）。
+ */
+type UserWithTotp = User & {
+  totpEnabled: boolean;
+  totpSecret: string | null;
+  totpSetupSecret: string | null;
+};
+
+const userUpdateData = (d: Record<string, unknown>): Prisma.UserUpdateInput =>
+  d as unknown as Prisma.UserUpdateInput;
 
 /**
  * 生成 Access Token (15分钟)
@@ -42,6 +56,121 @@ const generateAccessToken = (
 const generateRefreshToken = (): string => {
   return crypto.randomBytes(64).toString('hex');
 };
+
+const MFA_LOGIN_JWT_TYP = 'mfa_login';
+
+type MfaLoginJwtPayload = {
+  typ: typeof MFA_LOGIN_JWT_TYP;
+  uid: number;
+  /** 密码校验通过时是否须改密（与 policy 合算后） */
+  fc: 0 | 1;
+  /** 是否因当前密码不符合策略而须改密 */
+  pc: 0 | 1;
+};
+
+function signMfaLoginToken(p: { uid: number; finalMustChange: boolean; needPolicyChange: boolean }): string {
+  const body: MfaLoginJwtPayload = {
+    typ: MFA_LOGIN_JWT_TYP,
+    uid: p.uid,
+    fc: p.finalMustChange ? 1 : 0,
+    pc: p.needPolicyChange ? 1 : 0
+  };
+  return jwt.sign(body, process.env.JWT_SECRET!, { expiresIn: '5m' });
+}
+
+function parseMfaLoginToken(token: string): MfaLoginJwtPayload | null {
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as MfaLoginJwtPayload;
+    if (decoded?.typ !== MFA_LOGIN_JWT_TYP || typeof decoded.uid !== 'number') {
+      return null;
+    }
+    return decoded;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 完成登录态：发 refresh、写成功登录日志。供密码登录与 TOTP 第二步共用。
+ */
+async function runLoginSessionTransaction(
+  req: AuthRequest,
+  user: { id: number; username: string; role: Role },
+  finalMustChange: boolean,
+  revokeId: number | undefined
+): Promise<{ accessToken: string; refreshToken: string }> {
+  const limit = getMaxSessionSlots(user.role);
+
+  return prisma.$transaction(
+    async (tx) => {
+      if (revokeId != null) {
+        const revoked = await tx.refreshToken.updateMany({
+          where: { id: revokeId, userId: user.id, isRevoked: false },
+          data: { isRevoked: true }
+        });
+        if (revoked.count === 0) {
+          throw new InvalidRevokeSessionError();
+        }
+      }
+
+      const activeWhere = {
+        userId: user.id,
+        isRevoked: false,
+        expiresAt: { gt: new Date() }
+      };
+      const activeCount = await tx.refreshToken.count({ where: activeWhere });
+
+      if (limit !== null && activeCount >= limit) {
+        throw new SessionLimitError(user.id, user.role);
+      }
+
+      const uAfter = await tx.user.update({
+        where: { id: user.id },
+        data: {
+          lastSessionKickAt: null,
+          mustChangePassword: finalMustChange,
+          ...(revokeId != null ? { sessionVersion: { increment: 1 } } : {})
+        },
+        select: { sessionVersion: true }
+      });
+
+      const accessToken = generateAccessToken(
+        user.id,
+        user.username,
+        finalMustChange,
+        uAfter.sessionVersion
+      );
+      const refreshToken = generateRefreshToken();
+
+      await tx.refreshToken.create({
+        data: {
+          userId: user.id,
+          token: refreshToken,
+          deviceType: 'web',
+          ipAddress: req.ip || req.socket?.remoteAddress || 'unknown',
+          userAgent: req.get('User-Agent') || null,
+          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+        }
+      });
+
+      await tx.loginLog.create({
+        data: {
+          userId: user.id,
+          ipAddress: req.ip || req.socket?.remoteAddress || 'unknown',
+          userAgent: req.get('User-Agent') || null,
+          status: 'success'
+        }
+      });
+
+      return { accessToken, refreshToken };
+    },
+    {
+      isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+      maxWait: 5000,
+      timeout: 10000
+    }
+  );
+}
 
 /** 管理员不限制；VIP 5；普通用户 2 */
 function getMaxSessionSlots(role: Role): number | null {
@@ -271,10 +400,9 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
       return;
     }
 
-    // 查找用户
-    const user = await prisma.user.findUnique({
+    const user = (await prisma.user.findUnique({
       where: { username },
-    });
+    })) as UserWithTotp | null;
     
     if (!user) {
       // 记录失败的登录尝试
@@ -340,8 +468,24 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
     const needPolicyChange = validatePasswordStrengthWithPolicy(password, policy) !== null;
     const finalMustChange = user.mustChangePassword || needPolicyChange;
 
+    const mfaRequired =
+      user.totpEnabled === true && Boolean(user.totpSecret && user.totpSecret.length > 0);
+    if (mfaRequired) {
+      const mfaToken = signMfaLoginToken({
+        uid: user.id,
+        finalMustChange,
+        needPolicyChange
+      });
+      res.json({
+        success: true,
+        code: 'MFA_REQUIRED',
+        message: '请输入验证器中的动态码',
+        data: { mfaToken, expiresIn: 300 }
+      });
+      return;
+    }
+
     const { revokeSessionId } = req.body as LoginBody;
-    const limit = getMaxSessionSlots(user.role);
 
     let revokeId: number | undefined;
     if (revokeSessionId != null) {
@@ -356,81 +500,7 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
     let result: { accessToken: string; refreshToken: string };
 
     try {
-      result = await prisma.$transaction(
-        async (tx) => {
-          if (revokeId != null) {
-            const revoked = await tx.refreshToken.updateMany({
-              where: { id: revokeId, userId: user.id, isRevoked: false },
-              data: { isRevoked: true }
-            });
-            if (revoked.count === 0) {
-              throw new InvalidRevokeSessionError();
-            }
-          }
-
-          const activeWhere = {
-            userId: user.id,
-            isRevoked: false,
-            expiresAt: { gt: new Date() }
-          };
-          const activeCount = await tx.refreshToken.count({ where: activeWhere });
-
-          if (limit !== null && activeCount >= limit) {
-            throw new SessionLimitError(user.id, user.role);
-          }
-
-          /**
-           * 仅撤销 refresh 行无法立刻让该端下线：Access Token 仍有效至过期。
-           * 与管理员踢人一致：递增 sessionVersion，使旧 JWT 的 sv 与库中不一致，
-           * authenticate 将 401 SESSION_REVOKED；被撤销的 refresh 无法再 refresh。
-           * 其它未踢设备用各自 refresh 换签后可拿到新 sv，保持在线。
-           */
-          const uAfter = await tx.user.update({
-            where: { id: user.id },
-            data: {
-              lastSessionKickAt: null,
-              mustChangePassword: finalMustChange,
-              ...(revokeId != null ? { sessionVersion: { increment: 1 } } : {})
-            },
-            select: { sessionVersion: true }
-          });
-
-          const accessToken = generateAccessToken(
-            user.id,
-            user.username,
-            finalMustChange,
-            uAfter.sessionVersion
-          );
-          const refreshToken = generateRefreshToken();
-
-          await tx.refreshToken.create({
-            data: {
-              userId: user.id,
-              token: refreshToken,
-              deviceType: 'web',
-              ipAddress: req.ip || req.socket?.remoteAddress || 'unknown',
-              userAgent: req.get('User-Agent') || null,
-              expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
-            }
-          });
-
-          await tx.loginLog.create({
-            data: {
-              userId: user.id,
-              ipAddress: req.ip || req.socket?.remoteAddress || 'unknown',
-              userAgent: req.get('User-Agent') || null,
-              status: 'success'
-            }
-          });
-
-          return { accessToken, refreshToken };
-        },
-        {
-          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-          maxWait: 5000,
-          timeout: 10000
-        }
-      );
+      result = await runLoginSessionTransaction(req, user, finalMustChange, revokeId);
     } catch (err: unknown) {
       if (err instanceof SessionLimitError) {
         const sessions = await listActiveSessionsForResponse(err.uid);
@@ -472,6 +542,7 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
           avatar_url: user.avatarUrl ?? null,
           vip_expire_at: user.vipExpireAt ? user.vipExpireAt.toISOString() : null,
           created_at: user.createdAt.toISOString(),
+          totp_enabled: user.totpEnabled
         },
         accessToken: result.accessToken,
         refreshToken: result.refreshToken,
@@ -489,6 +560,306 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
       success: false,
       message: '登录失败，请稍后重试'
     });
+  }
+};
+
+/**
+ * 第二步：提交 TOTP 动态码，校验 mfaToken 后发正式登录 Token
+ */
+export const verifyMfaLogin = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const body = req.body as { mfaToken?: string; code?: string; revokeSessionId?: number };
+    const mfaToken = typeof body.mfaToken === 'string' ? body.mfaToken.trim() : '';
+    const code = typeof body.code === 'string' ? body.code.trim().replace(/\s/g, '') : '';
+    if (!mfaToken || !code) {
+      res.status(400).json({ success: false, message: '请提供 mfaToken 与 6 位动态码' });
+      return;
+    }
+
+    const payload = parseMfaLoginToken(mfaToken);
+    if (!payload) {
+      res.status(401).json({ success: false, message: '验证已过期，请从用户名密码重新登录' });
+      return;
+    }
+
+    const user = (await prisma.user.findUnique({
+      where: { id: payload.uid }
+    })) as UserWithTotp | null;
+    if (!user || user.status !== 'active') {
+      res.status(401).json({ success: false, message: '用户无效' });
+      return;
+    }
+    if (
+      !user.totpEnabled ||
+      !user.totpSecret ||
+      verifySync({ token: code, secret: user.totpSecret }).valid === false
+    ) {
+      await prisma.loginLog.create({
+        data: {
+          userId: user.id,
+          ipAddress: req.ip || req.socket?.remoteAddress || 'unknown',
+          userAgent: req.get('User-Agent') || null,
+          status: 'failed',
+          failReason: 'MFA 验证失败'
+        }
+      });
+      res.status(401).json({ success: false, message: '动态码错误' });
+      return;
+    }
+
+    const finalMustChange = payload.fc === 1;
+    const needPolicyChange = payload.pc === 1;
+    const settings = await getSystemSettings();
+    const policy = settingsRowToPolicy(settings);
+
+    let revokeId: number | undefined;
+    if (body.revokeSessionId != null) {
+      const rid = Number(body.revokeSessionId);
+      if (!Number.isInteger(rid) || rid <= 0) {
+        res.status(400).json({ success: false, message: '无效的会话参数' });
+        return;
+      }
+      revokeId = rid;
+    }
+
+    let result: { accessToken: string; refreshToken: string };
+    try {
+      result = await runLoginSessionTransaction(req, user, finalMustChange, revokeId);
+    } catch (err: unknown) {
+      if (err instanceof SessionLimitError) {
+        const sessions = await listActiveSessionsForResponse(err.uid);
+        const lim = getMaxSessionSlots(err.role);
+        res.status(409).json({
+          success: false,
+          code: 'SESSION_LIMIT',
+          message: '会话数达到上限',
+          data: { maxSessions: lim, sessions, showVipLink: err.role === 'user' }
+        });
+        return;
+      }
+      if (err instanceof InvalidRevokeSessionError) {
+        res.status(400).json({ success: false, message: '无效的会话或已失效' });
+        return;
+      }
+      throw err;
+    }
+
+    res.json({
+      success: true,
+      message: '登录成功',
+      data: {
+        user: {
+          id: user.id,
+          username: user.username,
+          email: user.email,
+          role: user.role,
+          storage_quota: Number(user.storageQuota),
+          storage_used: Number(user.storageUsed),
+          must_change_password: finalMustChange,
+          avatar_url: user.avatarUrl ?? null,
+          vip_expire_at: user.vipExpireAt ? user.vipExpireAt.toISOString() : null,
+          created_at: user.createdAt.toISOString(),
+          totp_enabled: true
+        },
+        accessToken: result.accessToken,
+        refreshToken: result.refreshToken,
+        ...(needPolicyChange
+          ? {
+              password_policy_hint: describePasswordPolicy(policy),
+              password_policy: policyToPublicDTO(policy)
+            }
+          : {})
+      }
+    });
+  } catch (error) {
+    console.error('verifyMfaLogin error:', error);
+    res.status(500).json({ success: false, message: '验证失败，请稍后重试' });
+  }
+};
+
+const TOTP_ISSUER = 'FileManagement';
+
+/**
+ * 开始绑定 TOTP（仅生成临时密钥，需 confirm 后生效；任意已登录用户可选开启）
+ */
+export const mfaSetupStart = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      res.status(401).json({ success: false, message: '未认证' });
+      return;
+    }
+    const user = (await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, totpEnabled: true, username: true } as unknown as Prisma.UserSelect
+    })) as { id: number; totpEnabled: boolean; username: string } | null;
+    if (!user) {
+      res.status(404).json({ success: false, message: '用户不存在' });
+      return;
+    }
+    if (user.totpEnabled) {
+      res.status(400).json({ success: false, message: '已开启两步验证，请先关闭后再重新绑定' });
+      return;
+    }
+
+    const secret = generateSecret();
+    await prisma.user.update({
+      where: { id: userId },
+      data: userUpdateData({ totpSetupSecret: secret })
+    });
+    const otpauthUrl = generateURI({
+      issuer: TOTP_ISSUER,
+      label: user.username,
+      secret
+    });
+
+    res.json({
+      success: true,
+      data: {
+        otpauthUrl,
+        accountLabel: user.username
+      }
+    });
+  } catch (error) {
+    console.error('mfaSetupStart error:', error);
+    res.status(500).json({ success: false, message: '生成绑定信息失败' });
+  }
+};
+
+/** 确认绑定：校验动态码，写入 totpEnabled */
+export const mfaSetupConfirm = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user?.id;
+    const code = typeof (req.body as { code?: string })?.code === 'string'
+      ? (req.body as { code: string }).code.trim().replace(/\s/g, '')
+      : '';
+    if (!userId) {
+      res.status(401).json({ success: false, message: '未认证' });
+      return;
+    }
+    if (code.length !== 6) {
+      res.status(400).json({ success: false, message: '请输入 6 位动态码' });
+      return;
+    }
+
+    const user = (await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, totpEnabled: true, totpSetupSecret: true } as unknown as Prisma.UserSelect
+    })) as {
+      id: number;
+      totpEnabled: boolean;
+      totpSetupSecret: string | null;
+    } | null;
+    if (!user) {
+      res.status(404).json({ success: false, message: '用户不存在' });
+      return;
+    }
+    if (user.totpEnabled || !user.totpSetupSecret) {
+      res.status(400).json({ success: false, message: '无待确认绑定，请先在设置中开始绑定' });
+      return;
+    }
+    if (!verifySync({ token: code, secret: user.totpSetupSecret }).valid) {
+      res.status(400).json({ success: false, message: '动态码错误' });
+      return;
+    }
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: userUpdateData({
+        totpEnabled: true,
+        totpSecret: user.totpSetupSecret,
+        totpSetupSecret: null
+      })
+    });
+
+    res.json({ success: true, message: '两步验证已开启' });
+  } catch (error) {
+    console.error('mfaSetupConfirm error:', error);
+    res.status(500).json({ success: false, message: '确认失败' });
+  }
+};
+
+/** 放弃本次未完成的绑定 */
+export const mfaSetupCancel = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      res.status(401).json({ success: false, message: '未认证' });
+      return;
+    }
+    const u = (await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, totpEnabled: true } as unknown as Prisma.UserSelect
+    })) as { id: number; totpEnabled: boolean } | null;
+    if (!u) {
+      res.status(404).json({ success: false, message: '用户不存在' });
+      return;
+    }
+    if (u.totpEnabled) {
+      res.status(400).json({ success: false, message: '已开启，请用「关闭两步验证」' });
+      return;
+    }
+    await prisma.user.update({
+      where: { id: userId },
+      data: userUpdateData({ totpSetupSecret: null })
+    });
+    res.json({ success: true, message: '已取消' });
+  } catch (error) {
+    console.error('mfaSetupCancel error:', error);
+    res.status(500).json({ success: false, message: '操作失败' });
+  }
+};
+
+/** 关闭 TOTP */
+export const mfaDisable = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user?.id;
+    const body = req.body as { password?: string; code?: string };
+    const password = typeof body.password === 'string' ? body.password : '';
+    const code = typeof body.code === 'string' ? body.code.trim().replace(/\s/g, '') : '';
+    if (!userId) {
+      res.status(401).json({ success: false, message: '未认证' });
+      return;
+    }
+    if (!password) {
+      res.status(400).json({ success: false, message: '请输入登录密码' });
+      return;
+    }
+    if (code.length !== 6) {
+      res.status(400).json({ success: false, message: '请输入验证器 6 位码' });
+      return;
+    }
+
+    const user = (await prisma.user.findUnique({
+      where: { id: userId }
+    })) as UserWithTotp | null;
+    if (!user || !user.totpEnabled || !user.totpSecret) {
+      res.status(400).json({ success: false, message: '未开启两步验证' });
+      return;
+    }
+    if (hashPassword(password) !== user.password) {
+      res.status(400).json({ success: false, message: '密码错误' });
+      return;
+    }
+    if (!verifySync({ token: code, secret: user.totpSecret }).valid) {
+      res.status(400).json({ success: false, message: '动态码错误' });
+      return;
+    }
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: userUpdateData({
+        totpEnabled: false,
+        totpSecret: null,
+        totpSetupSecret: null,
+        sessionVersion: { increment: 1 }
+      })
+    });
+
+    res.json({ success: true, message: '已关闭两步验证' });
+  } catch (error) {
+    console.error('mfaDisable error:', error);
+    res.status(500).json({ success: false, message: '操作失败' });
   }
 };
 
@@ -779,7 +1150,7 @@ export const getCurrentUser = async (req: AuthRequest, res: Response): Promise<v
       return;
     }
 
-    const user = await prisma.user.findUnique({
+    const user = (await prisma.user.findUnique({
       where: { id: req.user.id },
       select: {
         id: true,
@@ -793,8 +1164,24 @@ export const getCurrentUser = async (req: AuthRequest, res: Response): Promise<v
         createdAt: true,
         avatarUrl: true,
         vipExpireAt: true,
-      },
-    });
+        totpEnabled: true,
+        totpSetupSecret: true
+      } as unknown as Prisma.UserSelect
+    })) as {
+      id: number;
+      username: string;
+      email: string | null;
+      role: Role;
+      storageQuota: bigint;
+      storageUsed: bigint;
+      status: Status;
+      mustChangePassword: boolean;
+      createdAt: Date;
+      avatarUrl: string | null;
+      vipExpireAt: Date | null;
+      totpEnabled: boolean;
+      totpSetupSecret: string | null;
+    } | null;
 
     if (!user) {
       res.status(404).json({
@@ -818,6 +1205,8 @@ export const getCurrentUser = async (req: AuthRequest, res: Response): Promise<v
         created_at: user.createdAt,
         avatar_url: user.avatarUrl ?? null,
         vip_expire_at: user.vipExpireAt ? user.vipExpireAt.toISOString() : null,
+        totp_enabled: user.totpEnabled,
+        mfa_setup_pending: Boolean(user.totpSetupSecret)
       }
     });
   } catch (error) {

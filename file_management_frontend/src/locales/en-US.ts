@@ -141,7 +141,11 @@ export default {
     sessionLimitKickSuccess: 'Signed in',
     passwordPolicyChanged:
       'The administrator updated the password policy. Please change your password now. New requirements: {policy}',
-    registerPolicyError: 'Could not load password policy. Please try again.'
+    registerPolicyError: 'Could not load password policy. Please try again.',
+    mfaTitle: 'Two-step verification',
+    mfaHint: 'Enter the 6-digit code from your authenticator app.',
+    mfaPlaceholder: '6-digit code',
+    mfaInvalid: 'Invalid or expired code. Please try again.'
   },
   forceChangePassword: {
     title: 'Change your password',
@@ -200,7 +204,18 @@ export default {
     passwordStrengthWeak: 'Password does not meet the required character types',
     passwordSameAsOld: 'New password must differ from current password',
     passwordSuccess: 'Password updated',
-    passwordFailed: 'Failed to change password'
+    passwordFailed: 'Failed to change password',
+    mfaSection: 'Two-step verification (optional)',
+    mfaEnable: 'Enable 2FA',
+    mfaBoundHint: 'Enabled: sign-in requires your authenticator code in addition to your password.',
+    mfaSetupPendingHint: 'Pending: scan the QR code below and enter a code, or cancel and start over.',
+    mfaScanHint: 'Scan with Microsoft Authenticator or similar, then enter the current 6-digit code to finish.',
+    mfaConfirmBind: 'Confirm binding',
+    mfaCancelSetup: 'Cancel setup',
+    mfaDisable: 'Disable 2FA',
+    mfaDisableHint: 'Enter your account password and the current 6-digit code to disable.',
+    mfaDisabled: 'Two-step verification disabled',
+    mfaBoundSuccess: 'Two-step verification is now enabled'
   },
   index: {
     toolbar: {

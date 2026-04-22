@@ -28,6 +28,12 @@ model User {
   /// 管理员「踢出登录」标记时间；登录成功会清空，供管理端「登录状态」开关展示
   lastSessionKickAt DateTime? @map("last_session_kick_at")
   vipExpireAt    DateTime? @map("vip_expire_at")
+  /// 管理员可选：TOTP 两步验证已启用
+  totpEnabled    Boolean  @default(false) @map("totp_enabled")
+  /// 已激活的 TOTP 密钥（Base32）；仅当 totpEnabled 为 true 时有值
+  totpSecret     String?  @map("totp_secret") @db.VarChar(64)
+  /// 设置流程中的临时密钥，确认前未生效
+  totpSetupSecret String? @map("totp_setup_secret") @db.VarChar(64)
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
 

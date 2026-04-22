@@ -17,6 +17,11 @@
 | `GET` | `/api/admin/system-settings` | 读取 **`system_settings`**（需**管理员** JWT） |
 | `PUT` | `/api/admin/system-settings` | 更新 **`system_settings`**（需管理员 JWT） |
 | `GET` | `/api/vip/tier-config` | 会员中心对比表：与系统管理一致的默认存储与标签上限（需登录） |
+| `POST` | `/api/auth/mfa/verify` | 管理员第二步：凭短时 `mfaToken` + 6 位 TOTP 换双 Token；无需 Bearer（见下方 Q&A） |
+| `POST` | `/api/auth/mfa/setup/start` | 开始绑定 TOTP（**仅管理员**，需登录） |
+| `POST` | `/api/auth/mfa/setup/confirm` | 确认绑定（`{ "code": "123456" }`） |
+| `POST` | `/api/auth/mfa/setup/cancel` | 放弃未完成的绑定 |
+| `POST` | `/api/auth/mfa/disable` | 关闭 2FA（`password` + `code`；成功后 `session_version` 递增） |
 
 完整请求体与响应字段以 **`schema.prisma` 模型 `SystemSettings`** 及对应 controller 为准。
 
@@ -151,13 +156,16 @@ properties:
 ### Q: `POST /api/auth/login` 请求体里的 `revokeSessionId`？
 **A**：可选整数。与 **409** 响应里某条会话的 **`id`** 一致时，服务端在事务内撤销该 `refresh_tokens` 行、**`session_version` 递增**，再为本机签发新双 Token。完整契约以 Swagger **`/api-docs`** 与 `auth.routes.ts` / `auth.controller.ts` 为准。
 
+### Q: `POST /api/auth/login` 返回 200 且 `code` 为 `MFA_REQUIRED`（管理员已开 TOTP）？
+**A**：表示**仅密码通过**，尚未发 Access/Refresh。响应体 `data` 含短时 **`mfaToken`**（约 5 分钟有效，JWT）。前端应令用户输入验证器 6 位码，再调用 **`POST /api/auth/mfa/verify`**，body：`mfaToken`、`code`；若此前因会话达限需踢设备，可同时带 **`revokeSessionId`**（与 **409** 场景相同语义）。成功响应与普通登录相同（含 `user`、`accessToken`、`refreshToken`）。见 [REQUIREMENTS.md](./REQUIREMENTS.md) §5(8)、[BUSINESS_FLOWS.md](./BUSINESS_FLOWS.md) §1.2.1。
+
 ## 用户资料与头像（补充索引）
 
 以下路由在 Swagger 中若未完整展示，可直接对照代码；均需 **Bearer** 认证（挂载于 `/api/user`，即带 `/api` 前缀）：
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/api/user/profile` | 当前用户资料（含 `storage_quota`、`status`、`vip_expire_at`、`avatar_url` 等） |
+| GET | `/api/user/profile` | 当前用户资料（含 `storage_quota`、`status`、`vip_expire_at`、`avatar_url` 等；管理员另含 `totp_enabled`、`mfa_setup_pending`） |
 | PUT | `/api/user/profile` | 更新资料，当前主要支持 `email`（空字符串表示清空；邮箱格式校验与唯一约束见实现） |
 | POST | `/api/user/avatar` | 上传头像，`multipart/form-data`，字段名 **`avatar`**；成功后更新 `users.avatar_url` |
 

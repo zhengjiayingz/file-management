@@ -34,6 +34,32 @@
     </div>
 
     <el-dialog
+      v-model="mfaDialogOpen"
+      :title="t('login.mfaTitle')"
+      width="400px"
+      :close-on-click-modal="false"
+      destroy-on-close
+      @closed="onMfaDialogClosed"
+    >
+      <p class="mfa-hint">{{ t('login.mfaHint') }}</p>
+      <el-input
+        v-model="mfaCode"
+        maxlength="6"
+        :placeholder="t('login.mfaPlaceholder')"
+        size="large"
+        class="mfa-input"
+        autocomplete="one-time-code"
+        @keyup.enter="submitMfa"
+      />
+      <template #footer>
+        <el-button @click="mfaDialogOpen = false">{{ t('common.cancel') }}</el-button>
+        <el-button type="primary" :loading="mfaVerifying" :disabled="mfaCode.trim().length !== 6" @click="submitMfa">
+          {{ t('common.confirm') }}
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog
       v-model="sessionLimitOpen"
       :title="t('login.sessionLimitTitle')"
       width="560px"
@@ -93,6 +119,7 @@ import axios from 'axios'
 import { User, Lock, Message } from '@element-plus/icons-vue'
 import { useAuthStore } from '@stores/auth'
 import { authApi } from '@api/auth'
+import type { LoginResult } from '@typing/user'
 import { checkPasswordStrength, type PasswordPolicyClient } from '@utils/passwordStrength'
 import { useI18n } from 'vue-i18n'
 
@@ -140,6 +167,11 @@ const sessionLimitPayload = ref<{
 } | null>(null)
 const selectedSessionId = ref<number | undefined>(undefined)
 
+const mfaDialogOpen = ref(false)
+const pendingMfaToken = ref<string | null>(null)
+const mfaCode = ref('')
+const mfaVerifying = ref(false)
+
 function shortUa(ua: string | null | undefined): string {
   if (!ua) return '—'
   return ua.length > 48 ? ua.slice(0, 45) + '…' : ua
@@ -158,13 +190,19 @@ function onSessionDialogClosed() {
   selectedSessionId.value = undefined
 }
 
+function onMfaDialogClosed() {
+  pendingMfaToken.value = null
+  mfaCode.value = ''
+  mfaVerifying.value = false
+}
+
 function goVipApply() {
   sessionLimitOpen.value = false
   router.push({ path: '/', query: { openVip: '1' } })
 }
 
 async function afterLoginSuccess(
-  res: Awaited<ReturnType<typeof authApi.login>>,
+  res: LoginResult,
   options?: { successMessage?: string }
 ) {
   ElMessage.success(options?.successMessage ?? t('login.login') + ' Success')
@@ -192,15 +230,85 @@ async function afterLoginSuccess(
   }
 }
 
+async function submitMfa() {
+  const token = pendingMfaToken.value
+  const code = mfaCode.value.trim().replace(/\s/g, '')
+  if (!token || code.length !== 6) {
+    ElMessage.warning(t('login.mfaPlaceholder'))
+    return
+  }
+  mfaVerifying.value = true
+  try {
+    const res = await authApi.verifyMfaLogin({
+      mfaToken: token,
+      code
+    })
+    mfaDialogOpen.value = false
+    onMfaDialogClosed()
+    await afterLoginSuccess(res)
+  } catch (error: unknown) {
+    if (axios.isAxiosError(error) && error.response?.status === 409) {
+      const body = error.response.data as {
+        code?: string
+        data?: { maxSessions: number; sessions: SessionListItem[]; showVipLink: boolean }
+      }
+      if (body?.code === 'SESSION_LIMIT' && body.data?.sessions) {
+        sessionLimitPayload.value = body.data
+        selectedSessionId.value = body.data.sessions[0]?.id
+        sessionLimitOpen.value = true
+        return
+      }
+    }
+    const msg =
+      axios.isAxiosError(error) && error.response?.data
+        ? (error.response.data as { message?: string }).message
+        : t('login.mfaInvalid')
+    ElMessage.error(msg || t('login.mfaInvalid'))
+  } finally {
+    mfaVerifying.value = false
+  }
+}
+
 async function confirmKickAndLogin() {
   if (!selectedSessionId.value || !sessionLimitPayload.value) return
   loading.value = true
   try {
-    const res = await authApi.login({
-      username: loginForm.value.username,
-      password: loginForm.value.password,
-      revokeSessionId: Number(selectedSessionId.value)
-    })
+    const revokeId = Number(selectedSessionId.value)
+    let res: LoginResult
+    if (pendingMfaToken.value) {
+      const code = mfaCode.value.trim().replace(/\s/g, '')
+      if (code.length !== 6) {
+        ElMessage.warning(t('login.mfaPlaceholder'))
+        return
+      }
+      res = await authApi.verifyMfaLogin({
+        mfaToken: pendingMfaToken.value,
+        code,
+        revokeSessionId: revokeId
+      })
+    } else {
+      const loginRes = await authApi.login({
+        username: loginForm.value.username,
+        password: loginForm.value.password,
+        revokeSessionId: revokeId
+      })
+      if (loginRes.mfaRequired) {
+        pendingMfaToken.value = loginRes.mfaToken
+        mfaDialogOpen.value = true
+        sessionLimitOpen.value = false
+        sessionLimitPayload.value = null
+        ElMessage.info(loginRes.message || t('login.mfaTitle'))
+        return
+      }
+      res = {
+        message: loginRes.message,
+        user: loginRes.user,
+        token: loginRes.token,
+        refreshToken: loginRes.refreshToken,
+        passwordPolicyHint: loginRes.passwordPolicyHint,
+        passwordPolicy: loginRes.passwordPolicy
+      }
+    }
     sessionLimitOpen.value = false
     sessionLimitPayload.value = null
     await afterLoginSuccess(res, { successMessage: t('login.sessionLimitKickSuccess') })
@@ -275,6 +383,12 @@ const handleAuth = async () => {
         username: loginForm.value.username,
         password: loginForm.value.password
       })
+      if (res.mfaRequired) {
+        pendingMfaToken.value = res.mfaToken
+        mfaCode.value = ''
+        mfaDialogOpen.value = true
+        return
+      }
       await afterLoginSuccess(res)
     }
   } catch (error: unknown) {
@@ -373,6 +487,21 @@ const handleForgotPassword = async () => {
   .form-footer {
     margin-top: 20px;
     text-align: center;
+  }
+}
+
+.mfa-hint {
+  margin: 0 0 12px;
+  line-height: 1.5;
+  color: var(--el-text-color-secondary);
+  font-size: 14px;
+}
+
+.mfa-input {
+  :deep(.el-input__inner) {
+    letter-spacing: 0.2em;
+    text-align: center;
+    font-size: 20px;
   }
 }
 

@@ -17,6 +17,10 @@ export interface User {
   mustChangePassword?: boolean;
   /** VIP 到期时间 ISO 字符串，非 VIP 常为 null */
   vipExpireAt?: string | null;
+  /** 是否已开启 TOTP 两步验证（所有角色均可选开） */
+  totpEnabled?: boolean;
+  /** 是否有未完成的 TOTP 绑定（已生成密钥未确认） */
+  mfaSetupPending?: boolean;
 }
 
 // 登录成功响应数据
@@ -33,6 +37,11 @@ export interface LoginResult {
     minCategoriesInPool: number;
   };
 }
+
+/** 登录接口：要么要求第二步 MFA，要么直接成功 */
+export type LoginFlowResult =
+  | { mfaRequired: true; mfaToken: string; message?: string }
+  | ({ mfaRequired: false } & LoginResult)
 
 // 注册成功响应数据
 export interface RegisterResult {

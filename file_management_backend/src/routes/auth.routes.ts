@@ -9,7 +9,12 @@ import {
   forgotPasswordRequest,
   changePassword,
   postMySessionsList,
-  revokeMySessions
+  revokeMySessions,
+  verifyMfaLogin,
+  mfaSetupStart,
+  mfaSetupConfirm,
+  mfaSetupCancel,
+  mfaDisable
 } from '../controllers/auth.controller.js';
 import { authenticate } from '../middleware/auth.middleware.js';
 
@@ -119,6 +124,9 @@ router.get('/password-policy', getPasswordPolicy);
  */
 router.post('/login', login);
 
+/** 管理员 TOTP 第二步 */
+router.post('/mfa/verify', verifyMfaLogin);
+
 router.post('/forgot-password', forgotPasswordRequest);
 
 /**
@@ -188,6 +196,11 @@ router.post('/refresh', refreshToken);
 router.post('/logout', logout);
 
 router.post('/change-password', authenticate, changePassword);
+
+router.post('/mfa/setup/start', authenticate, mfaSetupStart);
+router.post('/mfa/setup/confirm', authenticate, mfaSetupConfirm);
+router.post('/mfa/setup/cancel', authenticate, mfaSetupCancel);
+router.post('/mfa/disable', authenticate, mfaDisable);
 
 /**
  * @swagger

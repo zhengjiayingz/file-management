@@ -50,7 +50,7 @@
 | §5(4) | 异常登录 / 异地提醒 | **未实现** | IP/地域策略、提醒渠道（站内信、邮件等）。 |
 | §5(5) | 敏感文件加密存储（可选） | **未实现** | 可选能力，可排期。 |
 
-**说明**：§5(1)(3)(6) 双 Token、登录日志、操作日志等已具备基础能力。**§5(2)**、**§5(7)** 与会话/设备管理已验收：**登录达限踢会话**（§1(8)）、**顶栏「会话管理」**（`POST /api/auth/sessions/list`、`POST /api/auth/sessions/revoke`，多选登出所选设备，`session_version` 与 `is_revoked` 与 [REQUIREMENTS.md](./REQUIREMENTS.md) 一致）。**§5(2) Token 管理**：**Refresh** 表内撤销 + **Access `sv`** 与 **`session_version`** 校验；**不**引入逐枚 Access（`jti`/Redis）黑名单，与 [REQUIREMENTS.md](./REQUIREMENTS.md) 实现状态总览一致。
+**说明**：§5(1)(3)(6) 双 Token、登录日志、操作日志等已具备基础能力。**§5(2)**、**§5(7)** 与会话/设备管理已验收：**登录达限踢会话**（§1(8)）、**顶栏「会话管理」**（`POST /api/auth/sessions/list`、`POST /api/auth/sessions/revoke`，多选登出所选设备，`session_version` 与 `is_revoked` 与 [REQUIREMENTS.md](./REQUIREMENTS.md) 一致）。**§5(8)**：**管理员账户**可选 **TOTP 两步验证**已落地（设置弹窗、登录二步、库字段 `totp_*`），**不**要求普通/VIP 全站 2FA。**§5(2) Token 管理**：**Refresh** 表内撤销 + **Access `sv`** 与 **`session_version`** 校验；**不**引入逐枚 Access（`jti`/Redis）黑名单，与 [REQUIREMENTS.md](./REQUIREMENTS.md) 实现状态总览一致。
 
 ---
 

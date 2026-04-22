@@ -12,6 +12,8 @@ export interface UserProfileDTO {
   vipExpireAt: string | null
   avatarUrl: string | null
   createdAt: string
+  totpEnabled?: boolean
+  mfaSetupPending?: boolean
 }
 
 function mapProfile(data: {
@@ -25,6 +27,8 @@ function mapProfile(data: {
   vip_expire_at: string | null
   avatar_url: string | null
   created_at: string
+  totp_enabled?: boolean
+  mfa_setup_pending?: boolean
 }): UserProfileDTO {
   return {
     id: data.id,
@@ -37,6 +41,8 @@ function mapProfile(data: {
     vipExpireAt: data.vip_expire_at,
     avatarUrl: data.avatar_url,
     createdAt: data.created_at,
+    totpEnabled: Boolean(data.totp_enabled),
+    mfaSetupPending: Boolean(data.mfa_setup_pending),
   }
 }
 
@@ -72,6 +78,8 @@ export const userApi = {
         vip_expire_at: string | null
         avatar_url: string | null
         created_at: string
+        totp_enabled?: boolean
+        mfa_setup_pending?: boolean
       }
     }>('/user/profile')
     return mapProfile(res.data.data)

@@ -57,6 +57,7 @@ request.interceptors.response.use(
       reqUrl.includes('auth/login') ||
       reqUrl.includes('auth/register') ||
       reqUrl.includes('auth/forgot-password') ||
+      reqUrl.includes('auth/mfa/verify') ||
       /** 登出所选设备时若包含本机 refresh，后端 401 SESSION_REVOKED_SELF；不得走刷新否则会误跳转 */
       reqUrl.includes('auth/sessions/revoke')
 

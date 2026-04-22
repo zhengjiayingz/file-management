@@ -43,8 +43,74 @@
         <el-button type="primary" plain @click="openChangePasswordDialog">
           {{ t('settingsDialog.changePassword') }}
         </el-button>
+
+        <div class="mfa-block">
+          <div class="section-sub">{{ t('settingsDialog.mfaSection') }}</div>
+          <p v-if="totpEnabled" class="hint">{{ t('settingsDialog.mfaBoundHint') }}</p>
+          <p v-else-if="mfaSetupPending" class="hint warn">{{ t('settingsDialog.mfaSetupPendingHint') }}</p>
+
+          <div v-if="!totpEnabled" class="mfa-actions">
+            <el-button type="primary" plain :loading="mfaStarting" @click="startMfaSetup">
+              {{ mfaSetupPending ? t('settingsDialog.mfaConfirmBind') : t('settingsDialog.mfaEnable') }}
+            </el-button>
+            <el-button v-if="mfaSetupPending" @click="cancelMfaSetup">{{ t('settingsDialog.mfaCancelSetup') }}</el-button>
+          </div>
+          <el-button v-else type="warning" plain @click="mfaDisableDialogOpen = true">
+            {{ t('settingsDialog.mfaDisable') }}
+          </el-button>
+        </div>
       </div>
     </div>
+
+    <el-dialog
+      v-model="mfaBindDialogVisible"
+      :title="t('settingsDialog.mfaEnable')"
+      width="420px"
+      append-to-body
+      destroy-on-close
+      @closed="onMfaBindDialogClose"
+    >
+      <p class="hint">{{ t('settingsDialog.mfaScanHint') }}</p>
+      <div v-if="mfaQrDataUrl" class="mfa-qr-wrap">
+        <img :src="mfaQrDataUrl" alt="TOTP QR" class="mfa-qr" />
+      </div>
+      <el-input
+        v-model="mfaBindCode"
+        maxlength="6"
+        :placeholder="t('login.mfaPlaceholder')"
+        class="mfa-code-input"
+        @keyup.enter="confirmMfaBind"
+      />
+      <template #footer>
+        <el-button @click="mfaBindDialogVisible = false">{{ t('common.cancel') }}</el-button>
+        <el-button type="primary" :loading="mfaBinding" :disabled="mfaBindCode.trim().length !== 6" @click="confirmMfaBind">
+          {{ t('settingsDialog.mfaConfirmBind') }}
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog
+      v-model="mfaDisableDialogOpen"
+      :title="t('settingsDialog.mfaDisable')"
+      width="400px"
+      append-to-body
+      destroy-on-close
+      @closed="resetMfaDisable"
+    >
+      <p class="hint">{{ t('settingsDialog.mfaDisableHint') }}</p>
+      <el-form label-position="top">
+        <el-form-item :label="t('settingsDialog.currentPassword')">
+          <el-input v-model="mfaDisablePassword" type="password" show-password />
+        </el-form-item>
+        <el-form-item :label="t('login.mfaTitle')">
+          <el-input v-model="mfaDisableCode" maxlength="6" :placeholder="t('login.mfaPlaceholder')" @keyup.enter="submitMfaDisable" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="mfaDisableDialogOpen = false">{{ t('common.cancel') }}</el-button>
+        <el-button type="primary" :loading="mfaDisabling" @click="submitMfaDisable">{{ t('common.confirm') }}</el-button>
+      </template>
+    </el-dialog>
 
     <el-dialog
       v-model="changePwdDialogVisible"
@@ -95,6 +161,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import QRCode from 'qrcode'
 import { checkPasswordStrength, buildPasswordPolicyHint, type PasswordPolicyClient } from '@utils/passwordStrength'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
@@ -134,6 +201,19 @@ const pwdConfirm = ref('')
 const changingPassword = ref(false)
 const passwordPolicyForDialog = ref<PasswordPolicyClient | null>(null)
 
+const totpEnabled = ref(false)
+const mfaSetupPending = ref(false)
+
+const mfaBindDialogVisible = ref(false)
+const mfaQrDataUrl = ref('')
+const mfaBindCode = ref('')
+const mfaStarting = ref(false)
+const mfaBinding = ref(false)
+const mfaDisableDialogOpen = ref(false)
+const mfaDisablePassword = ref('')
+const mfaDisableCode = ref('')
+const mfaDisabling = ref(false)
+
 const passwordHintLine = computed(() => {
   if (passwordPolicyForDialog.value) {
     return buildPasswordPolicyHint(passwordPolicyForDialog.value, t)
@@ -164,6 +244,15 @@ async function openChangePasswordDialog() {
   changePwdDialogVisible.value = true
 }
 
+function syncMfaFromProfile(p: { totpEnabled?: boolean; mfaSetupPending?: boolean }) {
+  totpEnabled.value = Boolean(p.totpEnabled)
+  mfaSetupPending.value = Boolean(p.mfaSetupPending)
+  authStore.updateUser({
+    totpEnabled: totpEnabled.value,
+    mfaSetupPending: mfaSetupPending.value
+  })
+}
+
 async function onOpen() {
   loading.value = true
   emailEditing.value = false
@@ -172,12 +261,103 @@ async function onOpen() {
     emailBaseline.value = p.email ?? ''
     emailDraft.value = emailBaseline.value
     avatarPath.value = p.avatarUrl
+    syncMfaFromProfile(p)
   } catch {
     emailBaseline.value = authStore.user?.email ?? ''
     emailDraft.value = emailBaseline.value
     avatarPath.value = authStore.user?.avatar ?? null
+    totpEnabled.value = Boolean(authStore.user?.totpEnabled)
+    mfaSetupPending.value = Boolean(authStore.user?.mfaSetupPending)
   } finally {
     loading.value = false
+  }
+}
+
+function onMfaBindDialogClose() {
+  mfaBindCode.value = ''
+  mfaQrDataUrl.value = ''
+}
+
+async function startMfaSetup() {
+  mfaStarting.value = true
+  try {
+    const { otpauthUrl } = await authApi.mfaSetupStart()
+    mfaQrDataUrl.value = await QRCode.toDataURL(otpauthUrl, { width: 220, margin: 2 })
+    mfaBindCode.value = ''
+    mfaBindDialogVisible.value = true
+    mfaSetupPending.value = true
+    authStore.updateUser({ mfaSetupPending: true })
+  } catch (e: unknown) {
+    const err = e as { response?: { data?: { message?: string } } }
+    ElMessage.error(err.response?.data?.message || 'MFA')
+  } finally {
+    mfaStarting.value = false
+  }
+}
+
+async function confirmMfaBind() {
+  const c = mfaBindCode.value.trim().replace(/\s/g, '')
+  if (c.length !== 6) {
+    ElMessage.warning(t('login.mfaPlaceholder'))
+    return
+  }
+  mfaBinding.value = true
+  try {
+    await authApi.mfaSetupConfirm(c)
+    totpEnabled.value = true
+    mfaSetupPending.value = false
+    mfaBindDialogVisible.value = false
+    onMfaBindDialogClose()
+    authStore.updateUser({ totpEnabled: true, mfaSetupPending: false })
+    ElMessage.success(t('settingsDialog.mfaBoundSuccess'))
+  } catch (e: unknown) {
+    const err = e as { response?: { data?: { message?: string } } }
+    ElMessage.error(err.response?.data?.message || t('settingsDialog.passwordFailed'))
+  } finally {
+    mfaBinding.value = false
+  }
+}
+
+async function cancelMfaSetup() {
+  try {
+    await authApi.mfaSetupCancel()
+    mfaSetupPending.value = false
+    mfaBindDialogVisible.value = false
+    onMfaBindDialogClose()
+    authStore.updateUser({ mfaSetupPending: false })
+    ElMessage.success(t('common.save'))
+  } catch (e: unknown) {
+    const err = e as { response?: { data?: { message?: string } } }
+    ElMessage.error(err.response?.data?.message || t('settingsDialog.saveFailed'))
+  }
+}
+
+function resetMfaDisable() {
+  mfaDisablePassword.value = ''
+  mfaDisableCode.value = ''
+}
+
+async function submitMfaDisable() {
+  const p = mfaDisablePassword.value
+  const c = mfaDisableCode.value.trim().replace(/\s/g, '')
+  if (!p || c.length !== 6) {
+    ElMessage.warning(t('settingsDialog.mfaDisableHint'))
+    return
+  }
+  mfaDisabling.value = true
+  try {
+    await authApi.mfaDisable(p, c)
+    totpEnabled.value = false
+    mfaSetupPending.value = false
+    mfaDisableDialogOpen.value = false
+    resetMfaDisable()
+    authStore.updateUser({ totpEnabled: false, mfaSetupPending: false })
+    ElMessage.success(t('settingsDialog.mfaDisabled'))
+  } catch (e: unknown) {
+    const err = e as { response?: { data?: { message?: string } } }
+    ElMessage.error(err.response?.data?.message || t('settingsDialog.passwordFailed'))
+  } finally {
+    mfaDisabling.value = false
   }
 }
 
@@ -346,5 +526,45 @@ async function onAvatarRequest(options: UploadRequestOptions) {
     justify-content: flex-end;
     gap: 8px;
   }
+}
+
+.mfa-block {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--el-border-color-lighter);
+}
+
+.section-sub {
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: var(--el-text-color-primary);
+}
+
+.mfa-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.hint.warn {
+  color: var(--el-color-warning);
+}
+
+.mfa-qr-wrap {
+  display: flex;
+  justify-content: center;
+  margin: 12px 0;
+}
+
+.mfa-qr {
+  width: 220px;
+  height: 220px;
+  border: 1px solid var(--el-border-color);
+  border-radius: 8px;
+}
+
+.mfa-code-input {
+  margin-top: 8px;
 }
 </style>

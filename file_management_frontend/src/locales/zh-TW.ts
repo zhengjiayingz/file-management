@@ -139,7 +139,11 @@ export default {
     upgradeVip: '升級為 VIP',
     sessionLimitKickSuccess: '已登入',
     passwordPolicyChanged: '管理員已更新密碼策略，請立即修改密碼。新要求：{policy}',
-    registerPolicyError: '無法取得密碼策略，請稍後再試'
+    registerPolicyError: '無法取得密碼策略，請稍後再試',
+    mfaTitle: '兩步驗證',
+    mfaHint: '請輸入驗證器 App 中顯示的 6 位動態碼。',
+    mfaPlaceholder: '6 位數字',
+    mfaInvalid: '動態碼無效或已過期，請重試'
   },
   forceChangePassword: {
     title: '請修改密碼',
@@ -198,7 +202,18 @@ export default {
     passwordStrengthWeak: '密碼未滿足已要求的字元類別',
     passwordSameAsOld: '新密碼不能與目前密碼相同',
     passwordSuccess: '密碼已更新',
-    passwordFailed: '修改密碼失敗'
+    passwordFailed: '修改密碼失敗',
+    mfaSection: '兩步驗證（可選）',
+    mfaEnable: '開啟兩步驗證',
+    mfaBoundHint: '已開啟：登入時除密碼外須輸入驗證器動態碼。',
+    mfaSetupPendingHint: '有待確認：請完成下方掃碼並輸入動態碼，或取消後重試。',
+    mfaScanHint: '使用 Microsoft Authenticator 等應用掃描，然後輸入目前 6 位碼以完成綁定。',
+    mfaConfirmBind: '確認綁定',
+    mfaCancelSetup: '取消本次綁定',
+    mfaDisable: '關閉兩步驗證',
+    mfaDisableHint: '請輸入登入密碼與驗證器目前 6 位碼以關閉。',
+    mfaDisabled: '已關閉兩步驗證',
+    mfaBoundSuccess: '兩步驗證已開啟'
   },
   index: {
     toolbar: {

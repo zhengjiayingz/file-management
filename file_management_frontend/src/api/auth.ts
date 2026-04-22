@@ -1,6 +1,6 @@
 import request from '@utils/request'
 
-import type { LoginResult, RegisterResult, User, UserRole } from '@typing/user'
+import type { LoginFlowResult, LoginResult, RegisterResult, User, UserRole } from '@typing/user'
 import { normalizePasswordPolicyClient, type PasswordPolicyClient } from '@utils/passwordStrength'
 
 function mapAuthUser(backendUser: {
@@ -14,6 +14,7 @@ function mapAuthUser(backendUser: {
   avatar_url?: string | null
   vip_expire_at?: string | null
   created_at?: string
+  totp_enabled?: boolean
 }): User {
   return {
     id: backendUser.id,
@@ -26,6 +27,7 @@ function mapAuthUser(backendUser: {
     mustChangePassword: Boolean(backendUser.must_change_password),
     avatar: backendUser.avatar_url ?? undefined,
     vipExpireAt: backendUser.vip_expire_at ?? null,
+    totpEnabled: Boolean(backendUser.totp_enabled),
   }
 }
 
@@ -37,32 +39,47 @@ export const authApi = {
     password: string
     /** 踢掉指定 refresh_token 记录后再登录 */
     revokeSessionId?: number
-  }): Promise<LoginResult> {
+  }): Promise<LoginFlowResult> {
     const res = await request.post<{
-      success: boolean;
+      success: boolean
+      code?: string
+      message?: string
       data: {
+        mfaToken?: string
+        expiresIn?: number
         user: {
-          id: number;
-          username: string;
-          email: string | null;
-          role: UserRole;
-          storage_quota: number;
-          storage_used: number;
-          must_change_password?: boolean;
-          avatar_url?: string | null;
-          vip_expire_at?: string | null;
-          created_at?: string;
-        };
-        accessToken: string;
-        refreshToken: string;
-        password_policy_hint?: string;
-        password_policy?: PasswordPolicyClient;
+          id: number
+          username: string
+          email: string | null
+          role: UserRole
+          storage_quota: number
+          storage_used: number
+          must_change_password?: boolean
+          avatar_url?: string | null
+          vip_expire_at?: string | null
+          created_at?: string
+          totp_enabled?: boolean
+        }
+        accessToken: string
+        refreshToken: string
+        password_policy_hint?: string
+        password_policy?: PasswordPolicyClient
       }
     }>('/auth/login', data)
 
-    const backendUser = res.data.data.user
-    const d = res.data.data
+    const root = res.data
+    if (root.code === 'MFA_REQUIRED' && root.data?.mfaToken) {
+      return {
+        mfaRequired: true,
+        mfaToken: root.data.mfaToken,
+        message: root.message
+      }
+    }
+
+    const backendUser = root.data.user
+    const d = root.data
     return {
+      mfaRequired: false,
       message: '登录成功',
       user: mapAuthUser(backendUser),
       token: d.accessToken,
@@ -70,6 +87,65 @@ export const authApi = {
       passwordPolicyHint: d.password_policy_hint,
       passwordPolicy: d.password_policy ? normalizePasswordPolicyClient(d.password_policy) : undefined
     }
+  },
+
+  /** 二步验证：提交 TOTP 动态码 */
+  async verifyMfaLogin(data: {
+    mfaToken: string
+    code: string
+    revokeSessionId?: number
+  }): Promise<LoginResult> {
+    const res = await request.post<{
+      success: boolean
+      data: {
+        user: {
+          id: number
+          username: string
+          email: string | null
+          role: UserRole
+          storage_quota: number
+          storage_used: number
+          must_change_password?: boolean
+          avatar_url?: string | null
+          vip_expire_at?: string | null
+          created_at?: string
+          totp_enabled?: boolean
+        }
+        accessToken: string
+        refreshToken: string
+        password_policy_hint?: string
+        password_policy?: PasswordPolicyClient
+      }
+    }>('/auth/mfa/verify', data)
+    const d = res.data.data
+    return {
+      message: '登录成功',
+      user: mapAuthUser(d.user),
+      token: d.accessToken,
+      refreshToken: d.refreshToken,
+      passwordPolicyHint: d.password_policy_hint,
+      passwordPolicy: d.password_policy ? normalizePasswordPolicyClient(d.password_policy) : undefined
+    }
+  },
+
+  async mfaSetupStart(): Promise<{ otpauthUrl: string; accountLabel: string }> {
+    const res = await request.post<{ success: boolean; data: { otpauthUrl: string; accountLabel: string } }>(
+      '/auth/mfa/setup/start',
+      {}
+    )
+    return res.data.data
+  },
+
+  async mfaSetupConfirm(code: string): Promise<void> {
+    await request.post('/auth/mfa/setup/confirm', { code })
+  },
+
+  async mfaSetupCancel(): Promise<void> {
+    await request.post('/auth/mfa/setup/cancel', {})
+  },
+
+  async mfaDisable(password: string, code: string): Promise<void> {
+    await request.post('/auth/mfa/disable', { password, code })
   },
 
   async changePassword(data: { newPassword: string; currentPassword?: string }): Promise<{
@@ -211,6 +287,8 @@ export const authApi = {
         created_at: string;
         avatar_url?: string | null;
         vip_expire_at?: string | null;
+        totp_enabled?: boolean;
+        mfa_setup_pending?: boolean;
       }
     }>('/auth/me')
 
@@ -227,6 +305,8 @@ export const authApi = {
       mustChangePassword: Boolean(backendUser.must_change_password),
       avatar: backendUser.avatar_url ?? undefined,
       vipExpireAt: backendUser.vip_expire_at ?? null,
+      totpEnabled: Boolean(backendUser.totp_enabled),
+      mfaSetupPending: Boolean(backendUser.mfa_setup_pending),
     }
   }
 }

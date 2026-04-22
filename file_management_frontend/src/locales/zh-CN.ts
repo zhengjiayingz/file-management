@@ -139,7 +139,11 @@ export default {
     upgradeVip: '升级为 VIP',
     sessionLimitKickSuccess: '已登录',
     passwordPolicyChanged: '管理员已更新密码策略，请立即修改密码。新要求：{policy}',
-    registerPolicyError: '无法获取密码策略，请稍后重试'
+    registerPolicyError: '无法获取密码策略，请稍后重试',
+    mfaTitle: '两步验证',
+    mfaHint: '请输入验证器 App 中显示的 6 位动态码。',
+    mfaPlaceholder: '6 位数字',
+    mfaInvalid: '动态码无效或已过期，请重试'
   },
   forceChangePassword: {
     title: '请修改密码',
@@ -198,7 +202,18 @@ export default {
     passwordStrengthWeak: '密码未满足已要求的字符类别',
     passwordSameAsOld: '新密码不能与当前密码相同',
     passwordSuccess: '密码已更新',
-    passwordFailed: '修改密码失败'
+    passwordFailed: '修改密码失败',
+    mfaSection: '两步验证（可选）',
+    mfaEnable: '开启两步验证',
+    mfaBoundHint: '已开启：登录时除密码外须输入验证器动态码。',
+    mfaSetupPendingHint: '有待确认：请完成下方扫码并输入动态码，或取消后重试。',
+    mfaScanHint: '使用 Microsoft Authenticator 等应用扫描，然后输入当前 6 位码以完成绑定。',
+    mfaConfirmBind: '确认绑定',
+    mfaCancelSetup: '取消本次绑定',
+    mfaDisable: '关闭两步验证',
+    mfaDisableHint: '请输入登录密码与验证器当前 6 位码以关闭。',
+    mfaDisabled: '已关闭两步验证',
+    mfaBoundSuccess: '两步验证已开启'
   },
   index: {
     toolbar: {

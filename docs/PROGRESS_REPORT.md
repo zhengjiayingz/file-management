@@ -91,6 +91,7 @@
 | (5) | 文件加密存储（可选） | ❌ 未实现 | - |
 | (6) | 操作日志 | ✅ 已实现 | `logger.service.ts` + `log.controller.ts` + 日志页面完整 |
 | (7) | 会话管理（查看/管理活跃会话，远程登出） | ✅ 已实现 | **登录达限**：`POST /api/auth/login` + `revokeSessionId`，409 返回列表；**顶栏「会话管理」**：`SessionManageDialog`，`POST /api/auth/sessions/list`、`POST /api/auth/sessions/revoke` 多选登出；均配合 `session_version` / `is_revoked`。详见 [REQUIREMENTS.md](./REQUIREMENTS.md) §1(8) §5(7)。 |
+| (8) | 管理员可选 TOTP 两步验证 | ✅ 已实现 | 设置中绑定/关闭；`users.totp_*`；登录 `MFA_REQUIRED` + `POST /api/auth/mfa/verify`；**非**全站（普通/VIP 无 2FA）。详见 [REQUIREMENTS.md](./REQUIREMENTS.md) §5(8) |
 
 ---
 
@@ -112,7 +113,7 @@
 | (1) | 主题切换（浅色/深色）+ 持久化到数据库 | ✅ 已实现 | `theme.ts` store + `user-preference.controller.ts` 持久化 |
 | (2) | 国际化（简中/繁中/英文）+ 持久化 | ✅ 已实现 | `locales/` 下有 `zh-CN.ts` / `zh-TW.ts` / `en-US.ts` + 持久化到数据库 |
 | (3) | 个人信息弹窗 | ✅ 已实现 | `PersonalInfoDialog`：顶栏用户菜单；`GET /api/user/profile`；展示资料与存储/VIP 摘要；跳转会员中心。见 [REQUIREMENTS.md](./REQUIREMENTS.md)「其他需求」（3） |
-| (4) | 设置弹窗（头像、邮箱、修改密码） | ✅ 已实现 | `UserSettingsDialog`：`POST /api/user/avatar`、`PUT /api/user/profile`、**`POST /api/auth/change-password`**（原密码 + 新密码强度 + 确认）；`users.avatar_url`。见 [REQUIREMENTS.md](./REQUIREMENTS.md)「其他需求」（4） |
+| (4) | 设置弹窗（头像、邮箱、修改密码；**管理员**可选 TOTP） | ✅ 已实现 | `UserSettingsDialog`：同上；**管理员**在「登录密码」区可 [§5(8)](./REQUIREMENTS.md) 启闭 TOTP。见 [REQUIREMENTS.md](./REQUIREMENTS.md)「其他需求」（4） |
 
 ---
 
@@ -124,10 +125,10 @@
 | 2. 文件管理 | 17 | 16 | 1 | 0 |
 | 3. 文件分享 | 5 | 5 | 0 | 0 |
 | 4. 权限管理 | 2 | 2 | 0 | 0 |
-| 5. 安全性 | 7 | 5 | 0 | 2 |
+| 5. 安全性 | 8 | 6 | 0 | 2 |
 | 6. 管理员功能 | 4 | 3 | 0 | 1 |
 | 7. 其他需求 | 4 | 4 | 0 | 0 |
-| **合计** | **47** | **43 (≈91%)** | **1 (≈2%)** | **3 (≈7%)** |
+| **合计** | **48** | **44 (≈92%)** | **1 (≈2%)** | **3 (≈6%)** |
 
 ---
 

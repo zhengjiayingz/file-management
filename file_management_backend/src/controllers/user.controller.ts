@@ -62,6 +62,8 @@ export const getProfile = async (req: AuthRequest, res: Response): Promise<void>
         vipExpireAt: true,
         avatarUrl: true,
         createdAt: true,
+        totpEnabled: true,
+        totpSetupSecret: true
       },
     });
 
@@ -73,9 +75,14 @@ export const getProfile = async (req: AuthRequest, res: Response): Promise<void>
       return;
     }
 
+    const base = profilePayload(user);
     res.json({
       success: true,
-      data: profilePayload(user),
+      data: {
+        ...base,
+        totp_enabled: user.totpEnabled,
+        mfa_setup_pending: Boolean(user.totpSetupSecret)
+      }
     });
   } catch (error) {
     console.error('Get profile error:', error);
@@ -137,13 +144,20 @@ export const updateProfile = async (req: AuthRequest, res: Response): Promise<vo
         vipExpireAt: true,
         avatarUrl: true,
         createdAt: true,
+        totpEnabled: true,
+        totpSetupSecret: true
       },
     });
 
+    const base = profilePayload(updatedUser);
     res.json({
       success: true,
       message: '用户资料更新成功',
-      data: profilePayload(updatedUser),
+      data: {
+        ...base,
+        totp_enabled: updatedUser.totpEnabled,
+        mfa_setup_pending: Boolean(updatedUser.totpSetupSecret)
+      },
     });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {

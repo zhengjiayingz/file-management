@@ -4,7 +4,7 @@
 
 本文档详细描述了文件管理系统各个功能模块的业务流程，包括每个步骤涉及的数据表操作。
 
-**与需求文档对齐**：验收口径与权限/回收策略以 [REQUIREMENTS.md](./REQUIREMENTS.md) 为准。**2026-04-18**：§7.3 已改为「仅定时任务回收无引用物理文件」，废止原「管理员手动清理」流程描述；VIP 完整申请与审核见 REQUIREMENTS「VIP 升级与审核流程」及本节 **6.2** 说明。**2026-04-19**：补充 **§9.3** 个人信息与资料更新（弹窗 + `GET/PUT /api/user/profile`、`POST /api/user/avatar`），与 REQUIREMENTS「其他需求」（3）（4）一致。**2026-04-20**：与 §5(2) 对齐——**Token 强失效**采用 **`users.session_version` + JWT `sv`** 与 **Refresh `is_revoked`**；**不**实现逐枚 Access（`jti`）黑名单；管理员踢会话见 **§7.1**。**2026-04-20（§3）**：链接分享 **访问人数上限** `max_visitors`（创建时可选 1～10 或不限）：**未登录**打开列表/下载按 **IP** 计数；**转存须登录**，仅按 **用户 ID** 计数（无匿名转存）；实现见 `share.controller.ts` `ensureVisitorAllowedInTx`；`share_access_logs.action` 含 `view` / `download` / `save`。**2026-04-21**：**并发会话**以 `refresh_tokens` 计；普通 **2** / VIP **5** / 管理员不限；达上限时 `POST /api/auth/login` 返回 **409** `SESSION_LIMIT`；带 **`revokeSessionId`** 再登录时在事务内撤销该行、`session_version` **+1** 并插入新 refresh（见 **§1.2**、**§1.5**）。**2026-04-22**：顶栏用户菜单 **「会话管理」** — `POST /api/auth/sessions/list`（可选带 refreshToken 标当前会话）、`POST /api/auth/sessions/revoke`（多选 `ids` + `refreshToken`）批量登出所选设备，事务内 `session_version` **+1**（见 **§1.6**）。**2026-04-22（§7.4）**：管理员看板 **系统管理** 维护 **`system_settings`**（密码策略、各角色默认存储、`max_tags_user` / `max_tags_vip`）；注册 / 改密 / 登录策略提示、VIP 通过后配额、标签上限、会员中心对比表等与该表同步（见 [DATABASE_DESIGN.md](./DATABASE_DESIGN.md) §3.17）。**工程**：Prisma Client 生成与 Windows 环境问题见 [DEVELOPMENT.md](./DEVELOPMENT.md)。
+**与需求文档对齐**：验收口径与权限/回收策略以 [REQUIREMENTS.md](./REQUIREMENTS.md) 为准。**2026-04-18**：§7.3 已改为「仅定时任务回收无引用物理文件」，废止原「管理员手动清理」流程描述；VIP 完整申请与审核见 REQUIREMENTS「VIP 升级与审核流程」及本节 **6.2** 说明。**2026-04-19**：补充 **§9.3** 个人信息与资料更新（弹窗 + `GET/PUT /api/user/profile`、`POST /api/user/avatar`），与 REQUIREMENTS「其他需求」（3）（4）一致。**2026-04-20**：与 §5(2) 对齐——**Token 强失效**采用 **`users.session_version` + JWT `sv`** 与 **Refresh `is_revoked`**；**不**实现逐枚 Access（`jti`）黑名单；管理员踢会话见 **§7.1**。**2026-04-20（§3）**：链接分享 **访问人数上限** `max_visitors`（创建时可选 1～10 或不限）：**未登录**打开列表/下载按 **IP** 计数；**转存须登录**，仅按 **用户 ID** 计数（无匿名转存）；实现见 `share.controller.ts` `ensureVisitorAllowedInTx`；`share_access_logs.action` 含 `view` / `download` / `save`。**2026-04-21**：**并发会话**以 `refresh_tokens` 计；普通 **2** / VIP **5** / 管理员不限；达上限时 `POST /api/auth/login` 返回 **409** `SESSION_LIMIT`；带 **`revokeSessionId`** 再登录时在事务内撤销该行、`session_version` **+1** 并插入新 refresh（见 **§1.2**、**§1.5**）。**2026-04-22**：顶栏用户菜单 **「会话管理」** — `POST /api/auth/sessions/list`（可选带 refreshToken 标当前会话）、`POST /api/auth/sessions/revoke`（多选 `ids` + `refreshToken`）批量登出所选设备，事务内 `session_version` **+1**（见 **§1.6**）。**2026-04-22（§7.4）**：管理员看板 **系统管理** 维护 **`system_settings`**（密码策略、各角色默认存储、`max_tags_user` / `max_tags_vip`）；注册 / 改密 / 登录策略提示、VIP 通过后配额、标签上限、会员中心对比表等与该表同步（见 [DATABASE_DESIGN.md](./DATABASE_DESIGN.md) §3.17）。**2026-04-22（管理员 TOTP 2FA）**：可选两步验证、登录 `MFA_REQUIRED`、绑定/关闭与表字段 `totp_*` 见 **§1.2.1**、**§9.4** 与 [REQUIREMENTS.md](./REQUIREMENTS.md) §5(8)。**工程**：Prisma Client 生成与 Windows 环境问题见 [DEVELOPMENT.md](./DEVELOPMENT.md)。
 
 ---
 
@@ -18,7 +18,7 @@
 6. [存储管理流程](#6-存储管理流程)
 7. [管理员功能流程](#7-管理员功能流程)（含 [7.4 系统管理（全局策略与默认配额）](#74-系统管理全局策略与默认配额)）
 8. [定时任务流程](#8-定时任务流程)
-9. [用户设置流程](#9-用户设置流程)（含 [9.3 个人信息与资料更新](#93-个人信息与资料更新头像--邮箱)）
+9. [用户设置流程](#9-用户设置流程)（含 [9.3 个人信息与资料更新](#93-个人信息与资料更新头像--邮箱) / [9.4 管理员两步验证（TOTP）](#94-管理员两步验证totp可选)）
 
 ---
 
@@ -120,6 +120,18 @@ VALUES (?, ?, ?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL 7 DAY))
 INSERT INTO login_logs (user_id, ip_address, device, user_agent, status)
 VALUES (?, ?, ?, ?, 'success')
 ```
+
+### 1.2.1 管理员 TOTP 两步验证（与 §1.2 衔接）
+
+**前置**：`users.role = 'admin'` 且用户在 **设置** 中完成 TOTP 绑定（`totp_enabled = true`，`totp_secret` 非空）。普通/VIP 不经过本节。
+
+1. 用户 `POST /api/auth/login` 提交用户名、密码（及可选的 `revokeSessionId`）。
+2. 密码与账户状态校验通过后，若命中「管理员 + 已开 TOTP」：不进入 §1.2 的「发双 Token / 记成功登录」事务，而返回 **200**、`code: MFA_REQUIRED`，`data.mfaToken` 为短时 JWT（载荷含须改密与策略位等，与 [REQUIREMENTS.md](./REQUIREMENTS.md) §5(8) 一致）。
+3. 用户输入验证器 6 位码，请求 **`POST /api/auth/mfa/verify`**，`mfaToken` + `code`（+ 可选 `revokeSessionId` 若上一步遇会话上限）。
+4. 服务端校验 JWT、`verifySync` TOTP 通过后，**再**执行与 §1.2 相同的发双 Token、写 `login_logs` 成功、清空 `last_session_kick_at` 等（实现上为 `runLoginSessionTransaction` 共用逻辑）。
+5. 失败 TOTP 记登录失败（原因含 MFA 失败），不签发 Token。
+
+**绑定 / 解绑**（均须已登录，且**仅管理员**接口路径）：`POST /api/auth/mfa/setup/start`（写 `totp_setup_secret`）→ 扫码后 `setup/confirm` 写入 `totp_enabled` + `totp_secret`；`setup/cancel` 清除临时密钥；`disable` 需密码+动态码，清空 TOTP 列并 **递增 `session_version`**。详见 [API_DOCUMENTATION.md](./API_DOCUMENTATION.md)。
 
 ---
 
@@ -1861,6 +1873,16 @@ ON DUPLICATE KEY UPDATE locale = VALUES(locale), theme = VALUES(theme), updated_
 | users | UPDATE | `updateProfile`（email）、`uploadAvatar`（avatar_url） |
 
 **说明**：若 Access Token 携带 `must_change_password`（管理员重置后的临时密码登录），中间件会限制除白名单外的 API；用户须先完成强制改密后，方可调用上述资料接口（与实现对齐）。
+
+### 9.4 管理员两步验证（TOTP，可选）
+
+**入口**：「设置」弹窗 →「登录密码」→「两步验证（仅管理员）」。
+
+1. 调用 `POST /api/auth/mfa/setup/start` 获得 `otpauthUrl`，前端生成二维码供 **Authenticator** 扫描；服务端写入 `totp_setup_secret`。
+2. 用户输入当前 6 位码 → `POST /api/auth/mfa/setup/confirm`，校验通过后 `totp_enabled = true`，`totp_secret` 从临时列迁入，`totp_setup_secret` 清空（与 [DATABASE_DESIGN.md](./DATABASE_DESIGN.md) §3.1 一致）。
+3. 未完成时可 `mfa/setup/cancel` 清除临时密钥。已开启时关闭须 `mfa/disable`（密码 + 动态码），并令 **`session_version` 递增**（各端重登）。登录侧见 **§1.2.1**。
+
+**涉及的表操作**：`users` 的 `totp_enabled`、`totp_secret`、`totp_setup_secret`（及关闭时的 `session_version`）。
 
 ---
 

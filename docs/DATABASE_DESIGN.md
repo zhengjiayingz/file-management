@@ -38,6 +38,9 @@
 | session_version | INT | NOT NULL, DEFAULT 0 | 会话版本；递增后此前签发的 Access Token（JWT 内 `sv`）全部失效，见 §5.1 |
 | last_session_kick_at | DATETIME | NULL | 管理员踢会话标记时间；登录成功会清空，供管理端「登录状态」展示 |
 | vip_expire_at | DATETIME | NULL | VIP过期时间 |
+| totp_enabled | BOOLEAN | NOT NULL, DEFAULT FALSE | 是否开启 TOTP 两步验证（**仅 `role=admin` 使用**；普通/VIP 恒为 false） |
+| totp_secret | VARCHAR(64) | NULL | 已启用的 TOTP 密钥（Base32）；`totp_enabled` 为 true 时有值 |
+| totp_setup_secret | VARCHAR(64) | NULL | 绑定流程中的临时密钥，确认前未生效；可空 |
 | created_at | DATETIME | NOT NULL, DEFAULT CURRENT_TIMESTAMP | 创建时间 |
 | updated_at | DATETIME | NOT NULL, DEFAULT CURRENT_TIMESTAMP ON UPDATE | 更新时间 |
 
@@ -51,6 +54,7 @@
 - **VIP 审核通过**时更新为 **`system_settings.storage_quota_vip_bytes`**（默认 2GB，可改）。
 - **管理员**账号的 `storage_quota` 以实现/种子数据为准（常见为极大值；前端可将 `storageQuota === -1` 视为展示上的「不限」）。
 - 各角色**默认空间**与 **标签个数上限**的权威配置见下文 **§3.17 `system_settings`**。
+- **管理员 TOTP**（[REQUIREMENTS.md](./REQUIREMENTS.md) §5(8)）：`totp_enabled` 为 true 时，登录在密码正确后须第二步入参校验（见 `auth.controller.ts`）；关闭 2FA 会递增 `session_version`。
 
 ---
 

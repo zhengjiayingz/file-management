@@ -16,6 +16,11 @@ const router = createRouter({
       component: () => import('../views/login/index.vue')
     },
     {
+      path: '/totp-demo',
+      name: 'totp-demo',
+      component: () => import('../views/totp-demo/index.vue')
+    },
+    {
       path: '/force-change-password',
       name: 'force-change-password',
       component: () => import('../views/force-change-password/index.vue'),
@@ -82,7 +87,7 @@ router.beforeEach((to, from, next) => {
     return
   }
 
-  if (mustChange && to.path !== '/force-change-password') {
+  if (mustChange && to.path !== '/force-change-password' && to.path !== '/totp-demo') {
     console.log('🔴 [路由守卫] 须先修改临时密码')
     next('/force-change-password')
     return
