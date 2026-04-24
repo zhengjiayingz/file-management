@@ -3,6 +3,34 @@ import { useAuthStore } from '@stores/auth'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
 
+/** 弱网 / 无响应 / 网关瞬时错误：最多自动重试次数（不含首次请求，即最多共 1+3 次） */
+const MAX_TRANSPORT_RETRIES = 3
+
+type RequestConfigWithRetry = InternalAxiosRequestConfig & {
+  _retry?: boolean
+  /** 传输层重试计数（与 401 换 token 的 _retry 无关） */
+  __transportRetryCount?: number
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+/** 是否值得做传输层重试：无响应；或网关类 5xx（仅对幂等请求重试，避免重复提交） */
+function shouldAttemptTransportRetry(error: AxiosError, config: RequestConfigWithRetry): boolean {
+  const method = (config.method || 'get').toUpperCase()
+  const idempotent = method === 'GET' || method === 'HEAD' || method === 'OPTIONS'
+
+  if (!error.response) {
+    return true
+  }
+  const status = error.response.status
+  if (status === 502 || status === 503 || status === 504) {
+    return idempotent
+  }
+  return false
+}
+
 // 创建axios实例
 const request = axios.create({
   baseURL: `${API_BASE_URL}/api`,
@@ -43,9 +71,20 @@ request.interceptors.response.use(
     return response
   },
   async (error: AxiosError) => {
-    const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean }
+    const originalRequest = error.config as RequestConfigWithRetry
 
-    // 如果没有 response (网络错误等)，直接 reject
+    // 弱网 / 超时 / 连接被重置 / 网关 502-504（限幂等）：自动重试，最多 MAX_TRANSPORT_RETRIES 次
+    if (originalRequest && shouldAttemptTransportRetry(error, originalRequest)) {
+      const count = originalRequest.__transportRetryCount ?? 0
+      if (count < MAX_TRANSPORT_RETRIES) {
+        originalRequest.__transportRetryCount = count + 1
+        const backoffMs = Math.min(2000, 100 * 2 ** count)
+        await sleep(backoffMs)
+        return request(originalRequest)
+      }
+    }
+
+    // 如果没有 response (网络错误等)，在重试用尽后 reject
     if (!error.response) {
       return Promise.reject(error)
     }
