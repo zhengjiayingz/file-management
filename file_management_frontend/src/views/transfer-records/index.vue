@@ -207,16 +207,20 @@ onMounted(() => {
 
 .main-container {
   flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
 
 .content-area {
+  flex: 1;
+  min-height: 0;
   padding: 20px;
-  overflow-y: auto;
+  /* 由 .table-container 内部滚动，避免整页无滚动条却裁切表格 */
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .filter-bar {
@@ -229,10 +233,11 @@ onMounted(() => {
 
 .table-container {
   flex: 1;
+  min-height: 0;
   background: white;
   padding: 0;
   border-radius: 8px;
-  overflow: hidden;
+  overflow: auto;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
 }
 

@@ -95,6 +95,8 @@ import { initCleanupJob } from './jobs/cleanup.job.js';
 
 const PORT = process.env.PORT || 3000;
 const httpServer = createServer(app);
+
+// 这样写就是让Http和WebSocket共用同一个端口
 initSocket(httpServer);
 
 httpServer.listen(PORT, () => {

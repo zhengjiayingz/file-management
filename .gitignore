@@ -1,0 +1,9 @@
+# 仓库根：与 backend/frontend 子目录 .gitignore 互补，覆盖 docs/ 等根下任意位置的 node_modules
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+
+# 后端转 PDF 预览缓存（LibreOffice 输出、临时目录）
+previews/

@@ -1,17 +1,6 @@
 <template>
     <div class="friend-panel-wrapper">
-        <!-- 悬浮通讯按钮 -->
-        <div class="floating-chat-btn" @click="toggleDrawer" :title="t('sidebar.contactsAndMessages')">
-            <el-badge :value="totalUnread > 0 ? totalUnread : ''" :hidden="totalUnread === 0" class="chat-badge">
-                <el-button type="primary" circle size="large" class="shadow-btn">
-                    <el-icon size="20">
-                        <Message />
-                    </el-icon>
-                </el-button>
-            </el-badge>
-        </div>
-
-        <!-- 侧边栏抽屉 -->
+        <!-- 侧边栏抽屉（由侧栏「通讯录与消息」或 window open-friend-panel 打开，无悬浮按钮） -->
         <el-drawer v-model="drawerVisible" :title="panelHeaderTitle"
             size="380px" :with-header="true">
             <!-- 为了自定义Header返回按钮 -->
@@ -277,7 +266,7 @@
 
 <script setup lang="ts">
 import { ref, watch, onMounted, onUnmounted, nextTick, computed } from 'vue'
-import { Message, Bell, ArrowRight, Search, Check, Close, ArrowLeft, Document, Folder, FolderOpened } from '@element-plus/icons-vue'
+import { Bell, ArrowRight, Search, Check, Close, ArrowLeft, Document, Folder, FolderOpened } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { friendshipApi } from '@api/friendship'
 import { messageApi } from '@api/message'
@@ -361,13 +350,6 @@ watch(
 const getUnreadCount = (friendId: number) => {
     const target = unreadSummary.value.find(u => u.senderId === friendId)
     return target ? target._count.id : 0
-}
-
-const toggleDrawer = () => {
-    drawerVisible.value = !drawerVisible.value
-    if (drawerVisible.value) {
-        loadData()
-    }
 }
 
 const openDrawerPanel = () => {
@@ -740,6 +722,7 @@ onMounted(() => {
         onFriendshipSync: handleSocketFriendshipSync,
     })
     if (authStore.isLoggedIn && authStore.token) {
+        // 发起长连接
         connectContactsSocket(authStore.token)
         fetchUnreadSummary()
     }
@@ -780,22 +763,6 @@ onUnmounted(() => {
     position: relative;
     z-index: 1000;
     /* 高层级保证能点到 */
-}
-
-.floating-chat-btn {
-    position: fixed;
-    bottom: 40px;
-    right: 40px;
-    z-index: 2000;
-}
-
-.shadow-btn {
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-    transition: transform 0.2s;
-}
-
-.shadow-btn:hover {
-    transform: scale(1.1);
 }
 
 .panel-body {

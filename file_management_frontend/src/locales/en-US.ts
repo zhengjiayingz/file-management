@@ -532,12 +532,24 @@ export default {
     downloading: 'Loading document...',
     converting: 'Converting document, please wait...',
     convertingHint: 'First preview requires PDF conversion, cache will be used afterwards',
+    largeOfficeHint: 'Large files take longer to convert and render; try opening in a new tab or download for local reading.',
+    openInNewTab: 'Open in new tab',
+    partialPagesHint: 'Showing the first {n} slides only. The full deck will open automatically when the PDF is ready in the background.',
+    fullPagesReady: 'Full document loaded',
     error: 'Document preview failed',
     loadFailed: 'Unable to load preview content',
     retry: 'Retry',
     downloadOriginal: 'Download original file',
     fullscreen: 'Fullscreen',
-    exitFullscreen: 'Exit fullscreen'
+    exitFullscreen: 'Exit fullscreen',
+    textChunkTitle: 'Text preview (chunked)',
+    textChunkProgress: 'Loaded {loaded} / {total} bytes',
+    textChunkLoadMore: 'Load next chunk',
+    textChunkEnd: 'End of file',
+    textChunkError: 'Load failed',
+    textChunkBytesHint: 'Large files load in segments; scroll to the bottom to load more',
+    textChunkReflow:
+      'Reflow: join line breaks within paragraphs, wrap to panel width (off = match source newlines)'
   },
   friendPanel: {
     chatWith: 'Chat with {name}',
