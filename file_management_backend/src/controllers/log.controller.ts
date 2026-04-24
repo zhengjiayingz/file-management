@@ -207,7 +207,19 @@ export const getOperationLogs = async (req: AuthRequest, res: Response): Promise
 
     const transferOnly = String(req.query.transferOnly || '') === 'true';
 
-    const { operationType, type, startDate, endDate, keyword, targetUserId, sortOrder } = req.query;
+    const { operationType, type, startDate, endDate, keyword, targetUserId, sortOrder, sortBy } = req.query;
+
+    const orderDir = sortOrder === 'asc' ? 'asc' : 'desc';
+    const allowedSort = new Set([
+      'id',
+      'operationType',
+      'resourceType',
+      'description',
+      'ipAddress',
+      'createdAt'
+    ]);
+    const sortFieldRaw = sortBy != null && String(sortBy).trim() !== '' ? String(sortBy).trim() : 'createdAt';
+    const orderByField = allowedSort.has(sortFieldRaw) ? sortFieldRaw : 'createdAt';
 
     let where: any = {};
 
@@ -264,8 +276,8 @@ export const getOperationLogs = async (req: AuthRequest, res: Response): Promise
       skip,
       take: limit,
       orderBy: {
-        createdAt: sortOrder === 'asc' ? 'asc' : 'desc'
-      },
+        [orderByField]: orderDir
+      } as { id?: 'asc' | 'desc'; [key: string]: 'asc' | 'desc' | undefined },
       include: {
         user: {
           select: {
