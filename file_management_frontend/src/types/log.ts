@@ -31,6 +31,8 @@ export interface LogQueryParams {
   entryKind?: string;
   tagId?: number;
   targetUserId?: number;
+  /** 与后端 `operation_logs` 列名一致；缺省为 createdAt */
+  sortBy?: 'id' | 'operationType' | 'resourceType' | 'description' | 'ipAddress' | 'createdAt' | string;
   sortOrder?: 'asc' | 'desc';
   /** 仅当前用户的上传/下载记录，筛选字段与首页 FileFilterBar 一致 */
   transferOnly?: boolean;

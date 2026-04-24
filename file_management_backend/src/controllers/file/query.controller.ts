@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import path from 'path';
 import fs from 'fs';
+import { open, stat } from 'fs/promises';
 import archiver from 'archiver';
 import sharp from 'sharp';
 import ffmpeg from 'fluent-ffmpeg';
@@ -15,6 +16,8 @@ import {
   sanitizeZipPathSegment
 } from '../../utils/fileBatch.utils.js';
 import { logOperation, LogOperationType, LogResourceType } from '../../services/logger.service.js';
+import iconv from 'iconv-lite';
+import jschardet from 'jschardet';
 
 // 尝试配置本地 FFmpeg 路径（如果存在）
 import { createRequire } from 'module';
@@ -709,8 +712,8 @@ export const previewFile = async (req: AuthRequest, res: Response): Promise<void
       return;
     }
 
-    // 执行转换（如果已有缓存则直接使用）
-    const pdfPath = await convertToPdf(physicalPath, userFile.storage.fileHash);
+    // 执行转换；PPT/ODP 可能先只出前 N 页 PDF，全文在后台继续转
+    const { path: pdfPath, phase: pdfPhase } = await convertToPdf(physicalPath, userFile.storage.fileHash);
 
     // 记录预览日志
     await logOperation({
@@ -722,10 +725,15 @@ export const previewFile = async (req: AuthRequest, res: Response): Promise<void
       description: `Previewed office file: ${userFile.fileName}`
     });
 
-    // 返回 PDF 文件流
+    // 返回 PDF 文件流（partial 为快速稿，可随后刷新在全文生成后走完整稿）
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(userFile.fileName.replace(/\.\w+$/, '.pdf'))}"`);
-    res.setHeader('Cache-Control', 'public, max-age=86400'); // 缓存 24 小时
+    res.setHeader('X-Preview-Pdf-Phase', pdfPhase);
+    if (pdfPhase === 'partial') {
+      res.setHeader('Cache-Control', 'private, no-cache');
+    } else {
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+    }
     res.sendFile(path.resolve(pdfPath));
   } catch (error: any) {
     console.error('[Preview] Error:', error);
@@ -733,6 +741,321 @@ export const previewFile = async (req: AuthRequest, res: Response): Promise<void
       success: false,
       message: `文档预览失败: ${error.message || '未知错误'}`
     });
+  }
+};
+
+/**
+ * 查询 Office 预览在磁盘上的阶段（不触发转换，供前端轮询 partial→full 后自动刷新）
+ */
+export const getOfficePreviewState = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ success: false, message: '未认证' });
+      return;
+    }
+    const fileId = parseInt(req.params.id, 10);
+    if (isNaN(fileId)) {
+      res.status(400).json({ success: false, message: '无效的文件ID' });
+      return;
+    }
+    const userFile = await prisma.userFile.findFirst({
+      where: { id: fileId, userId: req.user.id, isDeleted: false },
+      include: { storage: { select: { filePath: true, fileHash: true } } }
+    });
+    if (!userFile || !userFile.storage) {
+      res.status(404).json({ success: false, message: '文件不存在' });
+      return;
+    }
+    const { isOfficeFile, getPreviewFilePhase, getPptPreviewFirstSlideCount } = await import(
+      '../../services/preview.service.js'
+    );
+    if (!isOfficeFile(userFile.fileName)) {
+      res.status(400).json({ success: false, message: '该文件类型无预览状态' });
+      return;
+    }
+    const phase = getPreviewFilePhase(userFile.storage.fileHash);
+    res.json({
+      success: true,
+      phase,
+      firstSlides: getPptPreviewFirstSlideCount()
+    });
+  } catch (error: any) {
+    console.error('[Preview state] Error:', error);
+    res.status(500).json({ success: false, message: error.message || '查询失败' });
+  }
+};
+
+/** 与 download 中文本预览白名单一致，用于分块读取 */
+function isTextLikeFileForChunk(ext: string, contentType: string): boolean {
+  if (contentType.startsWith('text/')) return true;
+  return (
+    ext === '.txt' ||
+    ext === '.md' ||
+    ext === '.json' ||
+    ext === '.js' ||
+    ext === '.css' ||
+    ext === '.html' ||
+    ext === '.ts' ||
+    ext === '.log' ||
+    ext === '.csv' ||
+    ext === '.xml'
+  );
+}
+
+/**
+ * 返回从 buf 开头起、在 [0, n) 内可完整解码为 UTF-8 的字节数，避免在码点中间截断产生 � / 乱码。
+ * 若 n 处落在多字节字符内部，会停在**该字符开始之前**的偏移。
+ */
+function utf8CompletePrefixLength(buf: Buffer, n: number): number {
+  n = Math.min(n, buf.length);
+  let i = 0;
+  while (i < n) {
+    const c = buf[i]!;
+    if (c <= 0x7f) {
+      i += 1;
+    } else if ((c & 0xe0) === 0xc0) {
+      if (i + 2 > n) return i;
+      if ((buf[i + 1]! & 0xc0) !== 0x80) {
+        i += 1;
+        continue;
+      }
+      i += 2;
+    } else if ((c & 0xf0) === 0xe0) {
+      if (i + 3 > n) return i;
+      if ((buf[i + 1]! & 0xc0) !== 0x80 || (buf[i + 2]! & 0xc0) !== 0x80) {
+        i += 1;
+        continue;
+      }
+      i += 3;
+    } else if ((c & 0xf8) === 0xf0) {
+      if (i + 4 > n) return i;
+      if ((buf[i + 1]! & 0xc0) !== 0x80 || (buf[i + 2]! & 0xc0) !== 0x80 || (buf[i + 3]! & 0xc0) !== 0x80) {
+        i += 1;
+        continue;
+      }
+      if (c > 0xf4) {
+        i += 1;
+        continue;
+      }
+      i += 4;
+    } else {
+      i += 1;
+    }
+  }
+  return i;
+}
+
+type TextChunkFileEncoding = 'utf-8' | 'gb18030';
+
+const textChunkEncodingCache = new Map<string, TextChunkFileEncoding>();
+
+function textChunkCacheKey(userId: number, fileId: number): string {
+  return `${userId}:${fileId}`;
+}
+
+function mapQueryToChunkEncoding(
+  s: string | string[] | undefined
+): TextChunkFileEncoding | null {
+  if (s == null) return null;
+  const u = (Array.isArray(s) ? s[0] : s).toLowerCase();
+  if (u === 'utf-8' || u === 'utf8') return 'utf-8';
+  if (u === 'gbk' || u === 'gb18030' || u === 'gb2312' || u === 'gb_2312') return 'gb18030';
+  return null;
+}
+
+/** 用文件头样例探测；中文小说常见为 GBK/GB18030，与 UTF-8 误辨时用替换符数比较 */
+function detectTextFileEncodingFromBuffer(buf: Buffer): TextChunkFileEncoding {
+  if (buf.length === 0) return 'utf-8';
+  const d = jschardet.detect(buf);
+  const enc = d?.encoding?.toUpperCase() || '';
+  const conf = d?.confidence ?? 0;
+  if (enc) {
+    if (enc.includes('GB') || enc === 'EUC-CN' || enc === 'HZ-GB-2312') {
+      if (conf >= 0.3) return 'gb18030';
+    }
+    if (enc === 'UTF-8' || enc === 'UTF8' || enc === 'ASCII' || enc === 'ISO-8859-1') {
+      if (enc === 'UTF-8' && conf >= 0.6) {
+        if (utf8CompletePrefixLength(buf, buf.length) === buf.length) {
+          const t = buf.toString('utf8');
+          if (!t.includes('\uFFFD')) return 'utf-8';
+        }
+      } else if (enc === 'ASCII' && conf >= 0.4) {
+        return 'utf-8';
+      }
+    }
+  }
+  const sUtf8 = buf.toString('utf8');
+  const badU8 = (sUtf8.match(/\uFFFD/g) || []).length;
+  const sGb = iconv.decode(buf, 'gb18030');
+  const badGb = (sGb.match(/\uFFFD/g) || []).length;
+  if (badGb < badU8) return 'gb18030';
+  if (badU8 === 0 && utf8CompletePrefixLength(buf, buf.length) === buf.length) return 'utf-8';
+  return badU8 < badGb ? 'utf-8' : 'gb18030';
+}
+
+/** 非 UTF-8 时按码元对齐截断，避免在双字节/四字节字中间截断；尽量无 U+FFFD 的最长前缀 */
+function gb18030CompletePrefixLength(buf: Buffer, n: number): number {
+  n = Math.min(n, buf.length);
+  for (let k = 0; k < 4; k++) {
+    const len = n - k;
+    if (len <= 0) return 0;
+    const sub = buf.subarray(0, len);
+    try {
+      const t = iconv.decode(sub, 'gb18030');
+      if (t.includes('\uFFFD')) continue;
+      const back = iconv.encode(t, 'gb18030');
+      if (back.length === sub.length && back.equals(sub)) return len;
+    } catch {
+      // ignore
+    }
+  }
+  return n;
+}
+
+function rawCompletePrefixLength(data: Buffer, fileEnc: TextChunkFileEncoding): number {
+  if (fileEnc === 'utf-8') return utf8CompletePrefixLength(data, data.length);
+  return gb18030CompletePrefixLength(data, data.length);
+}
+
+const TEXT_CHUNK_MAX = 1024 * 1024; // 单次最多读 1MB
+const TEXT_CHUNK_DEFAULT = 256 * 1024; // 默认 256KB
+
+/**
+ * 大文本分块读取（按字节 offset，仅在完整 UTF-8 码点边界处截断，避免分块接合处出现乱码）
+ * GET /api/files/:id/text-chunk?offset=0&maxBytes=262144
+ */
+export const getTextFileChunk = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ success: false, message: '未认证' });
+      return;
+    }
+    const fileId = parseInt(req.params.id, 10);
+    if (isNaN(fileId)) {
+      res.status(400).json({ success: false, message: '无效的文件ID' });
+      return;
+    }
+    const offsetRaw = req.query.offset;
+    const maxBytesRaw = req.query.maxBytes;
+    let offset = offsetRaw == null || offsetRaw === '' ? 0 : parseInt(String(offsetRaw), 10);
+    let maxBytes = maxBytesRaw == null || maxBytesRaw === '' ? TEXT_CHUNK_DEFAULT : parseInt(String(maxBytesRaw), 10);
+    if (Number.isNaN(offset) || offset < 0) offset = 0;
+    if (Number.isNaN(maxBytes) || maxBytes < 1024) maxBytes = TEXT_CHUNK_DEFAULT;
+    if (maxBytes > TEXT_CHUNK_MAX) maxBytes = TEXT_CHUNK_MAX;
+
+    const userFile = await prisma.userFile.findFirst({
+      where: { id: fileId, userId: req.user.id, isDeleted: false },
+      include: {
+        storage: { select: { filePath: true, mimeType: true, fileSize: true } }
+      }
+    });
+    if (!userFile || !userFile.storage) {
+      res.status(404).json({ success: false, message: '文件不存在' });
+      return;
+    }
+    const ext = path.extname(userFile.fileName).toLowerCase();
+    const contentType = (userFile.storage.mimeType || '').toLowerCase();
+    if (!isTextLikeFileForChunk(ext, contentType)) {
+      res.status(400).json({ success: false, message: '该文件类型不支持分块文本预览' });
+      return;
+    }
+    if (ext === '.pdf' || contentType === 'application/pdf') {
+      res.status(400).json({ success: false, message: 'PDF 请使用全量或 PDF 阅读器' });
+      return;
+    }
+
+    const physicalPath = resolveStorageFilePath(userFile.storage.filePath);
+    if (!fs.existsSync(physicalPath)) {
+      res.status(404).json({ success: false, message: '文件已被删除' });
+      return;
+    }
+
+    const st = await stat(physicalPath);
+    const totalSize = st.size;
+    if (offset >= totalSize) {
+      res.json({
+        success: true,
+        data: { text: '', nextOffset: totalSize, totalSize, done: true }
+      });
+      return;
+    }
+
+    const handle = await open(physicalPath, 'r');
+    try {
+      const encQ = req.query.encoding;
+      const qenc = mapQueryToChunkEncoding(
+        typeof encQ === 'string' ? encQ : Array.isArray(encQ) && typeof encQ[0] === 'string' ? encQ[0] : undefined
+      );
+      const ck = textChunkCacheKey(req.user.id, fileId);
+      let fileEnc: TextChunkFileEncoding = 'utf-8';
+
+      if (qenc) {
+        fileEnc = qenc;
+        textChunkEncodingCache.set(ck, fileEnc);
+      } else if (textChunkEncodingCache.has(ck)) {
+        fileEnc = textChunkEncodingCache.get(ck)!;
+      } else if (offset > 0) {
+        const headLen = Math.min(65536, totalSize);
+        const headBuf = Buffer.alloc(headLen);
+        const hr = await handle.read(headBuf, 0, headLen, 0);
+        fileEnc = detectTextFileEncodingFromBuffer(headBuf.subarray(0, hr.bytesRead));
+        textChunkEncodingCache.set(ck, fileEnc);
+      }
+
+      const toRead = Math.min(maxBytes, totalSize - offset);
+      const buf = Buffer.alloc(toRead);
+      const result = await handle.read(buf, 0, toRead, offset);
+      let data = buf.subarray(0, result.bytesRead);
+
+      if (offset === 0 && !qenc && !textChunkEncodingCache.has(ck)) {
+        const sample = data.length > 65536 ? data.subarray(0, 65536) : data;
+        fileEnc = detectTextFileEncodingFromBuffer(sample);
+        textChunkEncodingCache.set(ck, fileEnc);
+      }
+
+      let useLen = rawCompletePrefixLength(data, fileEnc);
+      const maxTail = 3;
+      let added = 0;
+      while (useLen === 0 && data.length > 0 && added < maxTail && offset + data.length < totalSize) {
+        const one = Buffer.alloc(1);
+        const r2 = await handle.read(one, 0, 1, offset + data.length);
+        if (r2.bytesRead === 0) break;
+        added += 1;
+        data = Buffer.concat([data, one.subarray(0, 1)]);
+        useLen = rawCompletePrefixLength(data, fileEnc);
+      }
+      if (useLen === 0 && data.length > 0) {
+        useLen = data.length;
+      }
+
+      const slice = data.subarray(0, useLen);
+      let text: string;
+      if (fileEnc === 'utf-8') {
+        text = slice.toString('utf8');
+        if (offset === 0 && text.length > 0 && text.charCodeAt(0) === 0xfeff) {
+          text = text.slice(1);
+        }
+      } else {
+        text = iconv.decode(slice, 'gb18030');
+      }
+
+      const nextOffset = offset + useLen;
+      res.json({
+        success: true,
+        data: {
+          text,
+          nextOffset,
+          totalSize,
+          done: nextOffset >= totalSize,
+          fileEncoding: fileEnc
+        }
+      });
+    } finally {
+      await handle.close();
+    }
+  } catch (error) {
+    console.error('[TextChunk] Error:', error);
+    res.status(500).json({ success: false, message: '读取文本分块失败' });
   }
 };
 
