@@ -151,7 +151,15 @@
 
     <!-- Office 文档预览弹窗 -->
     <OfficePreviewDialog v-model="officePreviewVisible" :file-id="currentOfficeFile?.id"
-      :file-name="currentOfficeFile?.fileName" @download="currentOfficeFile && downloadFile(currentOfficeFile)" />
+      :file-name="currentOfficeFile?.fileName"
+      :file-size-bytes="currentOfficeFile?.storage?.fileSize ?? currentOfficeFile?.fileSize ?? 0"
+      @download="currentOfficeFile && downloadFile(currentOfficeFile)" />
+
+    <TextChunkPreviewDialog
+      v-model="textChunkPreviewVisible"
+      :file-id="textChunkFileId"
+      :file-name="textChunkFileName"
+    />
 
     <!-- 压缩包在线解压到当前网盘目录 -->
     <ArchiveExtractDialog
@@ -194,6 +202,7 @@ import VideoPlayerDialog from '@components/VideoPlayerDialog/index.vue'
 import MoveDialog from '@components/MoveDialog/index.vue'
 import FileHistoryDialog from '@components/FileHistoryDialog/index.vue'
 import OfficePreviewDialog from '@components/OfficePreviewDialog/index.vue'
+import TextChunkPreviewDialog from '@components/TextChunkPreviewDialog/index.vue'
 import ArchiveExtractDialog from '@components/ArchiveExtractDialog/index.vue'
 import FileTagDialog from '@components/FileTagDialog/index.vue'
 import ShareLinkDialog from '@components/ShareLinkDialog/index.vue'
@@ -532,6 +541,21 @@ const isDocumentFile = (file: FileInfo) => {
     /\.(pdf|txt|md|json|xml|html|js|css|ts)$/i.test(name)
 }
 
+/** 与后端 getTextFileChunk 白名单一致，用于大文件分块预览（排除 PDF） */
+const TEXT_CHUNK_SIZE_THRESHOLD = 200 * 1024
+const isTextLikeForChunk = (file: FileInfo) => {
+  const mime = (file.mimeType || '').toLowerCase()
+  if (mime === 'application/pdf') return false
+  const m = file.fileName.toLowerCase().match(/(\.[^.]+)$/)
+  const ext = (m && m[1]) || ''
+  if (mime.startsWith('text/')) return true
+  return ['.txt', '.md', '.json', '.js', '.css', '.html', '.ts', '.log', '.csv', '.xml'].includes(ext)
+}
+
+const textChunkPreviewVisible = ref(false)
+const textChunkFileId = ref(0)
+const textChunkFileName = ref('')
+
 // 获取文件下载链接
 const getFileDownloadUrl = (file: FileInfo) => {
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
@@ -578,9 +602,14 @@ const handleFileDoubleClick = async (file: FileInfo) => {
       currentOfficeFile.value = file
       officePreviewVisible.value = true
     } else if (isDocumentFile(file)) {
-      // 如果是文档，尝试新窗口预览 (PDF, text, etc)
-      const url = getFileViewUrl(file)
-      window.open(url, '_blank')
+      if (isTextLikeForChunk(file) && (file.fileSize ?? 0) >= TEXT_CHUNK_SIZE_THRESHOLD) {
+        textChunkFileId.value = file.id
+        textChunkFileName.value = file.fileName
+        textChunkPreviewVisible.value = true
+      } else {
+        const url = getFileViewUrl(file)
+        window.open(url, '_blank')
+      }
     } else {
       // 其他文件不进行默认操作，如需下载请点击下载按钮
       // downloadFile(file)

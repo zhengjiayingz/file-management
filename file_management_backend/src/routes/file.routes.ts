@@ -14,7 +14,9 @@ import {
   downloadBatchAsZip,
   getFileThumbnail,
   checkFileName,
-  previewFile
+  previewFile,
+  getOfficePreviewState,
+  getTextFileChunk
 } from '../controllers/file/query.controller.js';
 import {
   listArchiveEntries,
@@ -627,7 +629,11 @@ router.get('/:id/download', downloadFile);
  *       500:
  *         description: 转换失败或 LibreOffice 未安装
  */
+router.get('/:id/preview-state', getOfficePreviewState);
 router.get('/:id/preview', previewFile);
+
+// 大文本分块预览（UTF-8 按字节 offset 读取，避免整文件进浏览器）
+router.get('/:id/text-chunk', getTextFileChunk);
 
 // 设置文件标签（全量替换）
 router.put('/:id/tags', setFileTags);

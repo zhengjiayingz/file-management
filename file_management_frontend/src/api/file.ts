@@ -326,6 +326,38 @@ export const fileApiService = {
     }
     const res = await request.post<any>(`/files/${id}/save-to-my-drive`, body)
     return res.data.data
+  },
+
+  /** 大文本分块预览：按字节 offset 拉取文本（UTF-8 或 GB18030 等由后端探测，续传带 fileEncoding） */
+  async getTextFileChunk(
+    fileId: number,
+    offset: number,
+    maxBytes?: number,
+    fileEncoding?: 'utf-8' | 'gb18030'
+  ): Promise<{
+    text: string
+    nextOffset: number
+    totalSize: number
+    done: boolean
+    fileEncoding?: 'utf-8' | 'gb18030'
+  }> {
+    const res = await request.get<{
+      success: boolean
+      data: {
+        text: string
+        nextOffset: number
+        totalSize: number
+        done: boolean
+        fileEncoding?: 'utf-8' | 'gb18030'
+      }
+    }>(`/files/${fileId}/text-chunk`, {
+      params: {
+        offset,
+        maxBytes: maxBytes ?? 262144,
+        ...(fileEncoding ? { encoding: fileEncoding } : {})
+      }
+    })
+    return res.data.data
   }
 }
 
