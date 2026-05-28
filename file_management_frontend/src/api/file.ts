@@ -206,8 +206,10 @@ export const fileApiService = {
   },
 
   /** 批量移入回收站（软删），服务端展开子孙并一次 updateMany */
-  async deleteFilesBatch(ids: number[]): Promise<{ deletedCount: number }> {
-    const res = await request.post<any>('/files/batch/delete', { ids })
+  async deleteFilesBatch(ids: number[]): Promise<{ deletedCount: number } | void> {
+    const res = ids.length > 1 ?
+      await request.post<any>('/files/batch/delete', { ids }) :
+      await request.delete(`/files/${ids[0]}`)
     return res.data.data
   },
 
@@ -264,11 +266,6 @@ export const fileApiService = {
       { timeout: 600000 }
     )
     return res.data.data
-  },
-
-  // 删除文件（移入回收站）
-  async deleteFile(id: number): Promise<void> {
-    await request.delete(`/files/${id}`)
   },
 
   // 还原文件
