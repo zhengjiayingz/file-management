@@ -79,12 +79,12 @@ export function initSocket(httpServer: HttpServer): Server {
       next(new Error('无效的认证令牌'));
     }
   });
-
+  // 把「连接成功回调」登记到 io 上
   io.on('connection', (socket) => {
     const uid = socket.data.userId as number;
     socket.join(`user:${uid}`);
   });
-
+  // 登记完2个方法后返回io对象给app.js
   return io;
 }
 

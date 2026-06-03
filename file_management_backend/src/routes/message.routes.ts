@@ -9,6 +9,7 @@ import {
 
 const router: Router = express.Router();
 
+// 所有接口先过 authenticate（JWT）
 router.use(authenticate);
 
 /**

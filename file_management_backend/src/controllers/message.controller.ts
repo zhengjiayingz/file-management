@@ -43,8 +43,9 @@ export const sendMessage = async (req: AuthRequest, res: Response): Promise<any>
                 fileId: fileId ? parseInt(fileId) : null,
             },
         });
-
+        // 用刚插入的 id 再查一遍完整消息（含 file 附件等），供 Socket 推送
         const full = await loadMessageForEmit(message.id);
+        // 若查到了完整消息：推送给接收方
         if (full) {
             emitToUser(receiverId, 'message:new', { message: full });
         }
