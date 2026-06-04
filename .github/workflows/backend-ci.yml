@@ -1,0 +1,59 @@
+name: Backend CI
+
+on:
+  push:
+    paths:
+      - 'file_management_backend/**'
+      - '.github/workflows/backend-ci.yml'
+  pull_request:
+    paths:
+      - 'file_management_backend/**'
+      - '.github/workflows/backend-ci.yml'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: test
+          MYSQL_DATABASE: file_mgmt_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -uroot -ptest"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    env:
+      DATABASE_URL: mysql://root:test@127.0.0.1:3306/file_mgmt_test
+      JWT_SECRET: test-secret-key-at-least-32-chars-long
+      NODE_ENV: test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: pnpm
+          cache-dependency-path: file_management_backend/pnpm-lock.yaml
+
+      - name: Install dependencies
+        working-directory: file_management_backend
+        run: pnpm install --frozen-lockfile
+
+      - name: Apply database schema
+        working-directory: file_management_backend
+        run: pnpm exec prisma migrate deploy
+
+      - name: Run tests
+        working-directory: file_management_backend
+        run: pnpm test
