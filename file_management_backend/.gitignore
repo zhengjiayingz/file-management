@@ -45,10 +45,8 @@ coverage/
 tmp/
 temp/
 
-# Prisma
+# Prisma（migrations 必须提交，CI 才能 prisma migrate deploy）
 .env
-prisma/migrations/*
-!prisma/migrations/.gitkeep
 
 /src/generated/prisma
 
