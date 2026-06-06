@@ -11,3 +11,8 @@
 | [DATABASE_DESIGN.md](./DATABASE_DESIGN.md) | 数据库表结构与字段（对齐 `schema.prisma`） |
 | [BUSINESS_FLOWS.md](./BUSINESS_FLOWS.md) | 业务流程与表操作说明 |
 | [API_DOCUMENTATION.md](./API_DOCUMENTATION.md) | Swagger 使用说明与常见问题 |
+| [REDIS_INTERVIEW_QA.md](./REDIS_INTERVIEW_QA.md) | **面试**：Redis 概念、场景、常见用法与本项目结合 |
+| [WEBSOCKET_SOCKET_INTERVIEW_QA.md](./WEBSOCKET_SOCKET_INTERVIEW_QA.md) | **面试**：WebSocket / Socket.IO 常见问题 |
+| [NODE_BACKEND_STRENGTHENING.md](./NODE_BACKEND_STRENGTHENING.md) | Node 后端工程补强总纲 |
+| [NODE_BACKEND_实施任务清单.md](./NODE_BACKEND_实施任务清单.md) | 补强实施任务清单（按阶段勾选） |
+| [notes/SOCKET_MULTI_INSTANCE.md](./notes/SOCKET_MULTI_INSTANCE.md) | **阶段二 2.3**：Socket.IO Redis Adapter 多实例广播说明与本地验收 |

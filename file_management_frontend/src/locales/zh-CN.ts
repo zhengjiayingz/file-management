@@ -143,7 +143,8 @@ export default {
     mfaTitle: '两步验证',
     mfaHint: '请输入验证器 App 中显示的 6 位动态码。',
     mfaPlaceholder: '6 位数字',
-    mfaInvalid: '动态码无效或已过期，请重试'
+    mfaInvalid: '动态码无效或已过期，请重试',
+    rateLimitExceeded: '登录尝试过于频繁，请稍后再试'
   },
   forceChangePassword: {
     title: '请修改密码',

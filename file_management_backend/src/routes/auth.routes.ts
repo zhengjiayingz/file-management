@@ -17,6 +17,7 @@ import {
   mfaDisable
 } from '../controllers/auth.controller.js';
 import { authenticate } from '../middleware/auth.middleware.js';
+import { loginRateLimiter } from '../middleware/rateLimit.middleware.js';
 
 const router: Router = express.Router();
 
@@ -75,7 +76,7 @@ router.get('/password-policy', getPasswordPolicy);
 
 /**
  * @swagger
- * /api/auth/login:
+ * /api/auth/login:f
  *   post:
  *     summary: 用户登录
  *     tags: [认证]
@@ -122,7 +123,7 @@ router.get('/password-policy', getPasswordPolicy);
  *       401:
  *         description: 用户名或密码错误
  */
-router.post('/login', login);
+router.post('/login', loginRateLimiter, login);
 
 /** 管理员 TOTP 第二步 */
 router.post('/mfa/verify', verifyMfaLogin);

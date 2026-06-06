@@ -143,7 +143,8 @@ export default {
     mfaTitle: '兩步驗證',
     mfaHint: '請輸入驗證器 App 中顯示的 6 位動態碼。',
     mfaPlaceholder: '6 位數字',
-    mfaInvalid: '動態碼無效或已過期，請重試'
+    mfaInvalid: '動態碼無效或已過期，請重試',
+    rateLimitExceeded: '登入嘗試過於頻繁，請稍後再試'
   },
   forceChangePassword: {
     title: '請修改密碼',

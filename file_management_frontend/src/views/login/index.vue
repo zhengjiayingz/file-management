@@ -259,6 +259,15 @@ async function submitMfa() {
         return
       }
     }
+    const status = axios.isAxiosError(error) ? error.response?.status : undefined
+    if (status === 429) {
+      const msg =
+        axios.isAxiosError(error) && error.response?.data
+          ? (error.response.data as { message?: string }).message
+          : undefined
+      ElMessage.warning(msg || t('login.rateLimitExceeded'))
+      return
+    }
     const msg =
       axios.isAxiosError(error) && error.response?.data
         ? (error.response.data as { message?: string }).message
@@ -313,7 +322,10 @@ async function confirmKickAndLogin() {
     sessionLimitPayload.value = null
     await afterLoginSuccess(res, { successMessage: t('login.sessionLimitKickSuccess') })
   } catch (error: unknown) {
-    if (axios.isAxiosError(error)) {
+    if (axios.isAxiosError(error) && error.response?.status === 429) {
+      const msg = (error.response.data as { message?: string })?.message
+      ElMessage.warning(msg || t('login.rateLimitExceeded'))
+    } else if (axios.isAxiosError(error)) {
       const data = error.response?.data
       const msg = (data as { message?: string })?.message || error.message
       ElMessage.error(msg || t('login.wrongCredentials'))
@@ -414,7 +426,13 @@ const handleAuth = async () => {
       ElMessage.error(t('login.register') + ' Failed: ' + (msg || ''))
     } else {
       const status = axios.isAxiosError(error) ? error.response?.status : undefined
-      if (status === 401) {
+      if (status === 429) {
+        const msg =
+          axios.isAxiosError(error) && error.response?.data
+            ? (error.response.data as { message?: string }).message
+            : undefined
+        ElMessage.warning(msg || t('login.rateLimitExceeded'))
+      } else if (status === 401) {
         ElMessage.error(t('login.wrongCredentials'))
       } else {
         const msg =

@@ -145,7 +145,8 @@ export default {
     mfaTitle: 'Two-step verification',
     mfaHint: 'Enter the 6-digit code from your authenticator app.',
     mfaPlaceholder: '6-digit code',
-    mfaInvalid: 'Invalid or expired code. Please try again.'
+    mfaInvalid: 'Invalid or expired code. Please try again.',
+    rateLimitExceeded: 'Too many login attempts. Please try again later.'
   },
   forceChangePassword: {
     title: 'Change your password',

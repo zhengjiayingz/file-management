@@ -3,13 +3,15 @@ import { Server } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import prisma from '../lib/prisma.js';
 import type { JwtPayload } from '../types/index.js';
+import { createAdapter } from '@socket.io/redis-adapter';
+import { getRedis } from '../lib/redis.js';
 
 let io: Server | null = null;
 
 function matchSocketCorsOrigin(origin: string | undefined, callback: (err: Error | null, ok?: boolean) => void) {
   if (!origin || /^http:\/\/localhost:\d+$/.test(origin)) {
     callback(null, true);
-    return; 
+    return;
   }
   if (process.env.CORS_ORIGIN && origin === process.env.CORS_ORIGIN) {
     callback(null, true);
@@ -18,7 +20,7 @@ function matchSocketCorsOrigin(origin: string | undefined, callback: (err: Error
   callback(new Error('Not allowed by CORS'));
 }
 
-export function initSocket(httpServer: HttpServer): Server {
+export async function initSocket(httpServer: HttpServer): Promise<Server> {
   io = new Server(httpServer, {
     // 规定 Engine.IO / Socket.IO 
     // 的 HTTP 长轮询 + WebSocket 的服务路径 前缀 是 /socket.io，和 前端 socket.io-client 
@@ -31,16 +33,27 @@ export function initSocket(httpServer: HttpServer): Server {
       credentials: true, // 允许携带 Cookie
     },
   });
+  // 拿启动时已连好的主连接（pub 端 + 限流共用）
+  const redis = getRedis();
+  if (redis) {
+    // 订阅必须用 duplicate，不能和 pub 共用一个连接,这里是再开一条独立连接，专做 SUBSCRIBE
+    const subClient = redis.duplicate();
+    await subClient.connect(); // oredis lazyConnect，duplicate 后要自己连
+    io.adapter(createAdapter(redis, subClient));  // 替换 Socket.IO 默认内存 Adapter,这一行的含义：从此以后，所有 io.to(room).emit() 都会走 Redis Adapter 的逻辑，而不是只查本机内存。
+    console.log('[socket] Redis Adapter 已启用（多实例可广播）');
+  } else { // 无 Redis 时不挂 Adapter，退回单进程模式
+    console.warn('[socket] Redis 不可用，Socket 仅当前 Node 进程有效'); 
+  }
 
-   // 对整个 io 实例注册一层中间件,next:放行函数；调用 next() 表示通过；
-   // 调用 next(错误对象) 表示拒绝这次连接。  ladskfjdslakjf
+  // 对整个 io 实例注册一层中间件,next:放行函数；调用 next() 表示通过；
+  // 调用 next(错误对象) 表示拒绝这次连接。  ladskfjdslakjf
   io.use(async (socket, next) => {
     try {
       const token =
-      // 前端 io({ auth: { token } }) 会走这条；类型是字符串才要
+        // 前端 io({ auth: { token } }) 会走这条；类型是字符串才要
         (typeof socket.handshake.auth?.token === 'string' && socket.handshake.auth.token) ||
         (typeof socket.handshake.query?.token === 'string' && socket.handshake.query.token);
-        // 任何一边都没拿到合法 token
+      // 任何一边都没拿到合法 token
       if (!token) {
         // 告诉 Socket.IO 不要建立 这条已认证连接；客户端 会收到 连不上 / connect_error 之类表现。
         next(new Error('未提供认证令牌'));
