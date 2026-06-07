@@ -42,9 +42,8 @@ export function createApp(): express.Application {
   // 须在挂路由前初始化限流（connectRedis 已在 app.ts 完成；express-rate-limit v8 须在 app 初始化时 create）
   initRateLimiters();
 
-  if (process.env.NODE_ENV === 'production') {
-    app.use(helmet())
-  }
+  app.use(helmet())
+  
 
   // 中间件配置
   app.use(cors({
