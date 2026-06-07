@@ -76,7 +76,7 @@ router.get('/password-policy', getPasswordPolicy);
 
 /**
  * @swagger
- * /api/auth/login:f
+ * /api/auth/login:
  *   post:
  *     summary: 用户登录
  *     tags: [认证]

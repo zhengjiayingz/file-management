@@ -2,6 +2,7 @@ import { rateLimit } from 'express-rate-limit'
 import { RedisStore, type RedisReply } from 'rate-limit-redis'
 import type { RequestHandler } from 'express'
 import { getRedis } from '../lib/redis.js'
+import { logger } from '../lib/logger.js'
 
 /** 15 分钟，可用环境变量覆盖 */
 const WINDOW_MS = Number(process.env.LOGIN_RATE_LIMIT_WINDOW_MS ?? 15 * 60 * 1000)
@@ -21,7 +22,7 @@ function createLoginRateLimiter() {
                 redis.call(command, ...args) as Promise<RedisReply>,
         });
     } else {
-        console.warn('[rate-limit] Redis 不可用，登录限流降级为内存 store（多实例不一致）');
+        logger.warn('[rate-limit] Redis 不可用，登录限流降级为内存 store（多实例不一致）');
     }
     return rateLimit({
         windowMs: WINDOW_MS,
@@ -49,7 +50,7 @@ function createApiRateLimiter() {
                 redis.call(command, ...args) as Promise<RedisReply>,
         });
     } else {
-        console.warn('[rate-limit] Redis 不可用，api全局限流降级为内存 store（多实例不一致）');
+        logger.warn('[rate-limit] Redis 不可用，api全局限流降级为内存 store（多实例不一致）');
     }
     return rateLimit({
         windowMs: API_WINDOW_MS,

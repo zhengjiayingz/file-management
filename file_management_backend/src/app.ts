@@ -6,6 +6,7 @@ import { createApp } from './createApp.js';
 import { connectRedis } from './lib/redis.js';
 // 这里在启动段引入定时清理任务（如清理无引用文件）
 import { initCleanupJob } from './jobs/cleanup.job.js';
+import { logger } from './lib/logger.js';
 
 // 先连redis
 await connectRedis();
@@ -20,13 +21,16 @@ const httpServer = createServer(app);
 await initSocket(httpServer);
 
 httpServer.listen(PORT, () => {
-  console.log(`🚀 Server is running on port ${PORT}`);
-
-  // 	启动 cron 类定时任务。
   initCleanupJob();
 
-  console.log(`📝 Environment: ${process.env.NODE_ENV}`);
-  console.log(`🌐 CORS Origin: ${process.env.CORS_ORIGIN}`);
-  console.log(`💾 Database: Prisma + MySQL`);
-  console.log(`🔌 WebSocket: Socket.IO at /socket.io`);
+  logger.info(
+    {
+      port: PORT,
+      nodeEnv: process.env.NODE_ENV,
+      corsOrigin: process.env.CORS_ORIGIN,
+      database: 'Prisma + MySQL',
+      websocket: '/socket.io',
+    },
+    '服务已启动',
+  );
 });
