@@ -1,12 +1,4 @@
-import dotenv from 'dotenv';
-
-// 必须在 connectRedis 之前加载 .env；override 避免终端里残留的错误 DATABASE_URL 覆盖 .env
-// 保留 shell 传入的 PORT（便于多实例：PORT=3001 pnpm dev）
-const portFromShell = process.env.PORT;
-dotenv.config({ override: true });
-if (portFromShell) {
-  process.env.PORT = portFromShell;
-}
+import './loadEnv.js';
 
 import { createServer } from 'http';
 import { initSocket } from './realtime/socket.js';

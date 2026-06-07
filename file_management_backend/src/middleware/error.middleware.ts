@@ -3,8 +3,9 @@ import { Request, Response, NextFunction } from 'express';
 /**
  * 全局错误处理中间件
  */
-export const errorHandler = (err: any, _req: Request, res: Response, _next: NextFunction): void => {
-  console.error('Error:', err);
+export const errorHandler = (err: any, req: Request, res: Response, next: NextFunction): void => {
+  // console.error('Error:', err);
+  req.log?.error({err},'未处理异常')
 
   // Multer 文件上传错误
   if (err.code === 'LIMIT_FILE_SIZE') {

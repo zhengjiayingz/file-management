@@ -5,6 +5,7 @@ import prisma from '../lib/prisma.js';
 import type { JwtPayload } from '../types/index.js';
 import { createAdapter } from '@socket.io/redis-adapter';
 import { getRedis } from '../lib/redis.js';
+import logger from '../lib/logger.js';
 
 let io: Server | null = null;
 
@@ -40,9 +41,9 @@ export async function initSocket(httpServer: HttpServer): Promise<Server> {
     const subClient = redis.duplicate();
     await subClient.connect(); // oredis lazyConnect，duplicate 后要自己连
     io.adapter(createAdapter(redis, subClient));  // 替换 Socket.IO 默认内存 Adapter,这一行的含义：从此以后，所有 io.to(room).emit() 都会走 Redis Adapter 的逻辑，而不是只查本机内存。
-    console.log('[socket] Redis Adapter 已启用（多实例可广播）');
+    logger.info('socket redis adapter enabled');
   } else { // 无 Redis 时不挂 Adapter，退回单进程模式
-    console.warn('[socket] Redis 不可用，Socket 仅当前 Node 进程有效'); 
+    logger.warn('socket redis unavailable, single-process mode only');
   }
 
   // 对整个 io 实例注册一层中间件,next:放行函数；调用 next() 表示通过；
@@ -112,7 +113,7 @@ export function emitToUser(userId: number, event: string, payload: unknown): voi
   try {
     getIo().to(`user:${userId}`).emit(event, payload);
   } catch (e) {
-    console.warn('[socket] emitToUser skipped:', e);
+    logger.warn({ err: e }, 'socket emitToUser skipped');
   }
 }
 

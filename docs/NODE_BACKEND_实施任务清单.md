@@ -269,23 +269,23 @@ io.adapter(createAdapter(pubClient, subClient));
 
 ### 任务 3.1 — Helmet
 
-- [ ] `pnpm add helmet`
-- [ ] `createApp.ts` 里：`if (process.env.NODE_ENV === 'production') app.use(helmet())`
+- [x] `pnpm add helmet`
+- [x] `createApp.ts` 里：`if (process.env.NODE_ENV === 'production') app.use(helmet())`
 
 ### 任务 3.2 — 全局限流
 
-- [ ] 在 `createApp.ts` 挂 `apiRateLimiter`：例如每 IP 每分钟 300 次，挂在 `/api` 之前。
-- [ ] **白名单**：`/health`、`/api-docs` 可不限制或更高阈值。
+- [x] 在 `createApp.ts` 挂 `apiRateLimiter`：例如每 IP 每分钟 300 次，挂在 `/api` 之前。
+- [x] **白名单**：`/health`、`/api-docs` 可不限制或更高阈值。
 
 ### 任务 3.3 — 生产 CORS 文档
 
-- [ ] 在 `README.md` 写一节「生产部署」：必须设 `CORS_ORIGIN=https://你的前端域名`，禁止 `*` + credentials。
-- [ ] `.env.example` 注释写清。
+- [x] 在 `README.md` 写一节「生产部署」：必须设 `CORS_ORIGIN=https://你的前端域名`，禁止 `*` + credentials。
+- [x] `.env.example` 注释写清。
 
 **阶段三完成标准**
 
-- [ ] `NODE_ENV=production` 本地启动，响应头含 `X-Content-Type-Options` 等  
-- [ ] 用脚本快速请求 `/api/auth/password-policy` 超过 300 次/分钟 → 429  
+- [x] `NODE_ENV=production` 本地启动，响应头含 `X-Content-Type-Options` 等  
+- [x] 用脚本快速请求 `/api/auth/password-policy` 超过 300 次/分钟 → 429  
 
 ---
 
@@ -301,7 +301,7 @@ io.adapter(createAdapter(pubClient, subClient));
 - [ ] 把 `error.middleware.ts` 里 `console.error` 改为 `req.log?.error` 或 `logger.error`
 - [ ] 把 `cleanup.job.ts`、`socket.ts` 关键 warn 改为 `logger.warn`
 
-**禁止**：日志里打印完整 `password`、`refreshToken`、`Authorization`。
+**禁止**：日志里打印完整 `password`、`refreshToken`、`Authorization`。（脱敏）
 
 ### 任务 4.2 — 增强健康检查
 

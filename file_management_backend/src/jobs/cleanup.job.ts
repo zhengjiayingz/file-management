@@ -4,6 +4,7 @@ import fs from 'fs';
 
 import prisma from '../lib/prisma.js';
 import { resolveStorageFilePath } from '../utils/storagePath.utils.js';
+import { logger } from '../lib/logger.js';
 
 /**
  * 初始化清理定时任务（每小时）
@@ -14,7 +15,7 @@ async function cleanupExpiredFileShares(now: Date): Promise<number> {
   let totalDeleted = 0;
   const batchSize = 100;
 
-  for (;;) {
+  for (; ;) {
     const batch = await prisma.fileShare.findMany({
       where: {
         expireAt: { lt: now }
@@ -39,7 +40,7 @@ async function cleanupExpiredFileShares(now: Date): Promise<number> {
 export const initCleanupJob = () => {
   // 每小时的第 0 分钟执行 (0 * * * *)
   cron.schedule('0 * * * *', async () => {
-    console.log('Running cleanup job: files (pending_delete) + expired shares...');
+    logger.info('cleanup job started: files (pending_delete) + expired shares');
 
     try {
       const now = new Date();
@@ -64,16 +65,16 @@ export const initCleanupJob = () => {
       let fileFail = 0;
 
       if (filesToDelete.length > 0) {
-        console.log(`Found ${filesToDelete.length} files to delete.`);
+        logger.info({ count: filesToDelete.length }, 'found files to delete');
 
         for (const file of filesToDelete) {
           try {
             const physicalPath = resolveStorageFilePath(file.filePath);
             if (fs.existsSync(physicalPath)) {
               fs.unlinkSync(physicalPath);
-              console.log(`Deleted physical file: ${physicalPath}`);
+              logger.info({ fileId: file.id, path: file.filePath }, 'deleted physical file');
             } else {
-              console.warn(`Physical file not found (skipping unlink): ${file.filePath}`);
+              logger.warn({ fileId: file.id, path: file.filePath }, 'physical file not found, skipping unlink');
             }
 
             await prisma.fileStorage.delete({
@@ -82,27 +83,27 @@ export const initCleanupJob = () => {
 
             fileSuccess++;
           } catch (err) {
-            console.error(`Failed to delete file ID ${file.id}:`, err);
+            logger.error({ err, fileId: file.id }, 'failed to delete file');
             fileFail++;
           }
         }
       } else {
-        console.log('No pending_delete files to clean up.');
+        logger.info('no pending_delete files to clean up');
       }
 
-      console.log(`File cleanup: success ${fileSuccess}, failed ${fileFail}`);
+      logger.info({ fileSuccess, fileFail }, 'file cleanup finished');
 
       // --- 2) 过期分享清理 ---
       const shareDeleted = await cleanupExpiredFileShares(now);
       if (shareDeleted > 0) {
-        console.log(`Expired share records deleted: ${shareDeleted}`);
+        logger.info({ shareDeleted }, 'expired share records deleted');
       } else {
-        console.log('No expired shares to delete.');
+        logger.info('no expired shares to delete');
       }
     } catch (error) {
-      console.error('Error during cleanup job execution:', error);
+      logger.error({ err: error }, 'cleanup job execution failed');
     }
   });
 
-  console.log('Cleanup job scheduled (0 * * * *).');
+  logger.info({ schedule: '0 * * * *' }, 'cleanup job scheduled');
 };
