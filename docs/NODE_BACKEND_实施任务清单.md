@@ -33,13 +33,13 @@ docker run -d --name redis-dev -p 6379:6379 redis:7-alpine
 
 ### 任务 1.1 — 搭测试脚手架
 
-- [ ] **1.1.1** 安装依赖（在 `file_management_backend` 下执行）：
+- [x] **1.1.1** 安装依赖（在 `file_management_backend` 下执行）：
 
 ```bash
 pnpm add -D vitest supertest @types/supertest
 ```
 
-- [ ] **1.1.2** 新建 `vitest.config.ts`：
+- [x] **1.1.2** 新建 `vitest.config.ts`：
 
 ```ts
 import { defineConfig } from 'vitest/config';
@@ -54,9 +54,9 @@ export default defineConfig({
 });
 ```
 
-- [ ] **1.1.3** 新建 `tests/setup.ts`：加载 `dotenv` 且优先读 `.env.test`；设置 `NODE_ENV=test`。
+- [x] **1.1.3** 新建 `tests/setup.ts`：加载 `dotenv` 且优先读 `.env.test`；设置 `NODE_ENV=test`。
 
-- [ ] **1.1.4** 修改 `package.json`：
+- [x] **1.1.4** 修改 `package.json`：
 
 ```json
 "scripts": {
@@ -65,7 +65,7 @@ export default defineConfig({
 }
 ```
 
-- [ ] **1.1.5** 新建 `tests/health.test.ts`：对 `app` 发 `GET /health`，断言 `status === 'ok'`。
+- [x] **1.1.5** 新建 `tests/health.test.ts`：对 `app` 发 `GET /health`，断言 `status === 'ok'`。
 
 **你需要改/建的文件**
 
@@ -89,9 +89,9 @@ pnpm test
 
 ### 任务 1.1.6 — 拆分应用入口（测试必做）
 
-- [ ] 新建 `src/createApp.ts`：把 `app.ts` 里「创建 express、挂中间件和路由」挪进去，**export `createApp()`**。
-- [ ] `app.ts` 改为：`createApp()` + `createServer` + `initSocket` + `listen` + `initCleanupJob`。
-- [ ] 测试文件：`import { createApp } from '../src/createApp.js'`，`const app = createApp()`，**不要 listen**。
+- [x] 新建 `src/createApp.ts`：把 `app.ts` 里「创建 express、挂中间件和路由」挪进去，**export `createApp()`**。
+- [x] `app.ts` 改为：`createApp()` + `createServer` + `initSocket` + `listen` + `initCleanupJob`。
+- [x] 测试文件：`import { createApp } from '../src/createApp.js'`，`const app = createApp()`，**不要 listen**。
 
 **做完标志**：`pnpm test` 仍通过，且跑测试时终端**不会**打印「Server is running on port 3000」（或端口不冲突）。
 
@@ -99,12 +99,11 @@ pnpm test
 
 ### 任务 1.2 — 认证接口集成测试
 
-- [ ] **1.2.1** 新建 `tests/helpers/seed.ts`：
-
+- [x] **1.2.1** 新建 `tests/helpers/seed.ts`：
   - 函数 `createTestUser(prisma, { username, password })`  
   - 函数 `cleanupTestUsers(prisma, prefix: 'test_')` — 只删用户名以 `test_` 开头的用户  
 
-- [ ] **1.2.2** 新建 `tests/auth.integration.test.ts`，至少包含：
+- [x] **1.2.2** 新建 `tests/auth.integration.test.ts`，至少包含：
 
 | 用例编号 | 场景 | 请求 | 期望 |
 |----------|------|------|------|
@@ -114,7 +113,7 @@ pnpm test
 | A4 | Refresh | `POST /api/auth/refresh` 带 refreshToken | 200，新 accessToken |
 | A5 | 错误密码 | `POST /api/auth/login` 错密码 | 401 |
 
-- [ ] **1.2.3** `beforeEach`：清理 `test_` 用户；`beforeAll`：跑一次 `prisma migrate deploy`（指向测试库）。
+- [x] **1.2.3** `beforeEach`：清理 `test_` 用户；`beforeAll`：跑一次 `prisma migrate deploy`（指向测试库）。
 
 **做完标志**：`pnpm test` 至少 **5 passed**（health + auth）。
 
@@ -130,8 +129,8 @@ curl -X POST http://localhost:3000/api/auth/login \
 
 ### 任务 1.3 — 消息接口集成测试
 
-- [ ] **1.3.1** seed 两个用户 `test_alice`、`test_bob`，并插入一条已通过的 `Friendship`（或调用你现有的好友逻辑）。
-- [ ] **1.3.2** 新建 `tests/message.integration.test.ts`：
+- [x] **1.3.1** seed 两个用户 `test_alice`、`test_bob`，并插入一条已通过的 `Friendship`（或调用你现有的好友逻辑）。
+- [x] **1.3.2** 新建 `tests/message.integration.test.ts`：
 
 | 用例 | 步骤 | 期望 |
 |------|------|------|
@@ -157,7 +156,7 @@ curl -X POST http://localhost:3000/api/auth/login \
 
 ### 任务 1.5 — GitHub Actions CI
 
-- [ ] 新建 `.github/workflows/backend-ci.yml`：
+- [x] 新建 `.github/workflows/backend-ci.yml`：
 
 ```yaml
 name: Backend CI
@@ -190,13 +189,13 @@ jobs:
           JWT_SECRET: test-secret-min-32-chars-long!!!!
 ```
 
-- [ ] push 后 GitHub 显示绿勾。
+- [x] push 后 GitHub 显示绿勾。
 
 **阶段一完成标准（整阶段勾选）**
 
-- [ ] `pnpm test` 本地稳定通过  
-- [ ] CI 绿  
-- [ ] 已提交 `createApp` 拆分（否则后续阶段测试会痛苦）  
+- [x] `pnpm test` 本地稳定通过  
+- [x] CI 绿  
+- [x] 已提交 `createApp` 拆分（否则后续阶段测试会痛苦）  
 
 ---
 
@@ -206,10 +205,10 @@ jobs:
 
 ### 任务 2.1 — Redis 连接模块
 
-- [ ] 安装：`pnpm add ioredis`
-- [ ] 新建 `src/lib/redis.ts`：`getRedis()` 单例；`connectRedis()` / `disconnectRedis()`；未配置 `REDIS_URL` 时 dev 可 warn 并返回 null。
-- [ ] 在 `app.ts` 启动时 `await connectRedis()`（listen 之前）。
-- [ ] `.env.example` 增加：`REDIS_URL=redis://127.0.0.1:6379`
+- [x] 安装：`pnpm add ioredis`
+- [x] 新建 `src/lib/redis.ts`：`getRedis()` 单例；`connectRedis()` / `disconnectRedis()`；未配置 `REDIS_URL` 时 dev 可 warn 并返回 null。
+- [x] 在 `app.ts` 启动时 `await connectRedis()`（listen 之前）。
+- [x] `.env.example` 增加：`REDIS_URL=redis://127.0.0.1:6379`
 
 **做完标志**：启动日志有 `Redis connected`（或明确 skipped）。
 
@@ -217,12 +216,12 @@ jobs:
 
 ### 任务 2.2 — 登录限流
 
-- [ ] 安装：`pnpm add express-rate-limit rate-limit-redis`
-- [ ] 新建 `src/middleware/rateLimit.middleware.ts`：
+- [x] 安装：`pnpm add express-rate-limit rate-limit-redis`
+- [x] 新建 `src/middleware/rateLimit.middleware.ts`：
   - `loginRateLimiter`：仅用于 `POST /api/auth/login`
   - window 15 分钟，max 10（读 env）
   - store 使用 Redis（无 Redis 时 fallback memory 并打 warn）
-- [ ] 修改 `src/routes/auth.routes.ts`：`router.post('/login', loginRateLimiter, login)`
+- [x] 修改 `src/routes/auth.routes.ts`：`router.post('/login', loginRateLimiter, login)`
 
 **手动验收**
 
@@ -233,8 +232,8 @@ jobs:
 
 ### 任务 2.3 — Socket.IO Redis Adapter
 
-- [ ] 安装：`pnpm add @socket.io/redis-adapter`
-- [ ] 修改 `src/realtime/socket.ts`：在 `initSocket` 里，若 Redis 可用则：
+- [x] 安装：`pnpm add @socket.io/redis-adapter`
+- [x] 修改 `src/realtime/socket.ts`：在 `initSocket` 里，若 Redis 可用则：
 
 ```ts
 import { createAdapter } from '@socket.io/redis-adapter';
@@ -242,7 +241,7 @@ import { createAdapter } from '@socket.io/redis-adapter';
 io.adapter(createAdapter(pubClient, subClient));
 ```
 
-- [ ] 写 `docs/notes/SOCKET_MULTI_INSTANCE.md`（半页即可）：画 ASCII 图「实例 A emit → Redis → 实例 B 客户端收到」。
+- [x] 写 `docs/notes/SOCKET_MULTI_INSTANCE.md`（半页即可）：画 ASCII 图「实例 A emit → Redis → 实例 B 客户端收到」。
 
 **做完标志（本地）**
 
@@ -254,12 +253,12 @@ io.adapter(createAdapter(pubClient, subClient));
 
 ### 任务 2.4 — docker-compose 加入 Redis
 
-- [ ] 在后续 M6 的 compose 里先有 redis 服务；本阶段可临时建 `docker-compose.dev.yml` 仅含 redis。
+- [x] 在后续 M6 的 compose 里先有 redis 服务；本阶段可临时建 `docker-compose.dev.yml` 仅含 redis。
 
 **阶段二完成标准**
 
-- [ ] 登录 429 可复现  
-- [ ] 双实例 Socket 文档 + 你本地试过至少一次  
+- [x] 登录 429 可复现  
+- [x] 双实例 Socket 文档 + 你本地试过至少一次  
 - [ ] `tests` 可加一条：mock 限流或跳过（CI 无 Redis 时用 memory store 也要绿）  
 
 ---
