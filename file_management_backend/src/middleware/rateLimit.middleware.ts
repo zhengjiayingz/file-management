@@ -5,7 +5,7 @@ import { getRedis } from '../lib/redis.js'
 
 /** 15 分钟，可用环境变量覆盖 */
 const WINDOW_MS = Number(process.env.LOGIN_RATE_LIMIT_WINDOW_MS ?? 15 * 60 * 1000)
-const API_WINDOW_MS = Number(process.env.API_RATE_LIMIT_WINDOW_MS ?? 1 * 60 * 1000)
+const API_WINDOW_MS = Number(process.env.API_RATE_LIMIT_WINDOW_MS ?? 60 * 1000)
 
 /** 同一 IP 窗口内最多请求次数，默认 10*/
 const MAX = Number(process.env.LOGIN_RATE_LIMIT_MAX ?? 10)
@@ -67,31 +67,38 @@ function createApiRateLimiter() {
     });
 }
 
-let cached: ReturnType<typeof rateLimit> | null = null;
-let apiCached: ReturnType<typeof rateLimit> | null = null;
+let loginLimiter: ReturnType<typeof rateLimit> | null = null;
+let apiLimiter: ReturnType<typeof rateLimit> | null = null;
 
-function getLoginRateLimiterMiddleware() {
-    if (!cached) {
-        cached = createLoginRateLimiter()
+/**
+ * 在 createApp() 内、挂载路由前调用（app.ts 已 await connectRedis()）。
+ * express-rate-limit v8 要求实例在应用初始化时创建，不能在首个请求里 lazy create。
+ */
+export function initRateLimiters(): void {
+    if (!loginLimiter) {
+        loginLimiter = createLoginRateLimiter();
     }
-    return cached;
-}
-
-function getApiRateLimiterMiddleware() {
-    if (!apiCached) {
-        apiCached = createApiRateLimiter()
+    if (!apiLimiter) {
+        apiLimiter = createApiRateLimiter();
     }
-    return apiCached;
 }
 
 /**
  * 仅用于 POST /api/auth/login。
- * 懒加载：首次请求时创建 limiter，此时 connectRedis() 应已完成。
+ * 须在 createApp() 内先 initRateLimiters()（connectRedis 完成后）；
+ * 原先懒加载会在 express-rate-limit v8 触发 ERR_ERL_CREATED_IN_REQUEST_HANDLER。
  */
 export const loginRateLimiter: RequestHandler = (req, res, next) => {
-    return getLoginRateLimiterMiddleware()(req, res, next);
+    if (!loginLimiter) {
+        return next(new Error('[rate-limit] 请先调用 initRateLimiters()'));
+    }
+    return loginLimiter(req, res, next);
 };
-/**api请求限流 */
-export const apiRateLimiter: RequestHandler = (req, res, next) => {
-    return getApiRateLimiterMiddleware()(req, res, next);
-};
+
+/** api请求限流 */
+export function getApiRateLimiter(): RequestHandler {
+    if (!apiLimiter) {
+        throw new Error('[rate-limit] 请先调用 initRateLimiters()');
+    }
+    return apiLimiter;
+}
