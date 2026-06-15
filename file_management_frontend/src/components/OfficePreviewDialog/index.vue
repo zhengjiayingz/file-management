@@ -128,7 +128,7 @@ const previewUrl = computed(() => {
     if (!props.fileId) return ''
     const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
     const token = authStore.token || ''
-    const bust = iframeCacheBust.value ? `&_t=${iframeCacheBust.value}` : ''
+    const bust = iframeCacheBust.value ? `&_t=${iframeCacheBust.value}` : '' // _t 是缓存破坏参数，全文就绪后刷新 iframe 用
     return `${API_BASE_URL}/api/files/${props.fileId}/preview?token=${encodeURIComponent(token)}${bust}`
 })
 

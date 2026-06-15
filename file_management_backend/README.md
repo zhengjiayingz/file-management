@@ -19,9 +19,19 @@ pnpm install
 # 数据库迁移
 pnpm prisma:db:push
 
-# 启动开发服务器
+# 启动开发服务器（API + Office 预览 Worker，一条命令）
 pnpm dev
+
+# 仅启动 API（不启预览 Worker）
+pnpm dev:api
+
+# 仅启动预览 Worker（需 REDIS_URL + LibreOffice）
+pnpm worker:preview
 ```
+
+**Office 预览（PPT/Word 转 PDF）**：`pnpm dev` 会同时起 API 与 BullMQ Preview Worker（经 `concurrently`）。需配置 `REDIS_URL`（如 `redis://127.0.0.1:6379`）并安装 LibreOffice。本地 Redis 可用 `docker compose -f docker-compose.dev.yml up -d`。
+
+> **阶段六（Docker）**：生产/Compose 将把 API 与 `worker:preview` 拆成**两个容器进程**（同镜像、不同 `command`），不再与开发一样合在一条 `dev` 命令里。
 
 ## 📡 API 文档
 

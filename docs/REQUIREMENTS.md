@@ -103,6 +103,12 @@
    - **PDF**：在允许的类型内**直接**流式预览；缓存策略与 Office 快览/全文**区分**（快览不长期强缓存，便于接全文）。
    - **TXT/MD 等白名单文本**：`GET /api/files/:id/text-chunk` 按**字节分块**读取，在 **UTF-8 码点边界**截断，避免块衔接处**乱码**；配合前端分段展示，按产品视为满足「大文本」**分段预览**能力。
    - **说明**：**Excel**（.xls/.xlsx）产品范围内以**本地下载**为主，不强制走与 Word/PPT 同一套内嵌表预览。若以后单独要求 **GB 级单文件**纯文本的「虚拟页码/无限滚动」式极致体验，可另立增强项，**不**与本条当前验收冲突。
+   - **待完成增强（§2(17-a)，阶段五任务 5.5，2026-06-08 立项）**：**PPT 快览 partial 与全文 full 的浏览器缓存一致性**。
+     - **问题**：`GET /api/files/:id/preview` URL 不变；用户先收到快览 PDF（约前 N 页）后，浏览器可能缓存该响应（含 **304 Not Modified**）。磁盘上全文 `*-preview.pdf` 已就绪后，普通刷新或「新标签页打开」仍可能显示旧快览，需用户 **Ctrl+Shift+R** 或手动加 `&_t=` 才能看到全文——与「后台已转完」的产品预期不符。
+     - **后端**：`phase === 'partial'` 时响应头使用 **`Cache-Control: no-store`**（或等价禁止复用旧 PDF 体的策略）；`phase === 'full'` 时避免与 partial 共用可导致 **304 误命中**的协商缓存（如按 `fileHash + phase` 区分 **ETag**，或对 `/preview` 禁用 sendFile 默认 ETag 304）；验收时同一 URL 在 full 就绪后**无需硬刷新**即可拿到全文 PDF 流。
+     - **前端**（`file_management_frontend` `OfficePreviewDialog`）：弹窗 iframe 在 `preview-state` 由 `partial → full` 时已带 `_t` 刷新——保持并回归；**「新标签页打开」**链接须同样携带 **`_t`（或 `phase`）** 缓存破坏参数，避免新标签长期钉在 25 页快览。
+     - **验收**：删缓存后预览大 PPT → 出现快览 → 等全文转完（或 Worker 在 API 关闭时仍转完）→ **仅普通 F5 / 再次点「新标签打开」** 即能看到超过 N 页；Network 中 `/preview` 在 full 阶段为 **200** 且 `X-Preview-Pdf-Phase: full`，非长期 **304** 复用 partial 体。
+     - **与阶段五关系**：BullMQ 解决「关 API 后转码任务不丢」；本条解决「全文已在磁盘但浏览器仍显示快览」——**阶段五必做项 5.5**，详见 [NODE_BACKEND_实施任务清单.md](./NODE_BACKEND_实施任务清单.md) 任务 5.5。
 
 ### 3. 文件分享
 

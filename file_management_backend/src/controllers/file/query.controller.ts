@@ -729,6 +729,8 @@ export const previewFile = async (req: AuthRequest, res: Response): Promise<void
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(userFile.fileName.replace(/\.\w+$/, '.pdf'))}"`);
     res.setHeader('X-Preview-Pdf-Phase', pdfPhase);
+    // 确保跨域 iframe 可嵌入（与 createApp helmet frame-ancestors 一致）
+    res.removeHeader('X-Frame-Options');
     if (pdfPhase === 'partial') {
       res.setHeader('Cache-Control', 'private, no-cache');
     } else {

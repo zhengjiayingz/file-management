@@ -219,12 +219,14 @@ STORAGE_DRIVER=local
 | ID | 需求描述 | 验收标准 |
 |----|----------|----------|
 | M5.1 | 将 `preview.service.ts` 中内存 `conversionQueue` 迁为 **BullMQ 队列** `preview:convert` | 入队、处理、完成/失败状态可查 |
-| M5.2 | Worker 可与 API **同进程**启动（开发），生产建议 **独立进程** `pnpm worker:preview` | package.json 新脚本 |
+| M5.2 | 开发：`pnpm dev` 经 `concurrently` 同终端起 API + Worker；可单独 `dev:api` / `worker:preview` | package.json 脚本 |
+| M5.2b | 生产（**M6**）：Worker **独立容器/进程**，与 dev 合并启动拆开 | compose `worker` 服务 |
 | M5.3 | 任务 payload：`fileId`、`userId`、`jobType`（partial/full） | 失败重试最多 3 次，指数退避 |
 | M5.4 | 任务状态 API（可选）：`GET /api/files/:id/preview-job` 返回 pending/active/failed | 前端可轮询；不做 UI 也可仅 Swagger |
 | M5.5 | API 进程重启后，Redis 中 pending 任务仍被 Worker 消费 | 面试话术：「内存队列重启即失，Redis 持久任务」 |
+| M5.6 | PPT 快览 partial→全文 full 的**浏览器缓存**一致（§2(17-a)） | partial `no-store`；full 不与 partial 共用 304；新标签 `_t`；验收见任务清单 5.5 |
 
-**面试考点**：削峰、幂等、重复消费、长任务与 HTTP 超时分离。
+**面试考点**：削峰、幂等、重复消费、长任务与 HTTP 超时分离；partial/full 分阶段响应勿被浏览器缓存钉死在快览。
 
 ---
 
@@ -233,7 +235,7 @@ STORAGE_DRIVER=local
 | ID | 需求描述 | 验收标准 |
 |----|----------|----------|
 | M6.1 | 多阶段 `Dockerfile`：build → 仅 dist + prisma + production deps | 镜像 < 500MB（经验目标） |
-| M6.2 | `docker-compose.yml`：`mysql`、`redis`、`api`；卷挂载 uploads（或命名卷） | 一键 `docker compose up -d` |
+| M6.2 | `docker-compose.yml`：`mysql`、`redis`、`api`、**`worker`（独立容器）**；卷挂载 uploads/previews（api 与 worker 共享） | 一键 `docker compose up -d`；从 dev 的 `concurrently` 拆为两服务 |
 | M6.3 | 启动顺序：等 MySQL healthy → migrate/deploy → 起 API | entrypoint 脚本或 compose depends_on |
 | M6.4 | `file_management_backend/README.md` 增加「Docker 部署」章节 | 含环境变量表、常见问题 |
 | M6.5 | 更新 `PROJECT_STRUCTURE.md`：删除「内存存储」等过时描述 | 与当前 TS+Prisma 一致 |

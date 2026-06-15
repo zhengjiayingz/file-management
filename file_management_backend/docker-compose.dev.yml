@@ -1,5 +1,5 @@
 # file_management_backend/docker-compose.dev.yml
-# 阶段二 2.4：本地开发仅启动 Redis（API 仍用 pnpm dev 跑在宿主机）
+# 阶段二 2.4：本地开发仅启动 Redis（API + Preview Worker 用 pnpm dev 跑在宿主机）
 services:
   redis:
     image: redis:7-alpine

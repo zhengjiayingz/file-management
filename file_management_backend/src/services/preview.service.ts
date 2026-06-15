@@ -3,6 +3,15 @@ import path from 'path';
 import fs from 'fs';
 import { promisify } from 'util';
 import { ensureDirectoryExists } from '../utils/file.utils.js';
+import {
+  enqueuePreviewJob,
+  getPreviewJobState,
+  isPreviewQueueAvailable,
+  waitPreviewJobFinished,
+  type PreviewConvertJobData,
+  type PreviewConvertJobResult,
+} from '../queues/preview.queue.js';
+import { logger } from '../lib/logger.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -57,24 +66,8 @@ function getConversionTimeoutMs(fileSizeBytes: number): number {
   );
 }
 
-type QueueTask = {
-  op: 'impress-partial' | 'full';
-  fileHash: string;
-  sourceFilePath: string;
-  /** 后台只转缓存、无 HTTP 等待 */
-  isBackground?: boolean;
-  resolve: (r: { path: string; phase: 'full' | 'partial' }) => void;
-  reject: (e: Error) => void;
-};
-
-let isConverting = false;
-const conversionQueue: QueueTask[] = [];
-
 /** 同一份 PPT 正在生成第一屏 partial 时，复用同一条 Promise，避免排两次队 */
-const partialInFlight = new Map<string, Promise<{ path: string; phase: 'full' | 'partial' }>>();
-
-/** 全篇转 PDF 已入队，避免重复排队 */
-const fullPptScheduled = new Set<string>();
+const partialInFlight = new Map<string, Promise<ConvertToPdfResult>>();
 
 export type ConvertToPdfResult = { path: string; phase: 'full' | 'partial' };
 
@@ -152,7 +145,7 @@ function findPdfInDir(dir: string, baseHint: string): string | null {
 /**
  * 一次性全文转 PDF（Writer / 全文 Impress / 或 partial 失败后的回退）
  */
-const doFullConvert = async (sourceFilePath: string, fileHash: string): Promise<string> => {
+export const doFullConvert = async (sourceFilePath: string, fileHash: string): Promise<string> => {
   const sofficePath = findSofficePath();
   if (!sofficePath) {
     throw new Error('LibreOffice 未安装或未找到。请安装 LibreOffice 并确保路径正确。');
@@ -206,7 +199,6 @@ const doFullConvert = async (sourceFilePath: string, fileHash: string): Promise<
         // ignore
       }
     }
-    fullPptScheduled.delete(fileHash);
     return finalPath;
   } catch (error) {
     if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true });
@@ -217,7 +209,7 @@ const doFullConvert = async (sourceFilePath: string, fileHash: string): Promise<
 /**
  * 仅前 N 页（Impress）
  */
-const doImpressPartial = async (sourceFilePath: string, fileHash: string): Promise<string> => {
+export const doImpressPartial = async (sourceFilePath: string, fileHash: string): Promise<string> => {
   const sofficePath = findSofficePath();
   if (!sofficePath) {
     throw new Error('LibreOffice 未安装或未找到。请安装 LibreOffice 并确保路径正确。');
@@ -260,69 +252,88 @@ const doImpressPartial = async (sourceFilePath: string, fileHash: string): Promi
   }
 };
 
-/**
- * 在已有 partial 或 partial 刚生成后，将「全文转 PDF」排入同一条队列，立即入队；由 processQueue 串行执行
- */
-function scheduleFullPptInBackground(fileHash: string, sourceFilePath: string) {
-  if (fs.existsSync(getPreviewCachePath(fileHash))) return;
-  if (fullPptScheduled.has(fileHash)) return;
-  fullPptScheduled.add(fileHash);
-  conversionQueue.push({
-    op: 'full',
-    fileHash,
-    sourceFilePath,
-    isBackground: true,
-    resolve: () => {},
-    reject: () => {},
-  });
-  processQueue();
+function assertPreviewQueueReady(): void {
+  if (!isPreviewQueueAvailable()) {
+    throw new Error('REDIS_URL 未配置，Office 预览队列不可用');
+  }
 }
 
-const processQueue = async () => {
-  if (isConverting || conversionQueue.length === 0) return;
-  isConverting = true;
-  const task = conversionQueue.shift()!;
+/**
+ * 在已有 partial 或 partial 刚生成后，将「全文转 PDF」排入 BullMQ，立即入队
+ */
+async function scheduleFullPptInBackground(fileHash: string, sourceFilePath: string): Promise<void> {
+  if (fs.existsSync(getPreviewCachePath(fileHash))) return;
+
+  const state = await getPreviewJobState(fileHash, 'full');
+  if (state === 'waiting' || state === 'active' || state === 'delayed' || state === 'prioritized') {
+    return;
+  }
 
   try {
-    if (task.op === 'impress-partial') {
-      let usedPartial = true;
-      try {
-        const p = await doImpressPartial(task.sourceFilePath, task.fileHash);
-        task.resolve({ path: p, phase: 'partial' });
-      } catch (partialErr) {
-        usedPartial = false;
-        console.warn('[Preview] 部分页 PPT 转换失败，回退为仅全文转 PDF', partialErr);
-        try {
-          const p = await doFullConvert(task.sourceFilePath, task.fileHash);
-          task.resolve({ path: p, phase: 'full' });
-        } catch (e) {
-          task.reject(e as Error);
-        }
-      }
-      if (usedPartial && !fs.existsSync(getPreviewCachePath(task.fileHash))) {
-        scheduleFullPptInBackground(task.fileHash, task.sourceFilePath);
-      }
-    } else {
-      const p = await doFullConvert(task.sourceFilePath, task.fileHash);
-      if (task.isBackground) {
-        fullPptScheduled.delete(task.fileHash);
-        console.log(`[Preview] 后台全文 PDF 已就绪: ${p}`);
-      } else {
-        task.resolve({ path: p, phase: 'full' });
-      }
-    }
-  } catch (e: any) {
-    if (task.isBackground) {
-      fullPptScheduled.delete(task.fileHash);
-      console.error('[Preview] 后台/全文 转换失败:', e);
-    } else {
-      task.reject(e);
-    }
-  } finally {
-    isConverting = false;
-    processQueue();
+    await enqueuePreviewJob({
+      op: 'full',
+      fileHash,
+      sourceFilePath,
+      isBackground: true,
+    });
+  } catch (err) {
+    logger.warn({ err, fileHash }, '[Preview] 后台全文入队失败（可能已有同 jobId 任务）');
   }
-};
+}
+
+/**
+ * BullMQ Worker 消费入口：执行 impress-partial / full 转码
+ */
+export async function processPreviewConvertJob(
+  data: PreviewConvertJobData,
+): Promise<PreviewConvertJobResult> {
+  if (data.op === 'impress-partial') {
+    try {
+      const p = await doImpressPartial(data.sourceFilePath, data.fileHash);
+      if (!fs.existsSync(getPreviewCachePath(data.fileHash))) {
+        await scheduleFullPptInBackground(data.fileHash, data.sourceFilePath);
+      }
+      return { path: p, phase: 'partial' };
+    } catch (partialErr) {
+      logger.warn({ err: partialErr, fileHash: data.fileHash }, '[Preview] 部分页 PPT 转换失败，回退为全文');
+      const p = await doFullConvert(data.sourceFilePath, data.fileHash);
+      return { path: p, phase: 'full' };
+    }
+  }
+
+  const p = await doFullConvert(data.sourceFilePath, data.fileHash);
+  if (data.isBackground) {
+    logger.info({ fileHash: data.fileHash, path: p }, '[Preview] 后台全文 PDF 已就绪');
+  }
+  return { path: p, phase: 'full' };
+}
+// 入队完然后直接等待bullmq把当前任务跑完
+async function enqueueAndWait(
+  data: PreviewConvertJobData,  // 预览任务载荷：op impress-partial / full）、fileHash、sourceFilePath、可选 isBackground
+  timeoutMs: number,
+): Promise<ConvertToPdfResult> {  // 返回值{ path, phase: 'full' | 'partial' }
+  assertPreviewQueueReady();  // 无 REDIS_URL 直接报错
+  const job = await enqueuePreviewJob(data); // 把任务写入 BullMQ 队列 preview-convert，job 名 convert
+  if (!job.id) {  // BullMQ 正常会返回 job id；若没有，说明入队异常，抛错 预览任务入队失败：未获得 jobId，避免后面用空 id 去等
+    throw new Error('预览任务入队失败：未获得 jobId');
+  }
+  // 入队完然后直接等待bullmq把当前任务跑完。BullMQ 的 Worker 自动消费队列里的任务。不用手动消费
+  return waitPreviewJobFinished(job.id, timeoutMs); //订阅 QueueEvents，调用 job.waitUntilFinished(...), 阻塞到 Worker return
+}
+
+function getFullConvertWaitTimeoutMs(sourceFilePath: string): number {
+  if (!fs.existsSync(sourceFilePath)) {
+    return CONVERSION_TIMEOUT_MAX_MS;
+  }
+  const baseName = path.basename(sourceFilePath);
+  if (isImpressFile(baseName)) {
+    const st = fs.statSync(sourceFilePath);
+    const mb = st.size / (1024 * 1024);
+    const bySize = Math.ceil(mb) * CONVERSION_TIMEOUT_PER_MB_MS + 30_000;
+    return Math.min(PPT_FULL_CONVERSION_MAX_MS, Math.max(CONVERSION_TIMEOUT_MIN_MS, bySize));
+  }
+  return getConversionTimeoutMs(fs.statSync(sourceFilePath).size);
+}
 
 /**
  * 将 Office 文档转为预览用 PDF
@@ -333,51 +344,47 @@ export const convertToPdf = async (
   fileHash: string
 ): Promise<ConvertToPdfResult> => {
   const fullP = getPreviewCachePath(fileHash);
-  if (fs.existsSync(fullP)) {
+  if (fs.existsSync(fullP)) { // 若全文 PDF 已存在，直接返回，不再调 LibreOffice
     return { path: fullP, phase: 'full' };
   }
-
-  const base = path.basename(sourceFilePath);
-
-  if (isImpressFile(base)) {
-    const partP = getPreviewPartialPath(fileHash);
-    if (fs.existsSync(partP)) {
-      scheduleFullPptInBackground(fileHash, sourceFilePath);
-      return { path: partP, phase: 'partial' };
+  const base = path.basename(sourceFilePath); // ：取文件名（不含目录），例如 report.ppt
+  // 分支A
+  if (isImpressFile(base)) { //  判断扩展名是否为 .ppt / .pptx / .odp,只有这类文件走「先 partial、后 full」策略；Word 等走后面的全文分支。
+    const partP = getPreviewPartialPath(fileHash); //取前25页的转换缓存
+    if (fs.existsSync(partP)) {   // 若 partial 已在磁盘上
+      await scheduleFullPptInBackground(fileHash, sourceFilePath); // ：把「全文转 PDF」丢进 BullMQ 后台队列
+      return { path: partP, phase: 'partial' }; // 立刻返回 partial 路径，前端可先预览前几页；全文完成后前端可轮询切换。
     }
-
+    // 分支 B：同一文件正在生成 partial
     const inFlight = partialInFlight.get(fileHash);
-    if (inFlight) {
+    if (inFlight) { // 若已有进行中的 partial Promise（例如两个请求同时预览同一 PPT），复用同一个 Promise，避免重复入队、重复转码。
       return inFlight;
     }
-
-    const pr = new Promise<ConvertToPdfResult>((resolve, reject) => {
-      conversionQueue.push({
+    // PPT 分支 C：首次请求，入队 partial
+    const pr = enqueueAndWait(     // 1.检查 Redis/BullMQ 是否可用,2.入队 impress-partial 任务，并同步等待 Worker 完成
+      {
         op: 'impress-partial',
         fileHash,
         sourceFilePath,
-        isBackground: false,
-        resolve,
-        reject,
-      });
-      processQueue();
-    });
-    pr.finally(() => partialInFlight.delete(fileHash));
-    partialInFlight.set(fileHash, pr);
-    return pr;
+        isBackground: false, // 这是用户正在等的请求，不是后台静默任务
+      },
+      PPT_PARTIAL_TIMEOUT_MS, // 最多等 PPT_PARTIAL_TIMEOUT_MS，默认最多 240 秒
+    );
+    pr.finally(() => partialInFlight.delete(fileHash)); // 无论成功或失败，Promise 结束后从 partialInFlight 删除，避免 Map 泄漏
+    partialInFlight.set(fileHash, pr); // 把这条 Promise 放进 Map，供并发请求复用。
+    return pr; // 返回该 Promise；Worker 里会调 doImpressPartial，成功后通常还会触发后台 full
   }
 
-  return new Promise<ConvertToPdfResult>((resolve, reject) => {
-    conversionQueue.push({
+  // 分支 D：Word 等其他文件，直接转全文
+  return enqueueAndWait(    // 1.检查 Redis/BullMQ 是否可用,2.入队 full 任务，并同步等待 Worker 完成
+    {
       op: 'full',
       fileHash,
       sourceFilePath,
       isBackground: false,
-      resolve,
-      reject,
-    });
-    processQueue();
-  });
+    },
+    getFullConvertWaitTimeoutMs(sourceFilePath),
+  );
 };
 
 export const checkLibreOfficeInstallation = (): { installed: boolean; path: string | null } => {

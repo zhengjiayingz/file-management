@@ -30,6 +30,22 @@ import { runHealthCheck } from './lib/healthCheck.js';
 const __filename = fileURLToPath(import.meta.url); // 当前文件绝对路径。CommonJS 自带 __filename，ES Module 需自己算
 const __dirname = path.dirname(__filename);  // 当前文件所在目录（一般是 src/
 
+/** 允许将 API 响应（如 Office PDF 预览）嵌入前端 iframe 的祖先源 */
+function resolveFrameAncestors(): string[] {
+  const ancestors = ["'self'"];
+  const corsOrigin = process.env.CORS_ORIGIN?.trim();
+  if (corsOrigin) {
+    ancestors.push(corsOrigin);
+    return ancestors;
+  }
+  if (process.env.NODE_ENV !== 'production') {
+    for (let port = 5173; port <= 5200; port++) {
+      ancestors.push(`http://localhost:${port}`, `http://127.0.0.1:${port}`);
+    }
+  }
+  return ancestors;
+}
+
 /**
  * 组装 Express 应用（中间件 + 路由），不 listen、不启 Socket、不启定时任务。
  * 供 app.ts 启动服务，以及 Vitest + Supertest 集成测试 import（避免占端口）。
@@ -41,7 +57,19 @@ export function createApp(): express.Application {
   // 须在挂路由前初始化限流（connectRedis 已在 app.ts 完成；express-rate-limit v8 须在 app 初始化时 create）
   initRateLimiters();
 
-  app.use(helmet())
+  // 关闭 X-Frame-Options，改用 CSP frame-ancestors，否则 localhost:5173 无法 iframe 嵌入 localhost:3000 的 PDF 预览
+  app.use(
+    helmet({
+      crossOriginResourcePolicy: { policy: 'cross-origin' },
+      frameguard: false,
+      contentSecurityPolicy: {
+        directives: {
+          ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+          'frame-ancestors': resolveFrameAncestors(),
+        },
+      },
+    }),
+  );
   // 每条请求会自动记录 reqId、method、url、statusCode、responseTime
   app.use(
     pinoHttp({

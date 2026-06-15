@@ -147,8 +147,8 @@ curl -X POST http://localhost:3000/api/auth/login \
 
 ### 任务 1.4 — 密码策略单测
 
-- [ ] 新建 `tests/passwordPolicy.test.ts`，直接 import `passwordPolicy.service`。
-- [ ] 至少 5 组：`合法密码`、`太短`、`缺大写`、`缺数字`、`管理员改策略后仍校验`。
+- [x] 新建 `tests/passwordPolicy.test.ts`，直接 import `passwordPolicy.service`。
+- [x] 至少 5 组：`合法密码`、`太短`、`缺大写`、`缺数字`、`管理员改策略后仍校验`。
 
 **做完标志**：`pnpm test` ≥ 10 passed。
 
@@ -295,26 +295,26 @@ io.adapter(createAdapter(pubClient, subClient));
 
 ### 任务 4.1 — Pino 请求日志
 
-- [ ] `pnpm add pino pino-http`
-- [ ] 新建 `src/lib/logger.ts`：export `logger`
-- [ ] `createApp.ts` 最前：`pino-http` 生成 `req.log`，自定义 `genReqId`
-- [ ] 把 `error.middleware.ts` 里 `console.error` 改为 `req.log?.error` 或 `logger.error`
-- [ ] 把 `cleanup.job.ts`、`socket.ts` 关键 warn 改为 `logger.warn`
+- [x] `pnpm add pino pino-http`
+- [x] 新建 `src/lib/logger.ts`：export `logger`
+- [x] `createApp.ts` 最前：`pino-http` 生成 `req.log`，自定义 `genReqId`
+- [x] 把 `error.middleware.ts` 里 `console.error` 改为 `req.log?.error` 或 `logger.error`
+- [x] 把 `cleanup.job.ts`、`socket.ts` 关键 warn 改为 `logger.warn`
 
 **禁止**：日志里打印完整 `password`、`refreshToken`、`Authorization`。（脱敏）
 
 ### 任务 4.2 — 增强健康检查
 
-- [ ] 改 `GET /health`：
+- [x] 改 `GET /health`：
   - `checks.mysql`：`prisma.$queryRaw\`SELECT 1\``  
   - `checks.redis`：`redis.ping()`（未配置则 `skipped`）  
   - 任一 required 失败 → HTTP **503**，`status: 'degraded'`
-- [ ] 可选：拆 `GET /health/live`（只返回 ok）与 `GET /health/ready`（含依赖）
+- [x] 可选：拆 `GET /health/live`（只返回 ok）与 `GET /health/ready`（含依赖）
 
 **阶段四完成标准**
 
-- [ ] 停掉 Redis 后 `ready` 返回 503（若 Redis 标为 required）  
-- [ ] 打一条登录请求，日志里能看到 reqId + statusCode + durationMs  
+- [x] 停掉 Redis 后 `ready` 返回 503（若 Redis 标为 required）  
+- [x] 打一条登录请求，日志里能看到 reqId + statusCode + durationMs  
 
 ---
 
@@ -324,34 +324,44 @@ io.adapter(createAdapter(pubClient, subClient));
 
 ### 任务 5.1 — 队列基础设施
 
-- [ ] `pnpm add bullmq`
-- [ ] 新建 `src/queues/preview.queue.ts`：队列名 `preview-convert`，连接 Redis。
-- [ ] 新建 `src/workers/preview.worker.ts`：把现有 `processQueue` 里真正调 LibreOffice 的逻辑**搬进去**（或调用 preview.service 里抽出的纯函数）。
+- [x] `pnpm add bullmq`
+- [x] 新建 `src/queues/preview.queue.ts`：队列名 `preview-convert`，连接 Redis。
+- [x] 新建 `src/workers/preview.worker.ts`：把现有 `processQueue` 里真正调 LibreOffice 的逻辑**搬进去**（或调用 preview.service 里抽出的纯函数）。
 
 ### 任务 5.2 — 改造 preview.service.ts
 
-- [ ] 删除或废弃内存数组 `conversionQueue`、`isConverting`。
-- [ ] `enqueueConversion(task)` → `previewQueue.add('convert', { op, fileHash, sourceFilePath, ... })`。
-- [ ] 保留 `partialInFlight` Map 可做「同 hash 只入队一次」的 dedupe（用 jobId = fileHash+op）。
+- [x] 删除或废弃内存数组 `conversionQueue`、`isConverting`。
+- [x] `enqueueConversion(task)` → `previewQueue.add('convert', { op, fileHash, sourceFilePath, ... })`。
+- [x] 保留 `partialInFlight` Map 可做「同 hash 只入队一次」的 dedupe（用 jobId = fileHash+op）。
 
 ### 任务 5.3 — Worker 启动方式
 
-- [ ] `package.json` 增加 `"worker:preview": "tsx src/workers/preview.worker.ts"`
-- [ ] 开发：README 写「开两个终端：pnpm dev + pnpm worker:preview」
-- [ ] 生产：compose 里可加 `worker` 服务，与 `api` 同镜像不同 command
+- [x] `package.json` 增加 `"worker:preview": "tsx src/workers/preview.worker.ts"`
+- [x] 开发：`pnpm dev` 经 `concurrently` 同时起 `dev:api` + `worker:preview`（单终端）；可单独 `pnpm dev:api` / `pnpm worker:preview`
+- [ ] 生产（**阶段六**）：compose 里 **`worker` 独立服务**，与 `api` 同镜像、不同 `command`（从 dev 的同进程合并中拆出）
 
 ### 任务 5.4 — 任务状态（可选但推荐）
 
 - [ ] `GET /api/files/:id/preview-status` 或在现有预览接口里带 `jobState: waiting|active|completed|failed`
 - [ ] 读 BullMQ `getJob(fileHash)` 状态
 
+### 任务 5.5 — PPT 快览→全文预览缓存（必做，约 1 天）
+
+> **用户故事**：全文 PDF 已在磁盘就绪后，用户普通刷新或「新标签打开」应看到全文，而不是浏览器仍显示 25 页快览。  
+> **需求出处**：[REQUIREMENTS.md](./REQUIREMENTS.md) §2(17)「待完成增强」、[UNFINISHED_REQUIREMENTS.md](./UNFINISHED_REQUIREMENTS.md) §2(17-a)。
+
+- [ ] **后端** `query.controller.ts` `previewFile`：`phase === 'partial'` 时 `Cache-Control: no-store`（替换仅 `no-cache`）；`phase === 'full'` 时避免与 partial 共用 ETag 导致 **304 仍返回快览体**（如 `res.set('ETag', \`"${fileHash}-${pdfPhase}"\`)` 或预览路由禁用 304）
+- [ ] **前端** `OfficePreviewDialog`：「新标签页打开」URL 与 iframe 一致，在 `phase === 'full'` 或 `iframeCacheBust` 变化时附带 `&_t=` 参数
+- [ ] **验收**：大 PPT 快览出现后等待全文落盘 → **不按 Ctrl+Shift+R**，仅 F5 或再次「新标签打开」→ 页数超过 `PPT_PREVIEW_FIRST_SLIDES`；DevTools 中 `/preview` 响应头 `X-Preview-Pdf-Phase: full`
+
 **阶段五完成标准**
 
 - [ ] 上传一个 .pptx，触发预览，**关 API 只留 worker** 仍能继续转（或反过来验证队列持久）  
 - [ ] API 进程重启后，Redis 里 waiting 的 job 仍被执行  
 - [ ] 面试能讲：为何不用内存队列、失败重试 3 次  
+- [ ] **任务 5.5**：全文就绪后无需硬刷新即可看到超过快览页数（见上）
 
-**不要在本阶段做**：换 OSS、改前端 UI，除非只显示「转换中」。
+**不要在本阶段做**：换 OSS；与预览无关的大改 UI。
 
 ---
 
@@ -366,10 +376,12 @@ io.adapter(createAdapter(pubClient, subClient));
 
 ### 任务 6.2 — docker-compose.yml
 
-- [ ] 服务：`mysql`、`redis`、`api`、可选 `worker`
+- [ ] 服务：`mysql`、`redis`、`api`、**`worker`（必做，非可选）**
+- [ ] **`worker` 与 `api` 分容器**：同镜像，`api` → `node dist/app.js`，`worker` → `node dist/workers/preview.worker.js`（或 `pnpm worker:preview` 等价命令）；与阶段五 dev 里 `concurrently` 合并启动**拆开**
 - [ ] 环境变量：`DATABASE_URL`、`REDIS_URL`、`JWT_SECRET`、`CORS_ORIGIN`
-- [ ] 卷：`uploads`、`previews`（或命名卷）
+- [ ] 卷：`uploads`、`previews`（或命名卷）——**api 与 worker 须共享**，否则 Worker 写的 PDF API 读不到
 - [ ] `api` 依赖 mysql healthy；entrypoint：`prisma migrate deploy && node dist/app.js`
+- [ ] `worker` 依赖 redis healthy；镜像需含 LibreOffice（或专用 worker 镜像）
 
 ### 任务 6.3 — 文档
 
@@ -478,6 +490,7 @@ io.adapter(createAdapter(pubClient, subClient));
 **阶段五 队列**
 
 - [ ] 5.1～5.4 预览 BullMQ
+- [ ] 5.5 快览→全文预览缓存
 
 **阶段六 Docker**
 
@@ -498,7 +511,7 @@ io.adapter(createAdapter(pubClient, subClient));
 | Prisma 测试脏数据 | 没清理 test_ 用户 | beforeEach cleanup |
 | CI MySQL 连不上 | services 主机名应用 `127.0.0.1` | 对照 workflow 示例 |
 | Redis 限流不生效 | 用了 memory store 且只开一个进程 | 确认 `REDIS_URL` 与 rate-limit-redis |
-| 预览 worker 不消费 | 没起 worker 进程 | `pnpm worker:preview` |
+| 预览 worker 不消费 | 没起 worker 进程 | 确认 `pnpm dev` 含 preview 子进程，或单独 `pnpm worker:preview` |
 | Docker 迁移失败 | DB 未 ready | depends_on + healthcheck |
 
 ---
