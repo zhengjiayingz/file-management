@@ -732,9 +732,15 @@ export const previewFile = async (req: AuthRequest, res: Response): Promise<void
     // 确保跨域 iframe 可嵌入（与 createApp helmet frame-ancestors 一致）
     res.removeHeader('X-Frame-Options');
     if (pdfPhase === 'partial') {
-      res.setHeader('Cache-Control', 'private, no-cache');
+      // 快览 PDF 别进浏览器磁盘缓存，减少一直钉在 25 页的概率。
+      res.setHeader('Cache-Control', 'private, no-store');
     } else {
+      // 24 小时内可直接用强缓存，少打服务器
       res.setHeader('Cache-Control', 'public, max-age=86400');
+       // 全文可缓存，且标识是 full，不是快览
+       // 若之前缓存的是 partial（理想上 partial 已 no-store，不应长期留着）
+       // 若带的是旧 ETag，与新的 "hash-full" 不一致 → 200 + 新 PDF，而不是错误 304
+      res.setHeader('ETag', `"${userFile.storage.fileHash}-full"`);
     }
     res.sendFile(path.resolve(pdfPath));
   } catch (error: any) {
