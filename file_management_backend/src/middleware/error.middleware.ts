@@ -3,7 +3,7 @@ import { Request, Response, NextFunction } from 'express';
 /**
  * 全局错误处理中间件
  */
-export const errorHandler = (err: any, req: Request, res: Response, next: NextFunction): void => {
+export const errorHandler = (err: any, req: Request, res: Response, _next: NextFunction): void => {
   // console.error('Error:', err);
   req.log?.error({err},'未处理异常')
 

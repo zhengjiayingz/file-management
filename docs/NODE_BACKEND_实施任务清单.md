@@ -342,24 +342,24 @@ io.adapter(createAdapter(pubClient, subClient));
 
 ### 任务 5.4 — 任务状态（可选但推荐）
 
-- [ ] `GET /api/files/:id/preview-status` 或在现有预览接口里带 `jobState: waiting|active|completed|failed`
-- [ ] 读 BullMQ `getJob(fileHash)` 状态
+- [x] `GET /api/files/:id/preview-status` 或在现有预览接口里带 `jobState: waiting|active|completed|failed`
+- [x] 读 BullMQ `getJob(fileHash)` 状态
 
 ### 任务 5.5 — PPT 快览→全文预览缓存（必做，约 1 天）
 
 > **用户故事**：全文 PDF 已在磁盘就绪后，用户普通刷新或「新标签打开」应看到全文，而不是浏览器仍显示 25 页快览。  
 > **需求出处**：[REQUIREMENTS.md](./REQUIREMENTS.md) §2(17)「待完成增强」、[UNFINISHED_REQUIREMENTS.md](./UNFINISHED_REQUIREMENTS.md) §2(17-a)。
 
-- [ ] **后端** `query.controller.ts` `previewFile`：`phase === 'partial'` 时 `Cache-Control: no-store`（替换仅 `no-cache`）；`phase === 'full'` 时避免与 partial 共用 ETag 导致 **304 仍返回快览体**（如 `res.set('ETag', \`"${fileHash}-${pdfPhase}"\`)` 或预览路由禁用 304）
-- [ ] **前端** `OfficePreviewDialog`：「新标签页打开」URL 与 iframe 一致，在 `phase === 'full'` 或 `iframeCacheBust` 变化时附带 `&_t=` 参数
-- [ ] **验收**：大 PPT 快览出现后等待全文落盘 → **不按 Ctrl+Shift+R**，仅 F5 或再次「新标签打开」→ 页数超过 `PPT_PREVIEW_FIRST_SLIDES`；DevTools 中 `/preview` 响应头 `X-Preview-Pdf-Phase: full`
+- [x] **后端** `query.controller.ts` `previewFile`：`phase === 'partial'` 时 `Cache-Control: no-store`（替换仅 `no-cache`）；`phase === 'full'` 时避免与 partial 共用 ETag 导致 **304 仍返回快览体**（如 `res.set('ETag', \`"${fileHash}-${pdfPhase}"\`)` 或预览路由禁用 304）
+- [x] **前端** `OfficePreviewDialog`：「新标签页打开」URL 与 iframe 一致，在 `phase === 'full'` 或 `iframeCacheBust` 变化时附带 `&_t=` 参数
+- [x] **验收**：大 PPT 快览出现后等待全文落盘 → **不按 Ctrl+Shift+R**，仅 F5 或再次「新标签打开」→ 页数超过 `PPT_PREVIEW_FIRST_SLIDES`；DevTools 中 `/preview` 响应头 `X-Preview-Pdf-Phase: full`
 
 **阶段五完成标准**
 
 - [ ] 上传一个 .pptx，触发预览，**关 API 只留 worker** 仍能继续转（或反过来验证队列持久）  
 - [ ] API 进程重启后，Redis 里 waiting 的 job 仍被执行  
 - [ ] 面试能讲：为何不用内存队列、失败重试 3 次  
-- [ ] **任务 5.5**：全文就绪后无需硬刷新即可看到超过快览页数（见上）
+- [x] **任务 5.5**：全文就绪后无需硬刷新即可看到超过快览页数（见上）
 
 **不要在本阶段做**：换 OSS；与预览无关的大改 UI。
 

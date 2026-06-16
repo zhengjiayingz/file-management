@@ -689,16 +689,16 @@ export const previewFile = async (req: AuthRequest, res: Response): Promise<void
     const physicalPath = resolveStorageFilePath(userFile.storage.filePath);
 
     // 检查是否为支持的 Office 文件类型
-    const { isOfficeFile, convertToPdf, checkLibreOfficeInstallation } = await import('../../services/preview.service.js');
+    const { isOfficeFile, convertToPdf, checkLibreOfficeInstallation, isPreviewQueueAvailable } = await import('../../services/preview.service.js');
 
     if (!isOfficeFile(userFile.fileName)) {
       res.status(400).json({ success: false, message: '该文件类型不支持 Office 预览' });
       return;
     }
 
-    // 检查 LibreOffice 是否安装
+    // 队列可用时由 Worker 转码，API 容器无需本机 LibreOffice
     const installation = checkLibreOfficeInstallation();
-    if (!installation.installed) {
+    if (!installation.installed && !isPreviewQueueAvailable()) {
       res.status(500).json({
         success: false,
         message: 'LibreOffice 未安装，无法进行文档预览。请联系管理员安装 LibreOffice。'

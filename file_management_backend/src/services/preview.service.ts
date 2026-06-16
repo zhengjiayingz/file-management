@@ -677,6 +677,8 @@ export const convertToPdf = async (
   );
 };
 
+export { isPreviewQueueAvailable } from '../queues/preview.queue.js';
+
 export const checkLibreOfficeInstallation = (): { installed: boolean; path: string | null } => {
   const p = findSofficePath();
   return { installed: p !== null, path: p };

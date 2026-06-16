@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router,type Router as RouterType } from 'express';
 import { authenticate } from '../middleware/auth.middleware.js';
 import {
   applyVipUpgrade,
@@ -11,7 +11,7 @@ import {
   getVipTierComparisonConfig
 } from '../controllers/vip.controller.js';
 
-const router = Router();
+const router: RouterType = Router();
 
 router.get('/tier-config', authenticate, getVipTierComparisonConfig);
 

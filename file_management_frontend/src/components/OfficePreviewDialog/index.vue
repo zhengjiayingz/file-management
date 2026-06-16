@@ -261,11 +261,26 @@ const loadingHintText = computed(() => {
 /** 换稿时 bump，配合 PDF.js 重新拉流 */
 const pdfCacheBust = ref(0)
 
+/** 5.5：新标签 / 预览 URL 的缓存破坏 token（与弹窗内 PdfJsViewer 共用） */
+const previewCacheToken = computed(() => {
+    if (pdfCacheBust.value) return String(pdfCacheBust.value)
+    if (previewPhase.value === 'full') return 'full'
+    if (
+        previewPhase.value === 'partial' &&
+        availableSlides.value != null &&
+        availableSlides.value > firstSlideCount.value
+    ) {
+        return `partial-${availableSlides.value}`
+    }
+    return ''
+})
+
 const previewUrl = computed(() => {
     if (!props.fileId) return ''
     const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
     const token = authStore.token || ''
-    const bust = pdfCacheBust.value ? `&_t=${pdfCacheBust.value}` : ''
+    const cacheToken = previewCacheToken.value
+    const bust = cacheToken ? `&_t=${encodeURIComponent(cacheToken)}` : ''
     return `${API_BASE_URL}/api/files/${props.fileId}/preview?token=${encodeURIComponent(token)}${bust}`
 })
 
