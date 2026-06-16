@@ -338,7 +338,7 @@ io.adapter(createAdapter(pubClient, subClient));
 
 - [x] `package.json` 增加 `"worker:preview": "tsx src/workers/preview.worker.ts"`
 - [x] 开发：`pnpm dev` 经 `concurrently` 同时起 `dev:api` + `worker:preview`（单终端）；可单独 `pnpm dev:api` / `pnpm worker:preview`
-- [ ] 生产（**阶段六**）：compose 里 **`worker` 独立服务**，与 `api` 同镜像、不同 `command`（从 dev 的同进程合并中拆出）
+- [x] 生产（**阶段六**）：compose 里 **`worker` 独立服务**，与 `api` 同镜像、不同 `command`（从 dev 的同进程合并中拆出）
 
 ### 任务 5.4 — 任务状态（可选但推荐）
 
@@ -356,9 +356,9 @@ io.adapter(createAdapter(pubClient, subClient));
 
 **阶段五完成标准**
 
-- [ ] 上传一个 .pptx，触发预览，**关 API 只留 worker** 仍能继续转（或反过来验证队列持久）  
-- [ ] API 进程重启后，Redis 里 waiting 的 job 仍被执行  
-- [ ] 面试能讲：为何不用内存队列、失败重试 3 次  
+- [x] 上传一个 .pptx，触发预览，**关 API 只留 worker** 仍能继续转（或反过来验证队列持久）  
+- [x] API 进程重启后，Redis 里 waiting 的 job 仍被执行  
+- [x] 面试能讲：为何不用内存队列、失败重试 3 次  
 - [x] **任务 5.5**：全文就绪后无需硬刷新即可看到超过快览页数（见上）
 
 **不要在本阶段做**：换 OSS；与预览无关的大改 UI。
@@ -371,27 +371,27 @@ io.adapter(createAdapter(pubClient, subClient));
 
 ### 任务 6.1 — Dockerfile
 
-- [ ] 多阶段：stage1 `pnpm install && pnpm build`，stage2 只拷贝 `dist`、`node_modules`（production）、`prisma`
-- [ ] 注意：预览依赖 LibreOffice 则镜像很大——**CI 镜像可不装 LibreOffice**，compose 里 api 服务注释「预览需本地 LibreOffice 或 worker 扩展镜像」
+- [x] 多阶段：stage1 `pnpm install && pnpm build`，stage2 只拷贝 `dist`、`node_modules`（production）、`prisma`
+- [x] 注意：预览依赖 LibreOffice 则镜像很大——**CI 镜像可不装 LibreOffice**，compose 里 api 服务注释「预览需本地 LibreOffice 或 worker 扩展镜像」
 
 ### 任务 6.2 — docker-compose.yml
 
-- [ ] 服务：`mysql`、`redis`、`api`、**`worker`（必做，非可选）**
-- [ ] **`worker` 与 `api` 分容器**：同镜像，`api` → `node dist/app.js`，`worker` → `node dist/workers/preview.worker.js`（或 `pnpm worker:preview` 等价命令）；与阶段五 dev 里 `concurrently` 合并启动**拆开**
-- [ ] 环境变量：`DATABASE_URL`、`REDIS_URL`、`JWT_SECRET`、`CORS_ORIGIN`
-- [ ] 卷：`uploads`、`previews`（或命名卷）——**api 与 worker 须共享**，否则 Worker 写的 PDF API 读不到
-- [ ] `api` 依赖 mysql healthy；entrypoint：`prisma migrate deploy && node dist/app.js`
-- [ ] `worker` 依赖 redis healthy；镜像需含 LibreOffice（或专用 worker 镜像）
+- [x] 服务：`mysql`、`redis`、`api`、**`worker`（必做，非可选）**	注：MySQL现在走宿主机
+- [x] **`worker` 与 `api` 分容器**：同镜像，`api` → `node dist/app.js`，`worker` → `node dist/workers/preview.worker.js`（或 `pnpm worker:preview` 等价命令）；与阶段五 dev 里 `concurrently` 合并启动**拆开**
+- [x] 环境变量：`DATABASE_URL`、`REDIS_URL`、`JWT_SECRET`、`CORS_ORIGIN`
+- [x] 卷：`uploads`、`previews`（或命名卷）——**api 与 worker 须共享**，否则 Worker 写的 PDF API 读不到
+- [x] `api` 依赖 mysql healthy；entrypoint：`prisma migrate deploy && node dist/app.js`
+- [x] `worker` 依赖 redis healthy；镜像需含 LibreOffice（或专用 worker 镜像）
 
 ### 任务 6.3 — 文档
 
-- [ ] 更新 `file_management_backend/README.md`：Docker 章节、常见问题（端口、权限、迁移失败）
-- [ ] **重写** `PROJECT_STRUCTURE.md` 过时内容（内存存储、.js 命名改为 .ts + Prisma）
+- [x] 更新 `file_management_backend/README.md`：Docker 章节、常见问题（端口、权限、迁移失败）
+- [x] **重写** `PROJECT_STRUCTURE.md` 过时内容（内存存储、.js 命名改为 .ts + Prisma）
 
 **阶段六完成标准**
 
-- [ ] 新机器 10 分钟内：`docker compose up -d` → `curl localhost:3000/health` ok  
-- [ ] Swagger `http://localhost:3000/api-docs` 可打开  
+- [x] 新机器 10 分钟内：`docker compose up -d` → `curl localhost:3000/health` ok（需 MySQL 可达，见 README FAQ）
+- [x] Swagger `http://localhost:3000/api-docs` 可打开  
 
 ---
 

@@ -1,140 +1,201 @@
 # 项目结构说明
 
-## 📂 目录组织
+> 后端为 **TypeScript + Express + Prisma（MySQL）**，数据持久化在数据库，文件在 `uploads/` / `previews/`。  
+> 阶段六起支持 **Docker Compose**（`api` + `worker` + `redis`）与本机 `pnpm dev` 两种运行方式。
 
-### `/src` - 源代码目录
+## 📂 根目录
 
-#### `/src/controllers` - 控制器层
-负责处理业务逻辑，接收请求并返回响应。
+```
+file_management_backend/
+├── prisma/
+│   ├── schema.prisma          # 数据模型（User、UserFile、FileStorage 等）
+│   └── migrations/            # 数据库迁移 SQL
+├── src/                       # TypeScript 源码（编译到 dist/）
+├── uploads/                   # 用户上传文件（运行时生成）
+├── previews/                  # Office 预览 PDF 缓存（运行时生成）
+├── test/                      # Vitest 集成测试
+├── scripts/                   # 维护脚本
+├── Dockerfile                 # 多阶段镜像：target=api | worker
+├── docker-compose.yml         # redis + api + worker（MySQL 可连宿主机）
+├── docker-compose.dev.yml     # 仅 Redis，配合本机 pnpm dev
+├── .env / .env.example        # 环境变量
+├── package.json
+├── tsconfig.json
+└── README.md
+```
 
-- `auth.controller.js` - 认证相关（登录、注册）
-- `file.controller.js` - 文件管理（上传、下载、删除）
-- `user.controller.js` - 用户管理（获取、更新资料）
+## 📂 `/src` 源代码
 
-#### `/src/middleware` - 中间件层
-处理请求前的预处理逻辑。
+### 入口与应用组装
 
-- `auth.middleware.js` - JWT 认证中间件
-- `error.middleware.js` - 全局错误处理
-- `notFound.middleware.js` - 404 处理
-- `upload.middleware.js` - 文件上传配置（Multer）
+| 文件 | 说明 |
+|------|------|
+| `app.ts` | 进程入口：连 Redis、创建 HTTP 服务、挂载 Socket.IO、启动定时任务 |
+| `createApp.ts` | Express 应用：中间件、路由、Helmet、CORS、Swagger |
+| `loadEnv.ts` | 尽早加载 `.env`（ESM 下须在其它模块读 env 之前） |
 
-#### `/src/models` - 数据模型层
-定义数据结构（当前使用内存存储）。
+### `/src/controllers` — 控制器层
 
-- `user.model.js` - 用户数据模型
-- `file.model.js` - 文件数据模型
+处理 HTTP 请求，调用 Service / Prisma，返回 JSON 或文件流。
 
-#### `/src/routes` - 路由层
-定义 API 端点和路由规则。
+| 文件 / 目录 | 说明 |
+|-------------|------|
+| `auth.controller.ts` | 注册、登录、刷新 Token、会话、改密、TOTP |
+| `user.controller.ts` | 用户资料、头像 |
+| `user-preference.controller.ts` | 用户偏好设置 |
+| `admin.controller.ts` | 管理员：用户、系统设置、踢会话等 |
+| `vip.controller.ts` | VIP 升级申请与审核 |
+| `friendship.controller.ts` | 好友关系 |
+| `message.controller.ts` | 站内消息 |
+| `share.controller.ts` | 链接分享、访问计数 |
+| `log.controller.ts` | 操作日志查询 |
+| `file/upload.controller.ts` | 普通上传、分片、秒传、合并 |
+| `file/query.controller.ts` | 列表、下载、预览、搜索 |
+| `file/manage.controller.ts` | 重命名、移动、回收站 |
+| `file/version.controller.ts` | 文件历史版本 |
+| `file/fileTag.controller.ts` | 文件标签 |
+| `file/archiveExtract.controller.ts` | 压缩包解压入库 |
 
-- `auth.routes.js` - 认证路由
-- `file.routes.js` - 文件路由
-- `user.routes.js` - 用户路由
+### `/src/routes` — 路由层
 
-#### `/src/utils` - 工具函数
-通用的辅助函数。
+将 URL 映射到控制器；多数路由经 `auth.middleware` 鉴权。
 
-- `response.util.js` - 统一响应格式
+`auth.routes.ts`、`user.routes.ts`、`file.routes.ts`、`admin.routes.ts`、`share.routes.ts`、`message.routes.ts`、`friendship.routes.ts`、`vip.routes.ts`、`log.routes.ts`、`user-preference.routes.ts`
 
-#### `/src/app.js` - 应用入口
-Express 应用的主文件，配置中间件和路由。
+### `/src/middleware` — 中间件
 
-### `/uploads` - 文件上传目录
-存储用户上传的文件。
+| 文件 | 说明 |
+|------|------|
+| `auth.middleware.ts` | JWT 校验、`req.user` |
+| `admin.middleware.ts` | 管理员权限 |
+| `mustChangePassword.middleware.ts` | 强制改密拦截 |
+| `rateLimit.middleware.ts` | 登录 / API 限流（Redis，降级内存） |
+| `upload.middleware.ts` / `avatarUpload.middleware.ts` | Multer 上传 |
+| `error.middleware.ts` | 全局错误处理 |
+| `notFound.middleware.ts` | 404 |
+
+### `/src/services` — 业务服务层
+
+可复用逻辑，供控制器与 Worker 调用。
+
+| 文件 | 说明 |
+|------|------|
+| `preview.service.ts` | Office→PDF、BullMQ 入队、LibreOffice 调用 |
+| `mergeUpload.service.ts` | 分片合并、秒传、本地文件登记 |
+| `logger.service.ts` | 操作日志写入 |
+| `passwordPolicy.service.ts` | 密码强度策略 |
+| `systemSettings.service.ts` | 系统配置 |
+| `tagLimit.service.ts` | 标签数量限制 |
+| `adminFriend.service.ts` | 管理员默认好友 |
+
+### `/src/queues` + `/src/workers` — 预览队列
+
+| 文件 | 说明 |
+|------|------|
+| `queues/preview.queue.ts` | BullMQ 队列 `preview-convert`、入队与等待完成 |
+| `workers/preview.worker.ts` | 消费转码任务（dev 与本机 worker 容器共用逻辑） |
+
+开发时 `pnpm dev` 用 `concurrently` 同进程起 API + Worker；Docker 下 **api / worker 分容器**。
+
+### `/src/lib` — 基础设施
+
+| 文件 | 说明 |
+|------|------|
+| `prisma.ts` | Prisma Client 单例 |
+| `redis.ts` | ioredis 连接 |
+| `logger.ts` | pino 日志 |
+| `healthCheck.ts` | `/health` MySQL + Redis 探测 |
+
+### 其它目录
+
+| 目录 | 说明 |
+|------|------|
+| `config/swagger.config.ts` | OpenAPI / Swagger UI |
+| `realtime/socket.ts` | Socket.IO + Redis Adapter |
+| `jobs/cleanup.job.ts` | 定时清理无引用物理文件 |
+| `types/` | 共享 TypeScript 类型 |
+| `utils/` | 路径、文件、邮件等工具函数 |
+
+## 🗄️ 数据层（Prisma + MySQL）
+
+不再使用内存 `models/`。实体定义在 `prisma/schema.prisma`，通过 `@prisma/client` 访问。
+
+主要模型：`User`、`UserFile`、`FileStorage`、`UploadChunk`、`FileShare`、`Message`、`Friendship`、`OperationLog`、`LoginLog`、`RefreshToken`、`SystemSettings` 等。
+
+迁移命令：
+
+```bash
+pnpm exec prisma migrate dev    # 开发：生成并应用迁移
+pnpm exec prisma migrate deploy # 生产 / Docker 启动时应用
+pnpm prisma:studio              # 可视化管理数据
+```
 
 ## 🔄 请求流程
 
 ```
-客户端请求
-    ↓
-路由 (routes)
-    ↓
-中间件 (middleware)
-    ↓
-控制器 (controllers)
-    ↓
-模型 (models)
-    ↓
-响应返回客户端
+客户端
+  ↓
+routes（路由）
+  ↓
+middleware（鉴权、限流、上传解析）
+  ↓
+controllers（参数校验、编排）
+  ↓
+services / Prisma（业务与持久化）
+  ↓
+uploads/、previews/ 或 Redis 队列
+  ↓
+JSON / 文件流 / WebSocket 事件
 ```
 
-## 🎯 设计模式
+**Office 预览**：`query.controller` → `preview.service` 入队 → `preview.worker` 转 PDF → 写入 `previews/` → API 读文件返回。
 
-### MVC 架构
-- **Model (模型)**: 数据层，负责数据存储和操作
-- **View (视图)**: 由前端 Vue 项目负责
-- **Controller (控制器)**: 业务逻辑层，处理请求和响应
+## 🐳 Docker 相关文件
 
-### RESTful API 设计
-- GET - 获取资源
-- POST - 创建资源
-- PUT - 更新资源
-- DELETE - 删除资源
+| 文件 | 说明 |
+|------|------|
+| `Dockerfile` | `deps` → `build` → `runtime-base`；`api` 无 LibreOffice；`worker` 含 LibreOffice |
+| `docker-compose.yml` | `redis` + `api` + `worker`；`uploads`/`previews` bind mount |
+| `docker-compose.dev.yml` | 仅 `redis:6379`，供本机 `pnpm dev` |
+| `.dockerignore` | 排除 `node_modules`、`uploads` 等 |
+
+详见 [README.md](./README.md) 中「Docker 与开发启动指南」。
 
 ## 📋 代码规范
 
 ### 文件命名
-- 控制器: `*.controller.js`
-- 路由: `*.routes.js`
-- 中间件: `*.middleware.js`
-- 模型: `*.model.js`
-- 工具: `*.util.js`
 
-### 函数命名
-- 使用驼峰命名法
-- 控制器函数使用动词开头（get, create, update, delete）
-- 中间件函数使用名词或形容词
+- 控制器：`*.controller.ts`
+- 路由：`*.routes.ts`
+- 中间件：`*.middleware.ts`
+- 服务：`*.service.ts`
+- 工具：`*.utils.ts` / `*.util.ts`
+
+编译产物在 `dist/`，结构与 `src/` 对应（`.js` + source map）。
 
 ### 响应格式
-统一的 JSON 响应格式：
 
-```javascript
-// 成功响应
-{
-  "success": true,
-  "message": "操作成功",
-  "data": { ... }
-}
+```typescript
+// 成功
+{ "success": true, "message": "...", "data": { ... } }
 
-// 错误响应
-{
-  "success": false,
-  "message": "错误信息",
-  "errors": { ... }  // 可选
-}
+// 失败
+{ "success": false, "message": "...", "errors": { ... } }  // errors 可选
 ```
 
-## 🔐 安全措施
+## 🔐 安全与横切能力
 
-1. **JWT 认证**: 使用 JWT Token 进行身份验证
-2. **密码加密**: 使用 bcrypt 加密存储密码
-3. **CORS 配置**: 限制跨域访问来源
-4. **文件类型验证**: 限制上传文件类型
-5. **文件大小限制**: 防止大文件攻击
+- JWT（Access + Refresh）、`session_version` 强失效
+- 密码哈希、强度策略、TOTP、强制改密
+- Helmet、CORS、Redis 限流
+- 操作日志、登录日志
+- 上传类型与大小限制
 
-## 🚀 扩展建议
+## 🧪 测试
 
-### 数据库集成
-当前使用内存存储，建议集成：
-- **MySQL**: 关系型数据库
-- **MongoDB**: 文档型数据库
-- **PostgreSQL**: 高级关系型数据库
+`test/` 下为 Vitest 集成测试（`auth`、`file.upload`、`message` 等），使用 `test/helpers/` 造数。
 
-### 缓存系统
-- **Redis**: 用于 Session、Token 缓存
-
-### 文件存储
-- **本地存储**: 当前方案
-- **云存储**: OSS、S3、七牛云等
-
-### 日志系统
-- **Winston**: 日志记录
-- **Morgan**: HTTP 请求日志
-
-### API 文档
-- **Swagger**: 自动生成 API 文档
-
-### 测试
-- **Jest**: 单元测试
-- **Supertest**: API 测试
+```bash
+pnpm test
+pnpm test:watch
+```
