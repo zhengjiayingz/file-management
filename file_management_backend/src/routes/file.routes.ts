@@ -629,7 +629,35 @@ router.get('/:id/download', downloadFile);
  *       500:
  *         description: 转换失败或 LibreOffice 未安装
  */
+/**
+ * @swagger
+ * /api/files/{id}/preview-state:
+ *   get:
+ *     summary: 查询 Office 预览状态（磁盘阶段 + BullMQ 任务）
+ *     description: |
+ *       不触发 LibreOffice 转换。返回磁盘预览阶段（none/partial/full），
+ *       以及 BullMQ 队列中 partial/full 任务状态（waiting/active/completed/failed/missing）。
+ *     tags: [文件管理]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: token
+ *         schema:
+ *           type: string
+ *         description: 访问令牌（iframe 等无法带 Header 时使用）
+ *     responses:
+ *       200:
+ *         description: 预览状态
+ */
 router.get('/:id/preview-state', getOfficePreviewState);
+/** 与 preview-state 相同，任务 5.4 别名 */
+router.get('/:id/preview-status', getOfficePreviewState);
 router.get('/:id/preview', previewFile);
 
 // 大文本分块预览（UTF-8 按字节 offset 读取，避免整文件进浏览器）

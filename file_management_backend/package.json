@@ -16,7 +16,7 @@
     "backfill-friends": "tsx scripts/backfill-admin-friends.ts",
     "test": "vitest run",
     "test:watch": "vitest",
-    "worker:preview": "tsx src/workers/preview.worker.ts"
+    "worker:preview": "tsx watch src/workers/preview.worker.ts"
   },
   "keywords": [
     "express",

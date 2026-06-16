@@ -5,11 +5,15 @@ import { promisify } from 'util';
 import { ensureDirectoryExists } from '../utils/file.utils.js';
 import {
   enqueuePreviewJob,
+  getPreviewJobInfo,
   getPreviewJobState,
+  getPreviewQueue,
   isPreviewQueueAvailable,
   waitPreviewJobFinished,
+  buildPreviewJobId,
   type PreviewConvertJobData,
   type PreviewConvertJobResult,
+  type PreviewJobInfo,
 } from '../queues/preview.queue.js';
 import { logger } from '../lib/logger.js';
 
@@ -52,6 +56,13 @@ const PPT_PREVIEW_FIRST_SLIDES = (() => {
   const n = parseInt(String(process.env.PPT_PREVIEW_FIRST_SLIDES || '25'), 10);
   if (Number.isFinite(n) && n >= 3 && n <= 200) return n;
   return 25;
+})();
+
+/** 快览分批扩展的上限（页数），默认 200 */
+const PPT_PREVIEW_MAX_SLIDES = (() => {
+  const n = parseInt(String(process.env.PPT_PREVIEW_MAX_SLIDES || '200'), 10);
+  if (Number.isFinite(n) && n >= PPT_PREVIEW_FIRST_SLIDES && n <= 500) return n;
+  return 200;
 })();
 
 /** 仅前 N 页转换：超时单独放宽但不宜过长 */
@@ -98,6 +109,58 @@ const getPreviewCachePath = (fileHash: string): string =>
 const getPreviewPartialPath = (fileHash: string): string =>
   path.join(PREVIEWS_DIR, `${fileHash}-preview-partial.pdf`);
 
+const getPreviewPartialMetaPath = (fileHash: string): string =>
+  path.join(PREVIEWS_DIR, `${fileHash}-preview-partial.meta.json`);
+
+type PartialPreviewMeta = {
+  availableSlides: number;
+  reachedEnd: boolean;
+  updatedAt: string;
+};
+
+function readPartialMeta(fileHash: string): PartialPreviewMeta | null {
+  const metaPath = getPreviewPartialMetaPath(fileHash);
+  if (!fs.existsSync(metaPath)) return null;
+  try {
+    const raw = JSON.parse(fs.readFileSync(metaPath, 'utf8')) as PartialPreviewMeta;
+    if (typeof raw.availableSlides === 'number' && raw.availableSlides > 0) return raw;
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+function writePartialMeta(fileHash: string, meta: PartialPreviewMeta): void {
+  ensureDirectoryExists(PREVIEWS_DIR);
+  fs.writeFileSync(getPreviewPartialMetaPath(fileHash), JSON.stringify(meta), 'utf8');
+}
+
+/** 从 PDF 粗略统计页数（用于判断下一批是否还有新页） */
+function countPdfPages(pdfPath: string): number {
+  try {
+    const text = fs.readFileSync(pdfPath).toString('latin1');
+    const countMatch = text.match(/\/Type\s*\/Pages[\s\S]*?\/Count\s+(\d+)/);
+    if (countMatch) {
+      const n = parseInt(countMatch[1], 10);
+      if (Number.isFinite(n) && n > 0) return n;
+    }
+    const pageMatches = text.match(/\/Type\s*\/Page(?![s])/g);
+    return pageMatches?.length ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
+/** 当前快览 PDF 已可用的幻灯片页数（供 preview-state 与前端分批刷新） */
+export function getAvailablePartialSlides(fileHash: string): number | null {
+  const partialPath = getPreviewPartialPath(fileHash);
+  if (!fs.existsSync(partialPath)) return null;
+  const meta = readPartialMeta(fileHash);
+  if (meta) return meta.availableSlides;
+  const pages = countPdfPages(partialPath);
+  return pages > 0 ? pages : PPT_PREVIEW_FIRST_SLIDES;
+}
+
 export const getPreviewCache = (fileHash: string): string | null => {
   const cachePath = getPreviewCachePath(fileHash);
   if (fs.existsSync(cachePath)) return cachePath;
@@ -118,6 +181,46 @@ export function getPptPreviewFirstSlideCount(): number {
   return PPT_PREVIEW_FIRST_SLIDES;
 }
 
+export type PreviewQueueStatus = {
+  queueAvailable: boolean;
+  nextBatchTarget: number | null;
+  jobs: {
+    partial: PreviewJobInfo;
+    partialMore: PreviewJobInfo;
+    full: PreviewJobInfo;
+  };
+};
+
+function getNextPartialBatchTarget(fileHash: string): number | null {
+  const meta = readPartialMeta(fileHash);
+  if (meta?.reachedEnd) return null;
+  const currentSlides = meta?.availableSlides ?? getAvailablePartialSlides(fileHash) ?? PPT_PREVIEW_FIRST_SLIDES;
+  const nextTarget = currentSlides + PPT_PREVIEW_FIRST_SLIDES;
+  if (nextTarget > PPT_PREVIEW_MAX_SLIDES) return null;
+  return nextTarget;
+}
+
+/** 读 BullMQ 中 partial / partialMore / full 任务状态 */
+export async function getPreviewQueueStatus(fileHash: string): Promise<PreviewQueueStatus> {
+  const missing: PreviewJobInfo = { state: 'missing' };
+  if (!isPreviewQueueAvailable()) {
+    return {
+      queueAvailable: false,
+      nextBatchTarget: null,
+      jobs: { partial: missing, partialMore: missing, full: missing },
+    };
+  }
+  const nextBatchTarget = getNextPartialBatchTarget(fileHash);
+  const [partial, full, partialMore] = await Promise.all([
+    getPreviewJobInfo(fileHash, 'impress-partial'),
+    getPreviewJobInfo(fileHash, 'full'),
+    nextBatchTarget != null
+      ? getPreviewJobInfo(fileHash, 'impress-partial-more', nextBatchTarget)
+      : Promise.resolve(missing),
+  ]);
+  return { queueAvailable: true, nextBatchTarget, jobs: { partial, partialMore, full } };
+}
+
 const cleanupStaleProcesses = (): Promise<void> => {
   return new Promise((resolve) => {
     exec('taskkill /F /IM soffice.bin /T 2>NUL', { windowsHide: true }, () => resolve());
@@ -127,9 +230,9 @@ const cleanupStaleProcesses = (): Promise<void> => {
 /**
  * 使用 impress_pdf_Export 的 PageRange，只导出前 n 张幻灯片为 PDF
  */
-const buildImpressPartialConvertToArg = (firstSlides: number): string => {
+const buildImpressPartialConvertToArg = (slideCount: number): string => {
   const filterObj = {
-    PageRange: { type: 'string', value: `1-${firstSlides}` },
+    PageRange: { type: 'string', value: `1-${slideCount}` },
   };
   return `pdf:impress_pdf_Export:${JSON.stringify(filterObj)}`;
 };
@@ -199,6 +302,14 @@ export const doFullConvert = async (sourceFilePath: string, fileHash: string): P
         // ignore
       }
     }
+    const metaPath = getPreviewPartialMetaPath(fileHash);
+    if (fs.existsSync(metaPath)) {
+      try {
+        fs.unlinkSync(metaPath);
+      } catch {
+        // ignore
+      }
+    }
     return finalPath;
   } catch (error) {
     if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true });
@@ -207,9 +318,14 @@ export const doFullConvert = async (sourceFilePath: string, fileHash: string): P
 };
 
 /**
- * 仅前 N 页（Impress）
+ * 仅前 N 页（Impress）；allowOverwrite 为 true 时用于分批扩展快览
  */
-export const doImpressPartial = async (sourceFilePath: string, fileHash: string): Promise<string> => {
+export const doImpressPartial = async (
+  sourceFilePath: string,
+  fileHash: string,
+  slideCount: number = PPT_PREVIEW_FIRST_SLIDES,
+  allowOverwrite = false,
+): Promise<string> => {
   const sofficePath = findSofficePath();
   if (!sofficePath) {
     throw new Error('LibreOffice 未安装或未找到。请安装 LibreOffice 并确保路径正确。');
@@ -218,13 +334,31 @@ export const doImpressPartial = async (sourceFilePath: string, fileHash: string)
   if (!fs.existsSync(sourceFilePath)) throw new Error('源文件不存在');
 
   const outPath = getPreviewPartialPath(fileHash);
-  if (fs.existsSync(outPath)) return outPath;
+  const meta = readPartialMeta(fileHash);
+  if (!allowOverwrite && fs.existsSync(outPath)) {
+    if (!meta) {
+      writePartialMeta(fileHash, {
+        availableSlides: countPdfPages(outPath) || PPT_PREVIEW_FIRST_SLIDES,
+        reachedEnd: false,
+        updatedAt: new Date().toISOString(),
+      });
+    }
+    return outPath;
+  }
+  if (allowOverwrite && meta && meta.availableSlides >= slideCount && fs.existsSync(outPath)) {
+    return outPath;
+  }
 
   ensureDirectoryExists(PREVIEWS_DIR);
   const tempDir = path.join(PREVIEWS_DIR, `temp-${fileHash}-partial-${Date.now()}`);
   ensureDirectoryExists(tempDir);
   const sourceBase = path.basename(sourceFilePath, path.extname(sourceFilePath));
-  const convertTo = buildImpressPartialConvertToArg(PPT_PREVIEW_FIRST_SLIDES);
+  const convertTo = buildImpressPartialConvertToArg(slideCount);
+  const extraSlides = Math.max(0, slideCount - PPT_PREVIEW_FIRST_SLIDES);
+  const timeoutMs = Math.min(
+    CONVERSION_TIMEOUT_MAX_MS,
+    PPT_PARTIAL_TIMEOUT_MS + extraSlides * 4_000,
+  );
 
   try {
     await execFileAsync(
@@ -239,12 +373,19 @@ export const doImpressPartial = async (sourceFilePath: string, fileHash: string)
         tempDir,
         sourceFilePath,
       ],
-      { timeout: PPT_PARTIAL_TIMEOUT_MS, windowsHide: true, maxBuffer: 10 * 1024 * 1024 }
+      { timeout: timeoutMs, windowsHide: true, maxBuffer: 10 * 1024 * 1024 }
     );
     const gen = findPdfInDir(tempDir, sourceBase);
     if (!gen) throw new Error('LibreOffice 未生成部分页 PDF（PageRange 可能不受支持）');
     fs.renameSync(gen, outPath);
     if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true });
+
+    const availableSlides = countPdfPages(outPath) || Math.min(slideCount, PPT_PREVIEW_FIRST_SLIDES);
+    writePartialMeta(fileHash, {
+      availableSlides,
+      reachedEnd: false,
+      updatedAt: new Date().toISOString(),
+    });
     return outPath;
   } catch (error) {
     if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true });
@@ -259,8 +400,21 @@ function assertPreviewQueueReady(): void {
 }
 
 /**
- * 在已有 partial 或 partial 刚生成后，将「全文转 PDF」排入 BullMQ，立即入队
+ * 快览分批未完成前，移除排队中的全文任务，避免占用 Worker 导致下一批迟迟不转
  */
+async function deferWaitingFullJob(fileHash: string): Promise<void> {
+  const state = await getPreviewJobState(fileHash, 'full');
+  if (state !== 'waiting' && state !== 'delayed' && state !== 'prioritized') return;
+  try {
+    const job = await getPreviewQueue().getJob(buildPreviewJobId(fileHash, 'full'));
+    if (job) await job.remove();
+    logger.info({ fileHash }, '[Preview] 快览扩展中，已推迟排队中的全文任务');
+  } catch (err) {
+    logger.warn({ err, fileHash }, '[Preview] 推迟全文任务失败');
+  }
+}
+
+/** 快览已触顶或达到上限后，再排入后台全文转 PDF */
 async function scheduleFullPptInBackground(fileHash: string, sourceFilePath: string): Promise<void> {
   if (fs.existsSync(getPreviewCachePath(fileHash))) return;
 
@@ -281,8 +435,98 @@ async function scheduleFullPptInBackground(fileHash: string, sourceFilePath: str
   }
 }
 
+async function tryScheduleFullAfterPartialExpansion(
+  fileHash: string,
+  sourceFilePath: string,
+): Promise<void> {
+  const meta = readPartialMeta(fileHash);
+  if (!meta?.reachedEnd && (meta?.availableSlides ?? 0) < PPT_PREVIEW_MAX_SLIDES) {
+    return;
+  }
+  await scheduleFullPptInBackground(fileHash, sourceFilePath);
+}
+
+/** 快览分批未完成时，后台全文任务应让路 */
+export function shouldDeferFullConversion(fileHash: string): boolean {
+  if (fs.existsSync(getPreviewCachePath(fileHash))) return false;
+  const partialPath = getPreviewPartialPath(fileHash);
+  if (!fs.existsSync(partialPath)) return false;
+  const meta = readPartialMeta(fileHash);
+  if (meta?.reachedEnd) return false;
+  const available = meta?.availableSlides ?? countPdfPages(partialPath);
+  return available > 0 && available < PPT_PREVIEW_MAX_SLIDES;
+}
+
 /**
- * BullMQ Worker 消费入口：执行 impress-partial / full 转码
+ * 在已有 partial 后，按批扩展快览（25 → 50 → 75 …），直到触顶或全文就绪
+ */
+async function scheduleNextPartialBatch(fileHash: string, sourceFilePath: string): Promise<void> {
+  if (fs.existsSync(getPreviewCachePath(fileHash))) return;
+
+  const partialPath = getPreviewPartialPath(fileHash);
+  if (!fs.existsSync(partialPath)) return;
+
+  let meta = readPartialMeta(fileHash);
+  if (!meta) {
+    const pages = countPdfPages(partialPath) || PPT_PREVIEW_FIRST_SLIDES;
+    meta = { availableSlides: pages, reachedEnd: false, updatedAt: new Date().toISOString() };
+    writePartialMeta(fileHash, meta);
+  }
+  if (meta.reachedEnd) {
+    await tryScheduleFullAfterPartialExpansion(fileHash, sourceFilePath);
+    return;
+  }
+
+  await deferWaitingFullJob(fileHash);
+
+  const nextTarget = meta.availableSlides + PPT_PREVIEW_FIRST_SLIDES;
+  if (nextTarget > PPT_PREVIEW_MAX_SLIDES) {
+    writePartialMeta(fileHash, { ...meta, reachedEnd: true, updatedAt: new Date().toISOString() });
+    await tryScheduleFullAfterPartialExpansion(fileHash, sourceFilePath);
+    return;
+  }
+
+  const state = await getPreviewJobState(fileHash, 'impress-partial-more', nextTarget);
+  if (state === 'waiting' || state === 'active' || state === 'delayed' || state === 'prioritized') {
+    return;
+  }
+
+  try {
+    await enqueuePreviewJob({
+      op: 'impress-partial-more',
+      fileHash,
+      sourceFilePath,
+      targetSlides: nextTarget,
+      isBackground: true,
+    });
+    logger.info({ fileHash, nextTarget }, '[Preview] 已排入下一批快览');
+  } catch (err) {
+    logger.warn({ err, fileHash, nextTarget }, '[Preview] 快览分批入队失败');
+  }
+}
+
+/** 供 preview-state 轮询时补排遗漏的分批任务 */
+export async function ensurePartialBatchScheduled(
+  fileHash: string,
+  sourceFilePath: string,
+): Promise<void> {
+  if (!isPreviewQueueAvailable()) return;
+  if (getPreviewFilePhase(fileHash) !== 'partial') return;
+  await scheduleNextPartialBatch(fileHash, sourceFilePath);
+}
+
+/**
+ * 在已有 partial 或 partial 刚生成后，将「全文转 PDF」排入 BullMQ — 仅快览扩展完成后
+ */
+async function scheduleFullPptInBackgroundIfReady(
+  fileHash: string,
+  sourceFilePath: string,
+): Promise<void> {
+  await tryScheduleFullAfterPartialExpansion(fileHash, sourceFilePath);
+}
+
+/**
+ * BullMQ Worker 消费入口：执行 impress-partial / impress-partial-more / full 转码
  */
 export async function processPreviewConvertJob(
   data: PreviewConvertJobData,
@@ -291,7 +535,7 @@ export async function processPreviewConvertJob(
     try {
       const p = await doImpressPartial(data.sourceFilePath, data.fileHash);
       if (!fs.existsSync(getPreviewCachePath(data.fileHash))) {
-        await scheduleFullPptInBackground(data.fileHash, data.sourceFilePath);
+        await scheduleNextPartialBatch(data.fileHash, data.sourceFilePath);
       }
       return { path: p, phase: 'partial' };
     } catch (partialErr) {
@@ -301,11 +545,56 @@ export async function processPreviewConvertJob(
     }
   }
 
-  const p = await doFullConvert(data.sourceFilePath, data.fileHash);
-  if (data.isBackground) {
-    logger.info({ fileHash: data.fileHash, path: p }, '[Preview] 后台全文 PDF 已就绪');
+  if (data.op === 'impress-partial-more') {
+    const targetSlides = data.targetSlides ?? PPT_PREVIEW_FIRST_SLIDES * 2;
+    const partialPath = getPreviewPartialPath(data.fileHash);
+    const prevMeta = readPartialMeta(data.fileHash);
+    const prevCount = prevMeta?.availableSlides ?? countPdfPages(partialPath);
+
+    if (fs.existsSync(getPreviewCachePath(data.fileHash)) || prevMeta?.reachedEnd) {
+      return { path: partialPath, phase: 'partial' };
+    }
+
+    try {
+      await doImpressPartial(data.sourceFilePath, data.fileHash, targetSlides, true);
+      const newCount = countPdfPages(partialPath) || prevCount;
+
+      if (newCount <= prevCount) {
+        writePartialMeta(data.fileHash, {
+          availableSlides: prevCount,
+          reachedEnd: true,
+          updatedAt: new Date().toISOString(),
+        });
+        logger.info({ fileHash: data.fileHash, availableSlides: prevCount }, '[Preview] 快览已触顶，等待全文 PDF');
+        await tryScheduleFullAfterPartialExpansion(data.fileHash, data.sourceFilePath);
+      } else {
+        writePartialMeta(data.fileHash, {
+          availableSlides: newCount,
+          reachedEnd: false,
+          updatedAt: new Date().toISOString(),
+        });
+        logger.info(
+          { fileHash: data.fileHash, availableSlides: newCount, targetSlides },
+          '[Preview] 快览分批扩展完成',
+        );
+        await scheduleNextPartialBatch(data.fileHash, data.sourceFilePath);
+      }
+      return { path: partialPath, phase: 'partial' };
+    } catch (err) {
+      logger.warn({ err, fileHash: data.fileHash, targetSlides }, '[Preview] 快览分批扩展失败');
+      throw err;
+    }
   }
-  return { path: p, phase: 'full' };
+
+  if (data.op === 'full') {
+    const p = await doFullConvert(data.sourceFilePath, data.fileHash);
+    if (data.isBackground) {
+      logger.info({ fileHash: data.fileHash, path: p }, '[Preview] 后台全文 PDF 已就绪');
+    }
+    return { path: p, phase: 'full' };
+  }
+
+  throw new Error(`未知预览操作: ${data.op}`);
 }
 // 入队完然后直接等待bullmq把当前任务跑完
 async function enqueueAndWait(
@@ -352,8 +641,9 @@ export const convertToPdf = async (
   if (isImpressFile(base)) { //  判断扩展名是否为 .ppt / .pptx / .odp,只有这类文件走「先 partial、后 full」策略；Word 等走后面的全文分支。
     const partP = getPreviewPartialPath(fileHash); //取前25页的转换缓存
     if (fs.existsSync(partP)) {   // 若 partial 已在磁盘上
-      await scheduleFullPptInBackground(fileHash, sourceFilePath); // ：把「全文转 PDF」丢进 BullMQ 后台队列
-      return { path: partP, phase: 'partial' }; // 立刻返回 partial 路径，前端可先预览前几页；全文完成后前端可轮询切换。
+      await scheduleNextPartialBatch(fileHash, sourceFilePath);
+      await scheduleFullPptInBackgroundIfReady(fileHash, sourceFilePath);
+      return { path: partP, phase: 'partial' };
     }
     // 分支 B：同一文件正在生成 partial
     const inFlight = partialInFlight.get(fileHash);

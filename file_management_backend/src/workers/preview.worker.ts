@@ -1,6 +1,6 @@
 import '../loadEnv.js'; // 加载 .env（含 REDIS_URL）
 
-import { Worker } from 'bullmq'; // Worker：BullMQ 的消费者，从 Redis 拉任务并执行。
+import { DelayedError, Worker } from 'bullmq'; // Worker：BullMQ 的消费者，从 Redis 拉任务并执行。
 import type { ConnectionOptions } from 'bullmq';
 
 import { logger } from '../lib/logger.js';
@@ -11,7 +11,11 @@ import {
   type PreviewConvertJobData,
   type PreviewConvertJobResult,
 } from '../queues/preview.queue.js';
-import { processPreviewConvertJob } from '../services/preview.service.js';
+import {
+  processPreviewConvertJob,
+  shouldDeferFullConversion,
+  ensurePartialBatchScheduled,
+} from '../services/preview.service.js';
 
 function getConnection(): ConnectionOptions {
   const url = process.env.REDIS_URL;
@@ -29,9 +33,15 @@ const worker = new Worker<PreviewConvertJobData, PreviewConvertJobResult>(
    // 回调：每 dequeue 一条任务就执行一次，出队动作在BullMQ自动操作，
    // 这里的回调是BullMQ进行出队后会给你一个job参数，你规定对这个job怎么进行操作，
    // 出队后BullMQ调用你定义的函数对job进行操作
-  async (job) => { 
+  async (job) => {
     if (job.name !== PREVIEW_JOB_NAME) {
       throw new Error(`未知预览任务类型: ${job.name}`);
+    }
+    if (job.data.op === 'full' && job.data.isBackground && shouldDeferFullConversion(job.data.fileHash)) {
+      logger.info({ jobId: job.id, fileHash: job.data.fileHash }, '[preview-worker] 快览分批未完成，推迟全文');
+      await ensurePartialBatchScheduled(job.data.fileHash, job.data.sourceFilePath);
+      await job.moveToDelayed(Date.now() + 20_000);
+      throw new DelayedError();
     }
     logger.info(
       { jobId: job.id, op: job.data.op, fileHash: job.data.fileHash },

@@ -6,14 +6,16 @@ import type { ConnectionOptions } from 'bullmq';
 export const PREVIEW_QUEUE_NAME = 'preview-convert';    //队列名
 export const PREVIEW_JOB_NAME = 'convert';              //Job名
 
-export type PreviewConvertOp = 'impress-partial' | 'full'; // ppt前n页预览，和全文预览
-// 入队载荷
+export type PreviewConvertOp = 'impress-partial' | 'impress-partial-more' | 'full';
+
 export type PreviewConvertJobData = {
-  op: PreviewConvertOp; // 操作类型 前n页 / 全文
+  op: PreviewConvertOp;
   fileHash: string;
   sourceFilePath: string;
-  /** true = 后台全文，无 HTTP 在等 */
+  /** true = 后台任务，无 HTTP 在等 */
   isBackground?: boolean;
+  /** impress-partial-more：扩展快览到前 N 页 */
+  targetSlides?: number;
 };
 // Worker 返回值：生成 PDF 路径 + 阶段 full / partial
 export type PreviewConvertJobResult = {
@@ -73,16 +75,45 @@ function getPreviewQueueEvents(): QueueEvents {
   }
   return previewQueueEvents;
 }
-// 构建job ID
-export function buildPreviewJobId(fileHash: string, op: PreviewConvertOp): string {
+// 构建 job ID
+export function buildPreviewJobId(
+  fileHash: string,
+  op: PreviewConvertOp,
+  targetSlides?: number,
+): string {
+  if (op === 'impress-partial-more' && targetSlides != null) {
+    return `${fileHash}-impress-partial-more-${targetSlides}`;
+  }
   return `${fileHash}-${op}`;
 }
-// 入队
+
+function jobPriority(data: PreviewConvertJobData): number {
+  if (data.op === 'full') return data.isBackground ? 15 : 1;
+  if (data.op === 'impress-partial-more') return 3;
+  return 1;
+}
+
+// 入队（分批任务若已有 completed/failed 的同 jobId，先移除以便重试）
 export async function enqueuePreviewJob(data: PreviewConvertJobData) {
-  const queue = getPreviewQueue(); // 拿生产者 Queue
-  return queue.add(PREVIEW_JOB_NAME, data, { // add(任务名, 数据, 选项)
-    jobId: buildPreviewJobId(data.fileHash, data.op), // 固定 jobId，同文件同 op 不会重复排队
-    priority: data.isBackground ? 10 : 1, // 数字 越小优先级越高：用户等的 partial/full 为 1；后台全文为 10，让快览先跑
+  const queue = getPreviewQueue();
+  const jobId =
+    data.op === 'impress-partial-more'
+      ? buildPreviewJobId(data.fileHash, data.op, data.targetSlides)
+      : buildPreviewJobId(data.fileHash, data.op);
+
+  const existing = await queue.getJob(jobId);
+  if (existing) {
+    const state = await existing.getState();
+    if (state === 'completed' || state === 'failed') {
+      await existing.remove();
+    } else if (state === 'waiting' || state === 'active' || state === 'delayed' || state === 'prioritized') {
+      return existing;
+    }
+  }
+
+  return queue.add(PREVIEW_JOB_NAME, data, {
+    jobId,
+    priority: jobPriority(data),
   });
 }
 // async 函数：在 waitUntilFinished 完成前，调用它的 HTTP 请求会一直挂着
@@ -102,15 +133,40 @@ export async function waitPreviewJobFinished(
   const result = await job.waitUntilFinished(getPreviewQueueEvents(), timeoutMs);
   return result as PreviewConvertJobResult;
 }
+export type PreviewJobInfo = {
+  state: PreviewJobState;
+  attemptsMade?: number;
+  failedReason?: string;
+};
+
 // 查询 job 状态
 export async function getPreviewJobState(
   fileHash: string,
   op: PreviewConvertOp,
+  targetSlides?: number,
 ): Promise<PreviewJobState> {
-  const job = await getPreviewQueue().getJob(buildPreviewJobId(fileHash, op)); // 用 fileHash-op 查 job
-  if (!job) return 'missing';// 没有这条 job → 'missing'
-  const state = await job.getState();
-  return state as PreviewJobState; // 否则返回 BullMQ 状态：waiting、active、completed 等
+  const info = await getPreviewJobInfo(fileHash, op, targetSlides);
+  return info.state;
+}
+
+/** 查询 job 详情（状态、重试次数、失败原因），供任务状态 API 使用 */
+export async function getPreviewJobInfo(
+  fileHash: string,
+  op: PreviewConvertOp,
+  targetSlides?: number,
+): Promise<PreviewJobInfo> {
+  const jobId =
+    op === 'impress-partial-more'
+      ? buildPreviewJobId(fileHash, op, targetSlides)
+      : buildPreviewJobId(fileHash, op);
+  const job = await getPreviewQueue().getJob(jobId);
+  if (!job) return { state: 'missing' };
+  const state = (await job.getState()) as PreviewJobState;
+  return {
+    state,
+    attemptsMade: job.attemptsMade, // 重试次数
+    failedReason: state === 'failed' ? job.failedReason ?? undefined : undefined,
+  };
 }
 //优雅关闭
 // Worker 收到 SIGINT/SIGTERM 时调用，关掉 Redis 订阅和 Queue，释放连接；

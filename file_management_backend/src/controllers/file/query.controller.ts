@@ -753,7 +753,8 @@ export const previewFile = async (req: AuthRequest, res: Response): Promise<void
 };
 
 /**
- * 查询 Office 预览在磁盘上的阶段（不触发转换，供前端轮询 partial→full 后自动刷新）
+ * 查询 Office 预览状态：磁盘阶段 + BullMQ 任务状态（不触发转换）
+ * 供前端轮询 partial→full 刷新 iframe，以及展示排队/转换中/失败（任务 5.4）
  */
 export const getOfficePreviewState = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -774,18 +775,38 @@ export const getOfficePreviewState = async (req: AuthRequest, res: Response): Pr
       res.status(404).json({ success: false, message: '文件不存在' });
       return;
     }
-    const { isOfficeFile, getPreviewFilePhase, getPptPreviewFirstSlideCount } = await import(
-      '../../services/preview.service.js'
-    );
+    const { isOfficeFile, getPreviewFilePhase, getPptPreviewFirstSlideCount, getPreviewQueueStatus, getAvailablePartialSlides, ensurePartialBatchScheduled } =
+      await import('../../services/preview.service.js');
     if (!isOfficeFile(userFile.fileName)) {
       res.status(400).json({ success: false, message: '该文件类型无预览状态' });
       return;
     }
-    const phase = getPreviewFilePhase(userFile.storage.fileHash);
+    const fileHash = userFile.storage.fileHash;
+    const physicalPath = (await import('../../utils/storagePath.utils.js')).resolveStorageFilePath(
+      userFile.storage.filePath,
+    );
+    await ensurePartialBatchScheduled(fileHash, physicalPath);
+    const [phase, queueStatus] = await Promise.all([
+      Promise.resolve(getPreviewFilePhase(fileHash)),
+      getPreviewQueueStatus(fileHash),
+    ]);
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    const availableSlides = getAvailablePartialSlides(fileHash);
+    // 状态轮询须每次 200，禁用 Express 默认 ETag 304
+    res.setHeader(
+      'ETag',
+      `"preview-state-${fileHash}-${phase}-${availableSlides ?? 0}-${queueStatus.nextBatchTarget ?? 0}-${queueStatus.jobs.partialMore.state}"`,
+    );
     res.json({
       success: true,
       phase,
-      firstSlides: getPptPreviewFirstSlideCount()
+      firstSlides: getPptPreviewFirstSlideCount(),
+      availableSlides,
+      nextBatchTarget: queueStatus.nextBatchTarget,
+      queueAvailable: queueStatus.queueAvailable,
+      jobs: queueStatus.jobs,
     });
   } catch (error: any) {
     console.error('[Preview state] Error:', error);
