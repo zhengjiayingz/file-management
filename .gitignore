@@ -7,3 +7,9 @@ dist/
 
 # 后端转 PDF 预览缓存（LibreOffice 输出、临时目录）
 previews/
+
+# 面试准备文档（仅本地保留，不提交远程）
+docs/REDIS_INTERVIEW_QA.md
+docs/WEBSOCKET_SOCKET_INTERVIEW_QA.md
+docs/NODE_BACKEND_STRENGTHENING.md
+docs/PHASE_BENEFITS.md

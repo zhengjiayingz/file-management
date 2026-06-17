@@ -259,7 +259,6 @@ Helmet 管 **安全策略**；CORS 管 **跨域访问权限**。两者互补。
 |------|------|
 | [MIME_SNIFFING.md](./MIME_SNIFFING.md) | `nosniff` 与 MIME 嗅探攻击 |
 | [NODE_BACKEND_实施任务清单.md](../NODE_BACKEND_实施任务清单.md) | 阶段三 3.1～3.3 |
-| [NODE_BACKEND_STRENGTHENING.md](../NODE_BACKEND_STRENGTHENING.md) | M3 安全加固 |
 
 ---
 

@@ -2,7 +2,7 @@
 
 > **你怎么用这份文档**  
 > 1. 从上到下按顺序做，**做完一项勾一项**（`- [ ]` → `- [x]`）。  
-> 2. 总纲与面试话术见 [NODE_BACKEND_STRENGTHENING.md](./NODE_BACKEND_STRENGTHENING.md)。  
+> 2. 总纲见本地文档 `NODE_BACKEND_STRENGTHENING.md`（面试准备，不入 Git 仓库）。  
 > 3. 本文只回答：**今天要写什么文件、跑什么命令、怎样算做完**。  
 > **更新日期**：2026-06-03  
 > **工作目录**：`file_management_backend/`
@@ -453,7 +453,7 @@ io.adapter(createAdapter(pubClient, subClient));
 | 文档 | 写什么 |
 |------|--------|
 | [REQUIREMENTS.md](./REQUIREMENTS.md) | 用户能看到的业务：好友、VIP、分享 |
-| [NODE_BACKEND_STRENGTHENING.md](./NODE_BACKEND_STRENGTHENING.md) | 为什么要补强、里程碑、面试映射 |
+| `NODE_BACKEND_STRENGTHENING.md`（本地，不入库） | 为什么要补强、里程碑 |
 | **本文** | **今天打开 IDE 具体改哪几个文件** |
 
 ---

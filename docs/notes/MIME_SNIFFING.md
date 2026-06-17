@@ -89,7 +89,6 @@ X-Content-Type-Options: nosniff
 |------|------|
 | [HELMET.md](./HELMET.md) | Helmet 中间件与全部安全响应头说明 |
 | [NODE_BACKEND_实施任务清单.md](../NODE_BACKEND_实施任务清单.md) | 阶段三 3.1～3.3 |
-| [NODE_BACKEND_STRENGTHENING.md](../NODE_BACKEND_STRENGTHENING.md) | M3 安全加固总纲 |
 
 ---
 
