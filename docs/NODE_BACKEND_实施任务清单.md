@@ -408,8 +408,8 @@ io.adapter(createAdapter(pubClient, subClient));
 
 ## 阶段八：压测笔记（可选，约 1 天）
 
-- [ ] `scripts/load/login.k6.js`
-- [ ] `docs/PERFORMANCE_NOTES.md`：写 p95、瓶颈在 DB 还是磁盘、建议索引（`messages` 的 sender/receiver + createdAt）
+- [x] `scripts/load/login.k6.js`
+- [x] `docs/PERFORMANCE_NOTES.md`：写 p95、瓶颈在 DB 还是磁盘、建议索引（`messages` 的 sender/receiver + createdAt）
 
 ---
 
@@ -499,7 +499,7 @@ io.adapter(createAdapter(pubClient, subClient));
 **阶段七～八（可选）**
 
 - [ ] 7 存储抽象
-- [ ] 8 压测
+- [x] 8 压测
 
 ---
 
