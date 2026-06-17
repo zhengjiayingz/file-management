@@ -23,13 +23,16 @@ services:
       - "host.docker.internal:host-gateway"
     ports:
       - "3000:3000"  #容器端口映射到本机3000
+    env_file:
+      - .env
     environment:
       NODE_ENV: production
       PORT: 3000
-      DATABASE_URL: mysql://root:09092639961300Zj@host.docker.internal:3306/file_management
+      # 容器内连宿主机 MySQL 时用 DOCKER_DATABASE_URL；未设置则回退 .env 的 DATABASE_URL
+      DATABASE_URL: ${DOCKER_DATABASE_URL:-${DATABASE_URL}}
       REDIS_URL: redis://redis:6379
-      JWT_SECRET: file-management-secret-key-2024
-      CORS_ORIGIN: http://localhost:5173
+      JWT_SECRET: ${JWT_SECRET}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
       UPLOAD_PATH: ./uploads
     volumes:
       - ./uploads:/app/uploads
@@ -46,6 +49,8 @@ services:
       context: .
       dockerfile: Dockerfile
       target: worker
+    env_file:
+      - .env
     environment:
       NODE_ENV: production
       REDIS_URL: redis://redis:6379

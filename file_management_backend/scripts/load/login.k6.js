@@ -3,7 +3,7 @@ import { check, sleep } from 'k6';
 
 const BASE_URL = __ENV.BASE_URL || 'http://localhost:3000';
 const USERNAME = __ENV.USERNAME || 'admin';
-const PASSWORD = __ENV.PASSWORD
+const PASSWORD = __ENV.PASSWORD;
 
 export const options = {
   stages: [

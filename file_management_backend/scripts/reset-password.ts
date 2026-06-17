@@ -1,5 +1,8 @@
+import dotenv from 'dotenv';
 import { PrismaClient } from '@prisma/client';
 import crypto from 'crypto';
+
+dotenv.config();
 
 const prisma = new PrismaClient();
 
@@ -12,16 +15,25 @@ async function resetPassword(username: string, newPassword: string) {
 
     await prisma.user.update({
         where: { username },
-        data: { password: hashedPassword }
+        data: { password: hashedPassword },
     });
 
-    console.log(`\n\n✅ 密码已重置: ${username} -> 新密码为 ${newPassword}\n`);
+    console.log(`\n\n✅ 密码已重置: ${username}\n`);
 }
 
-// 使用示例
-resetPassword('admin', '123456')
+const username = process.argv[2] ?? process.env.RESET_USERNAME;
+const newPassword = process.argv[3] ?? process.env.RESET_PASSWORD;
+
+if (!username || !newPassword) {
+    console.error('用法: tsx scripts/reset-password.ts <username> [password]');
+    console.error('或在 .env 中设置 RESET_USERNAME、RESET_PASSWORD');
+    process.exit(1);
+}
+
+resetPassword(username, newPassword)
     .then(() => prisma.$disconnect())
     .catch((e) => {
         console.error(e);
         prisma.$disconnect();
+        process.exit(1);
     });
