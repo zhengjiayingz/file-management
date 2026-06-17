@@ -18,6 +18,7 @@ import {
 import { logOperation, LogOperationType, LogResourceType } from '../../services/logger.service.js';
 import iconv from 'iconv-lite';
 import jschardet from 'jschardet';
+import { getStorageProvider } from '../../storage/index.js';
 
 // 尝试配置本地 FFmpeg 路径（如果存在）
 import { createRequire } from 'module';
@@ -396,10 +397,8 @@ export const downloadFile = async (req: AuthRequest, res: Response): Promise<voi
       return;
     }
 
-    const physicalPath = resolveStorageFilePath(userFile.storage.filePath);
-
-    // 检查物理文件是否存在
-    if (!fs.existsSync(physicalPath)) {
+    const storage = getStorageProvider();
+    if (!(await storage.exists(userFile.storage.filePath))) {
       res.status(404).json({
         success: false,
         message: '文件已被删除'
@@ -451,8 +450,18 @@ export const downloadFile = async (req: AuthRequest, res: Response): Promise<voi
       description: `Downloaded file: ${userFile.fileName}`
     });
 
-    // 发送文件
-    res.sendFile(physicalPath);
+    // 发送文件（local/minio 统一走 provider stream）
+    const stream = await storage.getReadStream(userFile.storage.filePath);
+    // local 和 minio 返回的都是 Node.js 的 Readable 流，继承自 EventEmitter，所以都可以写 .on('error', ...)、.on('end', ...) 等。
+    stream.on('error', (err) => {
+      console.error('Download stream error:', err);
+      if (!res.headersSent) {
+        res.status(500).json({ success: false, message: '文件下载失败' });
+      } else {
+        res.end();
+      }
+    });
+    stream.pipe(res);
   } catch (error) {
     console.error('Download file error:', error);
     res.status(500).json({

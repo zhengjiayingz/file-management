@@ -39,5 +39,16 @@ export function toStoredRelativePath(absolutePath: string): string {
 /** 库中路径 → 本机绝对路径（相对则基于 process.cwd） */
 export function resolveStorageFilePath(storedPath: string): string {
   if (!storedPath) return storedPath;
-  return path.resolve(process.cwd(), storedPath);
+  const normalized = normalizeStoredPath(storedPath);
+  if (normalized.startsWith('minio://')) {
+    throw new Error('minio 对象路径无法直接解析为本地路径');
+  }
+  return path.resolve(process.cwd(), normalized);
+}
+
+/** 标准化库中的存储路径（兼容 local:// 或普通相对路径） */
+export function normalizeStoredPath(storedPath: string): string {
+  if (!storedPath) return storedPath;
+  if (storedPath.startsWith('local://')) return storedPath.slice('local://'.length);
+  return storedPath;
 }

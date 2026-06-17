@@ -16,20 +16,24 @@ RUN corepack enable && corepack prepare pnpm@9 --activate
 
 # ---------- 2. 安装依赖 ----------
 FROM base AS deps
-COPY package.json pnpm-lock.yaml ./
+COPY package.json pnpm-lock.yaml ./ 
 COPY prisma ./prisma
 RUN pnpm install --frozen-lockfile
 
 # ---------- 3. 编译 TypeScript ----------
+# 复制所有文件到镜像中
 FROM deps AS build
-COPY . .
+COPY . .     
+# 构建项目把 dist 打进镜像
 RUN pnpm build
 
 # ---------- 4. 运行基础层（api / worker 共用） ----------
 FROM base AS runtime-base
 COPY package.json pnpm-lock.yaml ./
-COPY prisma ./prisma
+# prisma 打进镜像
+COPY prisma ./prisma   
 # 安装阶段不能设 NODE_ENV=production，否则 pnpm add --save-dev 会被跳过
+# 这里执行npm install 其实就是把node_modules打进镜像
 RUN pnpm install --frozen-lockfile --prod --ignore-scripts \
   && pnpm add prisma@5.22.0 --save-dev \
   && pnpm exec prisma generate
@@ -40,6 +44,7 @@ RUN mkdir -p uploads previews
 # ---------- 5a. API（无 LibreOffice，构建快） ----------
 FROM runtime-base AS api
 EXPOSE 3000
+ # 容器启动时执行: node dist/app.js
 CMD ["node", "dist/app.js"]
 
 # ---------- 5b. Worker（含 LibreOffice，仅预览转码需要） ----------

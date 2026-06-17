@@ -16,13 +16,13 @@ services:
 
   api:
     build:
-      context: .
-      dockerfile: Dockerfile
-      target: api
+      context: . # 以当前目录（.）为上下文，也就是整个 file_management_backend
+      dockerfile: Dockerfile # 按 Dockerfile 构建镜像
+      target: api # 使用 target: api 这一层
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
-      - "3000:3000"
+      - "3000:3000"  #容器端口映射到本机3000
     environment:
       NODE_ENV: production
       PORT: 3000

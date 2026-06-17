@@ -378,6 +378,44 @@ curl http://localhost:3000/health        # {"status":"ok",...}
 # 浏览器打开 http://localhost:3000/api-docs
 ```
 
+## 🗂️ 阶段七：对象存储抽象（StorageProvider）
+
+后端已加入存储抽象层：
+
+- `src/storage/types.ts`：统一接口（`putFromLocalFile` / `getReadStream` / `exists` / `delete`）
+- `src/storage/local.provider.ts`：本地磁盘实现（兼容现有 `uploads/`）
+- `src/storage/minio.provider.ts`：MinIO 实现（用于本地模拟 OSS）
+- `src/storage/index.ts`：按 `STORAGE_DRIVER` 选择 provider
+
+### 环境变量
+
+```env
+STORAGE_DRIVER=local
+# 切到 MinIO 时：
+# STORAGE_DRIVER=minio
+# MINIO_ENDPOINT=127.0.0.1
+# MINIO_PORT=9000
+# MINIO_USE_SSL=false
+# MINIO_ACCESS_KEY=minioadmin
+# MINIO_SECRET_KEY=minioadmin
+# MINIO_BUCKET=file-management
+```
+
+### 本地验证 MinIO
+
+```bash
+# 启动 Redis + MinIO
+docker compose -f docker-compose.dev.yml up -d
+
+# 切换驱动（.env）
+# STORAGE_DRIVER=minio
+
+# 启动后端
+pnpm dev
+```
+
+验证方式：上传一个小文件后可正常下载，说明 `put/getStream` 已通过 MinIO 路径。
+
 ## 📡 API 文档
 
 本项目使用 Swagger UI 作为 API 文档。

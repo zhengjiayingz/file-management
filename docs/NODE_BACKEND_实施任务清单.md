@@ -399,10 +399,10 @@ io.adapter(createAdapter(pubClient, subClient));
 
 > **做完阶段六再做**。不做也不影响中级面试主体。
 
-- [ ] `src/storage/types.ts` 定义接口
-- [ ] `src/storage/local.provider.ts` 包装现有 `uploads/`
-- [ ] `upload.controller.ts` 里上传完成改为 `storage.put(...)`
-- [ ] MinIO 本地容器 + `oss.provider.ts` 骨架，`STORAGE_DRIVER=minio` 能传 1 个小文件
+- [x] `src/storage/types.ts` 定义接口
+- [x] `src/storage/local.provider.ts` 包装现有 `uploads/`
+- [x] `upload.controller.ts` 里上传完成改为 `storage.put(...)`
+- [x] MinIO 本地容器 + `oss.provider.ts` 骨架，`STORAGE_DRIVER=minio` 能传 1 个小文件
 
 ---
 

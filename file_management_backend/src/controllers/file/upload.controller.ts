@@ -5,6 +5,7 @@ import prisma from '../../lib/prisma.js';
 import { AuthRequest } from '../../types/index.js';
 import { calculateFileHash, ensureDirectoryExists } from '../../utils/file.utils.js';
 import { toStoredRelativePath } from '../../utils/storagePath.utils.js';
+import { getStorageProvider } from '../../storage/index.js';
 import { logOperation, LogOperationType, LogResourceType } from '../../services/logger.service.js';
 import {
   assertValidMergeChunksBody,
@@ -446,6 +447,7 @@ export const uploadFile = async (req: AuthRequest, res: Response): Promise<void>
       return;
     }
 
+    const storage = getStorageProvider();
     // 计算文件哈希
     const fileHash = calculateFileHash(req.file.path);
     
@@ -470,10 +472,14 @@ export const uploadFile = async (req: AuthRequest, res: Response): Promise<void>
 
       // 如果文件不存在，创建新的存储记录
       if (!fileStorage) {
+        const storedPath = await storage.putFromLocalFile({
+          localFilePath: req.file!.path,
+          suggestedName: `${fileHash}-${req.file!.originalname}`,
+        });
         fileStorage = await tx.fileStorage.create({
           data: {
             fileHash,
-            filePath: toStoredRelativePath(req.file!.path),
+            filePath: storedPath,
             fileSize: BigInt(req.file!.size),
             mimeType: req.file!.mimetype,
             referenceCount: 1,
@@ -487,10 +493,7 @@ export const uploadFile = async (req: AuthRequest, res: Response): Promise<void>
           data: { referenceCount: { increment: 1 } }
         });
         
-        // 删除重复的物理文件
-        if (fs.existsSync(req.file!.path)) {
-          fs.unlinkSync(req.file!.path);
-        }
+        await storage.delete(req.file!.path);
       }
 
       // 创建用户文件记录
