@@ -18,6 +18,7 @@ import {
   getOfficePreviewState,
   getTextFileChunk
 } from '../controllers/file/query.controller.js';
+import { askAboutSelection } from '../controllers/file/ai.controller.js';
 import {
   listArchiveEntries,
   checkArchiveExtractConflicts,
@@ -662,6 +663,9 @@ router.get('/:id/preview', previewFile);
 
 // 大文本分块预览（UTF-8 按字节 offset 读取，避免整文件进浏览器）
 router.get('/:id/text-chunk', getTextFileChunk);
+
+// 选中文字 AI 问答（流式 text/plain）
+router.post('/:id/ai/ask', askAboutSelection);
 
 // 设置文件标签（全量替换）
 router.put('/:id/tags', setFileTags);
