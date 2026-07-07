@@ -8,6 +8,14 @@ dist/
 # 后端转 PDF 预览缓存（LibreOffice 输出、临时目录）
 previews/
 
+# Nest / Express 运行时数据（上传、分片、缩略图等，勿提交）
+file_management_backend_nest/thumbnails/
+file_management_backend_nest/uploads/
+file_management_backend_nest/chunks/
+file_management_backend/uploads/
+file_management_backend/chunks/
+file_management_backend/thumbnails/
+
 # 面试准备文档（仅本地保留，不提交远程）
 docs/REDIS_INTERVIEW_QA.md
 docs/WEBSOCKET_SOCKET_INTERVIEW_QA.md
