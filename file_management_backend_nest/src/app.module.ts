@@ -14,6 +14,9 @@ import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { StorageModule } from './storage/storage.module';
 import { FilesModule } from './files/files.module';
 import { UserPreferenceModule } from './user-preference/user-preference.module';
+import { FriendshipModule } from './friendship/friendship.module';
+import { MessageModule } from './message/message.module';
+import { ShareModule } from './share/share.module';
 
 @Module({
   imports: [
@@ -38,6 +41,9 @@ import { UserPreferenceModule } from './user-preference/user-preference.module';
     UserModule,
     UserPreferenceModule,
     FilesModule,
+    FriendshipModule,
+    MessageModule,
+    ShareModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

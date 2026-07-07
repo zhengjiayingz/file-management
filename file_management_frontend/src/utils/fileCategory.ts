@@ -1,4 +1,5 @@
 import type { FileItem } from '@typing/file'
+import { isAudioMedia, isVideoMedia } from './mediaFileDetect'
 
 /** 与筛选「类型」一致：文件夹 + MIME 大类 */
 export type FileEntryCategory = 'folder' | 'image' | 'video' | 'audio' | 'document' | 'other'
@@ -24,11 +25,11 @@ export function getFileEntryCategory(file: FileItem): FileEntryCategory {
   if (mime.startsWith('image/') || /\.(jpg|jpeg|png|gif|webp|bmp)$/i.test(name)) {
     return 'image'
   }
-  if (mime.startsWith('video/') || /\.(mp4|webm|ogg|mov|wmv|flv|avi|rmvb|mkv)$/i.test(name)) {
-    return 'video'
-  }
-  if (mime.startsWith('audio/') || /\.(mp3|wav|ogg|flac|aac)$/i.test(name)) {
+  if (isAudioMedia({ mimeType: mime, fileName: name })) {
     return 'audio'
+  }
+  if (isVideoMedia({ mimeType: mime, fileName: name })) {
+    return 'video'
   }
   if (
     mime.startsWith('text/') ||

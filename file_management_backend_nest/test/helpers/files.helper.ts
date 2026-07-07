@@ -1,6 +1,8 @@
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { createWriteStream } from 'node:fs';
+import archiver from 'archiver';
 import { getPreviewsRootDir } from '@/files/preview/preview-path.utils';
 import { getUploadRootDir } from '@/files/utils/storagePath.utils';
 import { PrismaService } from '@/prisma/prisma.service';
@@ -226,5 +228,101 @@ export async function seedFolder(
       fileType: 'folder',
       isDeleted: false,
     },
+  });
+}
+
+function md5File(filePath: string): string {
+  const buf = fs.readFileSync(filePath);
+  return crypto.createHash('md5').update(buf).digest('hex');
+}
+
+export async function seedZipFile(
+  app: E2eApp,
+  userId: number,
+  innerFileName = 'inner.txt',
+  innerContent = 'zip-inner-content',
+  zipFileName?: string,
+) {
+  const prisma = app.get(PrismaService);
+  const uploadRoot = getUploadRootDir();
+  fs.mkdirSync(uploadRoot, { recursive: true });
+
+  const fileName = zipFileName ?? `e2e-${Date.now()}.zip`;
+  const absPath = path.join(uploadRoot, fileName);
+
+  await new Promise<void>((resolve, reject) => {
+    const output = createWriteStream(absPath);
+    const archive = archiver('zip');
+    output.on('close', () => resolve());
+    archive.on('error', reject);
+    archive.pipe(output);
+    archive.append(innerContent, { name: innerFileName });
+    void archive.finalize();
+  });
+
+  const fileHash = md5File(absPath);
+  const storedName = `${fileHash}-${fileName}`;
+  const finalPath = path.join(uploadRoot, storedName);
+  fs.renameSync(absPath, finalPath);
+
+  const uploadRel = (process.env.UPLOAD_PATH || 'uploads')
+    .trim()
+    .replace(/^\.\//, '')
+    .replace(/\\/g, '/');
+  const filePath = `${uploadRel}/${storedName}`;
+
+  const storage = await prisma.fileStorage.create({
+    data: {
+      fileHash,
+      filePath,
+      fileSize: BigInt(fs.statSync(finalPath).size),
+      mimeType: 'application/zip',
+      referenceCount: 1,
+      status: 'active',
+    },
+  });
+
+  const userFile = await prisma.userFile.create({
+    data: {
+      userId,
+      storageId: storage.id,
+      fileName,
+      fileType: 'file',
+      isDeleted: false,
+    },
+  });
+
+  return { storage, userFile, innerPath: innerFileName };
+}
+
+export async function seedFileHistory(
+  app: E2eApp,
+  userFileId: number,
+  storageId: number,
+  version: number,
+  fileName: string,
+  fileSize: number,
+) {
+  const prisma = app.get(PrismaService);
+  return prisma.fileHistory.create({
+    data: {
+      userFileId,
+      storageId,
+      fileName,
+      version,
+      fileSize: BigInt(fileSize),
+    },
+  });
+}
+
+export async function setUserRole(
+  app: E2eApp,
+  userId: number,
+  role: 'user' | 'admin' | 'vip',
+) {
+  const prisma = app.get(PrismaService);
+  return prisma.user.update({
+    where: { id: userId },
+    data: { role },
   });
 }

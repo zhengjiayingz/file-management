@@ -182,7 +182,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, watch } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox, ElImageViewer } from 'element-plus'
 import {
@@ -217,7 +217,12 @@ import {
   isZipExtractableOnline,
   canUseOnlineArchiveExtract
 } from '@utils/archive'
+import {
+  DRIVE_FILES_CHANGED,
+  type DriveFilesChangedDetail,
+} from '@utils/driveEvents'
 import { compareFileEntryCategory, getFileEntryCategory } from '@utils/fileCategory'
+import { isAudioMedia, isVideoMedia } from '@utils/mediaFileDetect'
 
 const router = useRouter()
 const route = useRoute()
@@ -404,9 +409,25 @@ const selectAll = (checked: boolean) => {
 }
 
 // 生命周期
+const onDriveFilesChanged = (event: Event) => {
+  const { parentId } = (event as CustomEvent<DriveFilesChangedDetail>).detail ?? {
+    parentId: null,
+  }
+  const viewingParent = currentFolderId.value ?? null
+  if (parentId === viewingParent) {
+    void loadFiles()
+  }
+  void authStore.refreshUserInfo()
+}
+
 onMounted(() => {
   loadFiles()
   loadTagOptions()
+  window.addEventListener(DRIVE_FILES_CHANGED, onDriveFilesChanged)
+})
+
+onUnmounted(() => {
+  window.removeEventListener(DRIVE_FILES_CHANGED, onDriveFilesChanged)
 })
 
 // 加载文件列表
@@ -522,15 +543,9 @@ const isImageFile = (file: FileInfo) => {
     /\.(jpg|jpeg|png|gif|webp|bmp)$/i.test(file.fileName)
 }
 
-const isVideoFile = (file: FileInfo) => {
-  return (file.mimeType && file.mimeType.startsWith('video/')) ||
-    /\.(mp4|webm|ogg|mov|wmv|flv|avi|rmvb|mkv)$/i.test(file.fileName)
-}
+const isVideoFile = (file: FileInfo) => isVideoMedia(file)
 
-const isAudioFile = (file: FileInfo) => {
-  return (file.mimeType && file.mimeType.startsWith('audio/')) ||
-    /\.(mp3|wav|ogg|flac|aac|m4a|opus|wma)$/i.test(file.fileName)
-}
+const isAudioFile = (file: FileInfo) => isAudioMedia(file)
 
 const isDocumentFile = (file: FileInfo) => {
   const mime = file.mimeType || ''
@@ -579,14 +594,14 @@ const handleFileDoubleClick = async (file: FileInfo) => {
       if (previewInitialIndex.value === -1) previewInitialIndex.value = 0
 
       previewVisible.value = true
-    } else if (isVideoFile(file)) {
-      currentMediaKind.value = 'video'
+    } else if (isAudioFile(file)) {
+      currentMediaKind.value = 'audio'
       currentVideoUrl.value = getFileViewUrl(file)
       currentVideoTitle.value = file.fileName
       currentVideoFile.value = file
       videoPlayerVisible.value = true
-    } else if (isAudioFile(file)) {
-      currentMediaKind.value = 'audio'
+    } else if (isVideoFile(file)) {
+      currentMediaKind.value = 'video'
       currentVideoUrl.value = getFileViewUrl(file)
       currentVideoTitle.value = file.fileName
       currentVideoFile.value = file

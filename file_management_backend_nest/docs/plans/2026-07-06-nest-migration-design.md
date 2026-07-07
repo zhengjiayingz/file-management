@@ -1,9 +1,9 @@
 # Express → Nest 迁移设计文档
 
-> **版本**：v1.0  
-> **日期**：2026-07-06  
-> **状态**：已评审确认，待进入实施计划  
-> **关联文档**：[MIGRATION_PLAN.md](../../MIGRATION_PLAN.md)（端点清单与工期粗估）
+> **版本**：v1.1  
+> **日期**：2026-07-06（进度更新：2026-07-07）  
+> **状态**：实施中 — **S1～S8 已完成**，S9 待开始  
+> **关联文档**：[MIGRATION.md](../../MIGRATION.md)（当前进度与验收）、[MIGRATION_PLAN.md](../../MIGRATION_PLAN.md)（端点清单与工期粗估）
 
 ---
 
@@ -11,14 +11,19 @@
 
 ### 1.1 项目背景
 
-网盘后端当前运行于 Express（`../file_management_backend`，端口 **3000**），约 94 个 REST 端点 + Socket.IO + 预览 Worker。Nest 迁移版（`file_management_backend_nest`，端口 **3002**）已完成阶段 0～1 及部分 Auth/User：
+网盘后端当前运行于 Express（`../file_management_backend`，端口 **3000**），约 94 个 REST 端点 + Socket.IO + 预览 Worker。Nest 迁移版（`file_management_backend_nest`，端口 **3002**）已完成阶段 0～1 及 **S1～S6**：
 
 | 已完成 | 未完成 |
 |--------|--------|
-| 脚手架、Config、Prisma、Health、ValidationPipe | Auth 剩余 12 端点 |
-| Redis、全局限流、登录限流、Guards、异常 Filter | Files（39 端点）及全部业务模块 |
-| Auth：login / refresh / logout | Socket、BullMQ Worker 迁移 |
-| User：GET /profile | Express 下线 |
+| 脚手架、Config、Prisma、Health、ValidationPipe | Versions / Archive（S7 剩余） |
+| Redis、全局限流、登录限流、Guards、异常 Filter | Socket Gateway（S9） |
+| **S1** Auth 15 端点全量 | Socket Gateway（S9） |
+| **S2** Files 读（列表、下载、回收站、批量等 11 端点） | Admin / VIP / Log（S10） |
+| **S3** AI 流式问答 | Express 下线（S11） |
+| **S4** Office 预览 + BullMQ 入队 | 预览 Worker 迁入 Nest（S11） |
+| **S5** User + UserPreference（6 端点） | |
+| **S6** Files 上传（8 端点：分片、秒传、传统上传、建文件夹） | |
+| Files 标签（5 端点，**已提前迁入**，归入 S7 验收） | |
 
 ### 1.2 终局目标
 
@@ -181,7 +186,7 @@ src/
 
 每阶段统一流程：**迁端点 → 边迁边重构 → 写 e2e → 前端灰度 → 回退检查点**。
 
-### S1 — Auth 补全（3 天）
+### S1 — Auth 补全（3 天）✅
 
 **目标**：15 个 Auth 端点全部对齐 Express。
 
@@ -190,18 +195,18 @@ src/
 | `/api/auth/login` | POST | ✅ |
 | `/api/auth/refresh` | POST | ✅ |
 | `/api/auth/logout` | POST | ✅ |
-| `/api/auth/register` | POST | ⬜ |
-| `/api/auth/password-policy` | GET | ⬜ |
-| `/api/auth/mfa/verify` | POST | ⬜ |
-| `/api/auth/forgot-password` | POST | ⬜ |
-| `/api/auth/change-password` | POST | ⬜ |
-| `/api/auth/mfa/setup/start` | POST | ⬜ |
-| `/api/auth/mfa/setup/confirm` | POST | ⬜ |
-| `/api/auth/mfa/setup/cancel` | POST | ⬜ |
-| `/api/auth/mfa/disable` | POST | ⬜ |
-| `/api/auth/me` | GET | ⬜ |
-| `/api/auth/sessions/list` | POST | ⬜ |
-| `/api/auth/sessions/revoke` | POST | ⬜ |
+| `/api/auth/register` | POST | ✅ |
+| `/api/auth/password-policy` | GET | ✅ |
+| `/api/auth/mfa/verify` | POST | ✅ |
+| `/api/auth/forgot-password` | POST | ✅ |
+| `/api/auth/change-password` | POST | ✅ |
+| `/api/auth/mfa/setup/start` | POST | ✅ |
+| `/api/auth/mfa/setup/confirm` | POST | ✅ |
+| `/api/auth/mfa/setup/cancel` | POST | ✅ |
+| `/api/auth/mfa/disable` | POST | ✅ |
+| `/api/auth/me` | GET | ✅ |
+| `/api/auth/sessions/list` | POST | ✅ |
+| `/api/auth/sessions/revoke` | POST | ✅ |
 
 **重构**：拆 `SessionService`、`MfaService`、`PasswordService`；补全 DTO。
 
@@ -213,23 +218,23 @@ src/
 
 ---
 
-### S2 — Files 读（最小集，4 天）
+### S2 — Files 读（最小集，4 天）✅
 
 **目标**：网盘主路径读操作，**不含上传**。
 
-| 端点 | 方法 |
-|------|------|
-| `/api/files` | GET |
-| `/api/files/:id` | GET |
-| `/api/files/:id/download` | GET |
-| `/api/files/:id/thumbnail` | GET |
-| `/api/files/:id/text-chunk` | GET |
-| `/api/files/:id` | DELETE |
-| `/api/files/:id/restore` | POST |
-| `/api/files/:id/permanent` | DELETE |
-| `/api/files/batch/*` | POST |
-| `/api/files/:id/rename` | PUT |
-| `/api/files/:id/move` | PUT |
+| 端点 | 方法 | 状态 |
+|------|------|------|
+| `/api/files` | GET | ✅ |
+| `/api/files/:id` | GET | ✅ |
+| `/api/files/:id/download` | GET | ✅ |
+| `/api/files/:id/thumbnail` | GET | ✅ |
+| `/api/files/:id/text-chunk` | GET | ✅ |
+| `/api/files/:id` | DELETE | ✅ |
+| `/api/files/:id/restore` | POST | ✅ |
+| `/api/files/:id/permanent` | DELETE | ✅ |
+| `/api/files/batch/*` | POST | ✅ |
+| `/api/files/:id/rename` | PUT | ✅ |
+| `/api/files/:id/move` | PUT | ✅ |
 
 **重构**：新建 `StorageModule`；拆 `FilesQueryService` + `FilesManageService`；从 Express `query.controller.ts`（1300+ 行）按职责提取。
 
@@ -239,11 +244,11 @@ src/
 
 ---
 
-### S3 — AI 流式问答（2 天）
+### S3 — AI 流式问答（2 天）✅
 
-| 端点 | 方法 |
-|------|------|
-| `/api/files/:id/ai/ask` | POST |
+| 端点 | 方法 | 状态 |
+|------|------|------|
+| `/api/files/:id/ai/ask` | POST | ✅ |
 
 **重构**：新建 `AiModule`；`pipeTextStreamToResponse`；`req.on('close')` → `abortSignal`。
 
@@ -253,13 +258,13 @@ src/
 
 ---
 
-### S4 — 预览 + BullMQ 入队（4 天）
+### S4 — 预览 + BullMQ 入队（4 天）✅
 
-| 端点 | 方法 |
-|------|------|
-| `/api/files/:id/preview` | GET |
-| `/api/files/:id/preview-state` | GET |
-| `/api/files/:id/preview-status` | GET |
+| 端点 | 方法 | 状态 |
+|------|------|------|
+| `/api/files/:id/preview` | GET | ✅ |
+| `/api/files/:id/preview-state` | GET | ✅ |
+| `/api/files/:id/preview-status` | GET | ✅ |
 
 **重构**：新建 `PreviewModule`；`@nestjs/bullmq` 入队；**Worker 继续跑 Express**。
 
@@ -267,15 +272,16 @@ src/
 
 ---
 
-### S5 — User + UserPreference（2 天）
+### S5 — User + UserPreference（2 天）✅
 
 | 端点 | 方法 | 状态 |
 |------|------|------|
 | `/api/user/profile` | GET | ✅ |
-| `/api/user/profile` | PUT | ⬜ |
-| `/api/user/avatar` | POST | ⬜ |
-| `/api/user/search` | GET | ⬜ |
-| `/api/user-preferences` | GET/PUT | ⬜ |
+| `/api/user/profile` | PUT | ✅ |
+| `/api/user/avatar` | POST | ✅ |
+| `/api/user/search` | GET | ✅ |
+| `/api/user-preferences` | GET | ✅ |
+| `/api/user-preferences` | PUT | ✅ |
 
 **重构**：`FileInterceptor` + sharp 头像；新建 `UserPreferenceModule`。
 
@@ -283,18 +289,20 @@ src/
 
 ---
 
-### S6 — Files 上传（6 天）⚠️ 最重阶段
+### S6 — Files 上传（6 天）✅ ⚠️ 最重阶段
 
-| 端点 | 方法 |
-|------|------|
-| `/api/files/check-exists` | POST |
-| `/api/files/check-name` | POST |
-| `/api/files/upload-chunk` | POST |
-| `/api/files/chunks/:fileHash` | GET |
-| `/api/files/merge-chunks` | POST |
-| `/api/files/instant-upload` | POST |
-| `/api/files/upload` | POST |
-| `/api/files/folder` | POST |
+| 端点 | 方法 | 状态 |
+|------|------|------|
+| `/api/files/check-exists` | POST | ✅ |
+| `/api/files/check-name` | POST | ✅ |
+| `/api/files/upload-chunk` | POST | ✅ |
+| `/api/files/chunks/:fileHash` | GET | ✅ |
+| `/api/files/merge-chunks` | POST | ✅ |
+| `/api/files/instant-upload` | POST | ✅ |
+| `/api/files/upload` | POST | ✅ |
+| `/api/files/folder` | POST | ✅ |
+
+**实施文档**：[2026-07-07-s6-upload-design.md](./2026-07-07-s6-upload-design.md)、[2026-07-07-s6-upload-implementation.md](./2026-07-07-s6-upload-implementation.md)
 
 **重构**：拆 `MergeUploadService`、`ChunkService`；从 Express `mergeUpload.service.ts` 按步骤提取。
 
@@ -304,27 +312,31 @@ src/
 
 ---
 
-### S7 — Tags + Versions + Archive（3 天）
+### S7 — Tags + Versions + Archive（3 天）✅
 
-| 子模块 | 来源 |
-|--------|------|
-| Tags | `fileTag.controller.ts` |
-| Versions | `version.controller.ts` |
-| Archive | `archiveExtract.controller.ts` |
+| 子模块 | 来源 | 状态 |
+|--------|------|------|
+| Tags（5 端点） | `fileTag.controller.ts` | ✅ `files/tag/` |
+| Versions（3 端点） | `version.controller.ts` | ✅ `files/version/` |
+| Archive（3 端点） | `archiveExtract.controller.ts` | ✅ `files/archive/`（yauzl） |
+
+**实施文档**：[2026-07-07-s7-versions-archive-design.md](./2026-07-07-s7-versions-archive-design.md)
 
 **验收**：各子模块独立 e2e 文件。
 
 ---
 
-### S8 — 社交三模块（4 天）
+### S8 — 社交三模块（4 天）✅
 
-| 模块 | 端点数 |
-|------|--------|
-| Friendship | 6 |
-| Message | 4 |
-| Share | 6（含公开链接，无需登录） |
+| 模块 | 端点数 | Nest 路径 |
+|------|--------|-----------|
+| Friendship | 6 | `src/friendship/` |
+| Message | 4 | `src/message/` |
+| Share | 6 | `src/share/`（公开 3 端点 `@Public()`） |
 
-**验收**：Share 公开链接单独测；Message 为 S9 Socket 前置。
+**实施文档**：[2026-07-07-s8-social-design.md](./2026-07-07-s8-social-design.md)
+
+**验收**：Share 公开链接 e2e；Message Socket 推送留 S9。
 
 ---
 
@@ -372,15 +384,15 @@ src/
 ### 阶段依赖图
 
 ```
-S1 Auth ──► S2 Files读 ──► S3 AI
-                │
-                ├──► S4 预览+BullMQ
-                │
-                ├──► S6 上传 ──► S7 Tags/Versions/Archive
-                │
-S5 User ◄──（可与 S3/S4 并行）
+S1 Auth ✅ ──► S2 Files读 ✅ ──► S3 AI ✅
+                    │
+                    ├──► S4 预览+BullMQ ✅
+                    │
+                    ├──► S6 上传 ✅ ──► S7 Tags✅/Versions/Archive ⬜
+                    │
+S5 User ✅ ◄──（已与 S3/S4 并行完成）
 
-S8 社交 ──► S9 Socket ──► S10 Admin/VIP/Log ──► S11 下线
+S8 社交 ✅ ──► S9 Socket ⬜ ──► S10 Admin/VIP/Log ⬜ ──► S11 下线 ⬜
 ```
 
 **暂停策略**：任一阶段可暂停；已迁模块留 Nest，未迁走 Express 3000；恢复时从下一阶段继续，无需推倒重来。
@@ -406,19 +418,24 @@ test/
     auth.helper.ts         # 获取测试用 Token
     express-baseline.ts    # 可选：对照 Express 响应快照
   e2e/
-    health.e2e-spec.ts     # 已有
-    auth.e2e-spec.ts
-    files-query.e2e-spec.ts
-    files-manage.e2e-spec.ts
-    files-upload.e2e-spec.ts
-    ai.e2e-spec.ts
-    preview.e2e-spec.ts
-    user.e2e-spec.ts
-    friendship.e2e-spec.ts
-    message.e2e-spec.ts
-    share.e2e-spec.ts
-    admin.e2e-spec.ts
-    vip.e2e-spec.ts
+    health.e2e-spec.ts         # ✅
+    auth.e2e-spec.ts           # ✅
+    auth-register.e2e-spec.ts  # ✅
+    files-query.e2e-spec.ts  # ✅
+    files-manage.e2e-spec.ts   # ✅
+    files-upload.e2e-spec.ts # ✅ S6
+    files-ai.e2e-spec.ts       # ✅
+    files-preview.e2e-spec.ts  # ✅
+    user.e2e-spec.ts           # ✅
+    user-preference.e2e-spec.ts # ✅
+    files-tag.e2e-spec.ts      # ⬜ S7（Tags 已迁，待补 e2e）
+    files-version.e2e-spec.ts  # ⬜ S7
+    files-archive.e2e-spec.ts  # ⬜ S7
+    friendship.e2e-spec.ts     # ✅ S8
+    message.e2e-spec.ts        # ✅ S8
+    share.e2e-spec.ts          # ✅ S8
+    admin.e2e-spec.ts          # ⬜ S10
+    vip.e2e-spec.ts            # ⬜ S10
 ```
 
 ### 4.3 e2e 脚手架
@@ -580,23 +597,30 @@ VITE_API_BASE_URL=http://localhost:3000   # 回退 Express
 
 ## 9. 端点进度总览
 
-| 模块 | 进度 | 阶段 |
-|------|------|------|
-| Auth | 3/15 | S1 |
-| User | 1/4 | S5 |
-| UserPreference | 0/2 | S5 |
-| Files 读 | 0/11 | S2 |
-| AI | 0/1 | S3 |
-| Preview | 0/3 | S4 |
-| Files 上传 | 0/8 | S6 |
-| Tags/Versions/Archive | 0/11 | S7 |
-| Friendship | 0/6 | S8 |
-| Message | 0/4 | S8 |
-| Share | 0/6 | S8 |
-| Socket | 0/1 | S9 |
-| Admin | 0/9 | S10 |
-| VIP | 0/8 | S10 |
-| Log | 0/1 | S10 |
+> 最后更新：2026-07-07（S6 完成）
+
+| 模块 | 进度 | 阶段 | 状态 |
+|------|------|------|------|
+| Auth | 15/15 | S1 | ✅ |
+| User | 4/4 | S5 | ✅ |
+| UserPreference | 2/2 | S5 | ✅ |
+| Files 读 | 11/11 | S2 | ✅ |
+| AI | 1/1 | S3 | ✅ |
+| Preview | 3/3 | S4 | ✅ |
+| Files 上传 | 8/8 | S6 | ✅ |
+| Tags | 5/5 | S7 | ✅ |
+| Versions | 3/3 | S7 | ✅ |
+| Archive | 3/3 | S7 | ✅ |
+| Friendship | 6/6 | S8 | ✅ |
+| Message | 4/4 | S8 | ✅ |
+| Share | 6/6 | S8 | ✅ |
+| Socket | 0/1 | S9 | ⬜ |
+| Admin | 0/9 | S10 | ⬜ |
+| VIP | 0/8 | S10 | ⬜ |
+| Log | 0/1 | S10 | ⬜ |
+
+**已迁 REST 端点合计**：约 **76/94**（含 S8 社交 16 端点）。  
+**当前 e2e**：16 suites / 86 tests 全绿（`pnpm test:e2e`）。
 
 全部 ✅ 后执行 S11 下线 Express。
 
@@ -604,10 +628,10 @@ VITE_API_BASE_URL=http://localhost:3000   # 回退 Express
 
 ## 10. 下一步
 
-1. **writing-plans**：为 S1 Auth 补全编写详细实施计划（`docs/plans/2026-07-06-s1-auth-implementation.md`）
-2. **using-git-worktrees**（可选）：创建隔离 worktree 开发 S1
-3. **executing-plans**：按实施计划分批执行，批间汇报
+1. **S9 Socket Gateway**（与 Message 联调）
+2. **S10 Admin + VIP + Log**
+3. **S11**：下线 Express
 
 ---
 
-*本文档由 superpowers brainstorming 流程产出，已与项目方确认架构决策、Express 冻结原则、全量迁移终局目标。*
+*本文档由 superpowers brainstorming 流程产出；v1.2 同步 S1～S8 完成进度。*

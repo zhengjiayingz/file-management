@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -15,6 +16,12 @@ import {
   OperationLogService,
 } from '@/operation-log/operation-log.service';
 import { PrismaService } from '@/prisma/prisma.service';
+import {
+  clientIp,
+  ensureVisitorAllowedInTx,
+  isVisitorLimitError,
+  ShareService,
+} from '@/share/share.service';
 
 const MAX_BATCH_PERMANENT_DELETE = 2000;
 const MAX_BATCH_PERMANENT_DELETE_EXPANDED = 10000;
@@ -32,12 +39,26 @@ function parseOptionalParentId(value: unknown): number {
   return Number.NaN;
 }
 
+function parseNullableParentId(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null;
+  if (typeof value === 'number' && Number.isInteger(value)) return value;
+  if (typeof value === 'string' && value.trim() !== '') {
+    const n = parseInt(value.trim(), 10);
+    if (!Number.isInteger(n)) {
+      throw new BadRequestException('无效的目标文件夹');
+    }
+    return n;
+  }
+  throw new BadRequestException('无效的目标文件夹');
+}
+
 @Injectable()
 export class FilesManageService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly operationLogService: OperationLogService,
     private readonly fileBatchHelper: FileBatchHelper,
+    private readonly shareService: ShareService,
   ) {}
 
   async renameFile(req: Request, userId: number, fileId: number, name: string) {
@@ -616,6 +637,177 @@ export class FilesManageService {
       success: true,
       message: `已移动 ${rootRows.length} 项`,
       data: { movedCount: rootRows.length },
+    };
+  }
+
+  async saveSharedFileToMyDrive(
+    req: Request,
+    userId: number,
+    sourceFileId: number,
+    body: {
+      parentId?: unknown;
+      shareCode?: unknown;
+      extractCode?: unknown;
+    },
+  ) {
+    if (Number.isNaN(sourceFileId)) {
+      throw new BadRequestException('无效的文件ID');
+    }
+
+    const parentId = parseNullableParentId(body.parentId);
+
+    const sourceFile = await this.prisma.userFile.findFirst({
+      where: {
+        id: sourceFileId,
+        isDeleted: false,
+        fileType: 'file',
+      },
+      include: { storage: true },
+    });
+
+    if (!sourceFile?.storageId || !sourceFile.storage) {
+      throw new NotFoundException('共享的原文件不存在或已删除');
+    }
+
+    const shareCodeStr =
+      typeof body.shareCode === 'string' && body.shareCode.trim() !== ''
+        ? body.shareCode.trim()
+        : '';
+    if (shareCodeStr) {
+      const extractCode =
+        typeof body.extractCode === 'string' ? body.extractCode : undefined;
+      const v = await this.shareService.verifySharedFileForSave(
+        shareCodeStr,
+        extractCode,
+        sourceFileId,
+      );
+      if (!v.ok) {
+        if (v.status === 403) {
+          throw new ForbiddenException({ success: false, message: v.message });
+        }
+        throw new NotFoundException({ success: false, message: v.message });
+      }
+    }
+
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException('当前用户不存在');
+    }
+
+    const fileSize = sourceFile.storage.fileSize;
+    if (user.storageUsed + fileSize > user.storageQuota) {
+      throw new BadRequestException('您的存储空间不足，无法保存');
+    }
+
+    if (parentId !== null) {
+      const targetFolder = await this.prisma.userFile.findFirst({
+        where: {
+          id: parentId,
+          userId,
+          fileType: 'folder',
+          isDeleted: false,
+        },
+      });
+      if (!targetFolder) {
+        throw new NotFoundException('目标存放文件夹不存在');
+      }
+    }
+
+    let finalFileName = sourceFile.fileName;
+    let counter = 1;
+    let baseName = finalFileName;
+    let ext = '';
+    const lastDotIdx = finalFileName.lastIndexOf('.');
+    if (lastDotIdx !== -1) {
+      baseName = finalFileName.substring(0, lastDotIdx);
+      ext = finalFileName.substring(lastDotIdx);
+    }
+
+    while (true) {
+      const exists = await this.prisma.userFile.findFirst({
+        where: {
+          userId,
+          parentId: parentId ?? null,
+          fileName: finalFileName,
+          isDeleted: false,
+        },
+      });
+      if (!exists) break;
+      finalFileName = `${baseName}(${counter})${ext}`;
+      counter++;
+    }
+
+    const shareRow = shareCodeStr
+      ? await this.prisma.fileShare.findFirst({
+          where: { shareCode: shareCodeStr, status: 'active' },
+        })
+      : null;
+
+    let newFile;
+    try {
+      newFile = await this.prisma.$transaction(async (tx) => {
+        if (shareRow) {
+          await ensureVisitorAllowedInTx(
+            tx,
+            shareRow,
+            clientIp(req),
+            userId,
+          );
+          await tx.shareAccessLog.create({
+            data: {
+              shareId: shareRow.id,
+              visitorId: userId,
+              ipAddress: clientIp(req),
+              userAgent:
+                (req.headers['user-agent'] || '').slice(0, 500) || null,
+              action: 'save',
+            },
+          });
+        }
+
+        await tx.user.update({
+          where: { id: userId },
+          data: { storageUsed: { increment: fileSize } },
+        });
+
+        await tx.fileStorage.update({
+          where: { id: sourceFile.storageId! },
+          data: { referenceCount: { increment: 1 } },
+        });
+
+        return tx.userFile.create({
+          data: {
+            userId,
+            storageId: sourceFile.storageId,
+            parentId: parentId ?? null,
+            fileName: finalFileName,
+            fileType: 'file',
+          },
+        });
+      });
+    } catch (e) {
+      if (isVisitorLimitError(e)) {
+        throw new ForbiddenException({
+          success: false,
+          message: '分享访问人数已达上限',
+        });
+      }
+      throw e;
+    }
+
+    await this.operationLogService.logOperation({
+      req,
+      userId,
+      operationType: LogOperationType.UPLOAD,
+      resourceType: LogResourceType.FILE,
+      resourceId: newFile.id,
+      description: `Saved shared file to personal drive: ${finalFileName}`,
+    });
+
+    return {
+      success: true,
+      message: '成功存入您的网盘',
+      data: newFile,
     };
   }
 

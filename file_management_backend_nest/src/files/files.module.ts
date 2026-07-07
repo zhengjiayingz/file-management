@@ -1,6 +1,14 @@
 import { Module } from '@nestjs/common';
 import { PasswordPolicyService } from '../common/password-policy/password-policy.service';
+import { ShareModule } from '../share/share.module';
 import { StorageModule } from '../storage/storage.module';
+import { FilesUploadController } from './upload/files-upload.controller';
+import { FilesUploadService } from './upload/files-upload.service';
+import { MergeUploadService } from './upload/merge-upload.service';
+import { FilesVersionController } from './version/files-version.controller';
+import { FilesVersionService } from './version/files-version.service';
+import { FilesArchiveController } from './archive/files-archive.controller';
+import { FilesArchiveService } from './archive/files-archive.service';
 import { FilesAiController } from './ai/files-ai.controller';
 import { FilesAiService } from './ai/files-ai.service';
 import { FilesPreviewController } from './preview/files-preview.controller';
@@ -16,15 +24,22 @@ import { FilesTagService } from './tag/files-tag.service';
 import { OperationLogService } from '../operation-log/operation-log.service';
 
 @Module({
-  imports: [StorageModule],
+  imports: [StorageModule, ShareModule],
   controllers: [
+    FilesUploadController,
     FilesTagController,
+    FilesVersionController,
+    FilesArchiveController,
     FilesAiController,
     FilesPreviewController,
     FilesQueryController,
     FilesManageController,
   ],
   providers: [
+    FilesUploadService,
+    MergeUploadService,
+    FilesVersionService,
+    FilesArchiveService,
     FilesQueryService,
     FilesManageService,
     FilesTagService,

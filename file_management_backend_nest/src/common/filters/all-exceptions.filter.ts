@@ -45,6 +45,10 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
     this.logger.error(err?.message ?? exception, err?.stack);
 
+    if (err?.message === '不支持的文件类型') {
+      response.status(400).json({ success: false, message: err.message });
+      return;
+    }
     if (err?.code === 'LIMIT_FILE_SIZE') {
       response
         .status(400)

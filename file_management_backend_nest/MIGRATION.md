@@ -14,6 +14,9 @@
 | S3 | AI 流式问答 | ✅ |
 | S4 | 预览 + BullMQ | ✅ |
 | S5 | User + UserPreference | ✅ |
+| **S6** | **Files 上传** | **✅** |
+| **S7** | **Tags + Versions + Archive** | **✅** |
+| **S8** | **Friendship + Message + Share** | **✅** |
 
 ## 启动
 
@@ -151,6 +154,56 @@ VITE_API_BASE_URL=http://localhost:3002
 
 验证：设置页更新邮箱、上传头像、主题/语言切换、好友搜索用户。
 
+## API 对照（S6 Files 上传）
+
+| Express | Nest | 状态 |
+|---------|------|------|
+| `POST /api/files/check-exists` | 同 | ✅ |
+| `POST /api/files/check-name` | 同 | ✅ |
+| `POST /api/files/upload-chunk` | 同 | ✅ |
+| `GET /api/files/chunks/:fileHash` | 同 | ✅ |
+| `POST /api/files/merge-chunks` | 同 | ✅ |
+| `POST /api/files/instant-upload` | 同 | ✅ |
+| `POST /api/files/upload` | 同 | ✅ |
+| `POST /api/files/folder` | 同 | ✅ |
+
+分片临时目录 `chunks/<fileHash>/` 与 Express 共用；最终文件写入 `UPLOAD_PATH`（默认 `../file_management_backend/uploads`）。
+
+**注意**：`check-name` 响应为 `{ success, exists }`（无 `data` 包装），与 Express 一致。
+
+## S6 验收后前端切换
+
+```bash
+# file_management_frontend/.env
+VITE_API_BASE_URL=http://localhost:3002
+```
+
+验证：拖拽/选择上传、大文件分片、秒传、新建文件夹。
+
+回退：`VITE_API_BASE_URL=http://localhost:3000`
+
+## API 对照（S7 Tags + Versions + Archive）
+
+| Express | Nest | 状态 |
+|---------|------|------|
+| `GET /api/files/tags` | 同 | ✅ |
+| `POST /api/files/tags` | 同 | ✅ |
+| `PUT /api/files/tags/:tagId` | 同 | ✅ |
+| `DELETE /api/files/tags/:tagId` | 同 | ✅ |
+| `PUT /api/files/:id/tags` | 同 | ✅ |
+| `GET /api/files/:id/versions` | 同 | ✅ |
+| `POST /api/files/:id/versions/:versionId/rollback` | 同 | ✅ |
+| `GET /api/files/:id/versions/:versionId/download` | 同 | ✅ |
+| `GET /api/files/:id/archive/entries` | 同 | ✅ |
+| `POST /api/files/:id/archive/conflicts` | 同 | ✅ |
+| `POST /api/files/:id/archive/extract` | 同 | ✅ |
+
+在线解压需 **VIP 或管理员**；解压落盘复用 `MergeUploadService.registerLocalFileInDrive`。
+
+## S7 验收
+
+验证：标签 CRUD、文件版本列表/回滚/下载、ZIP 在线解压（VIP/管理员）。
+
 ## 测试
 
 ```bash
@@ -161,3 +214,34 @@ S2 e2e 覆盖：列表、详情、下载、text-chunk、回收站、重命名、
 S3 e2e 覆盖：AI 401/400/404、text/plain 流式 mock 响应。
 S4 e2e 覆盖：预览 401/404/400、preview-state/status JSON、有缓存时 PDF 流。
 S5 e2e 覆盖：profile GET/PUT、avatar 上传、user search、user-preferences GET/PUT。
+S6 e2e 覆盖：check-exists、check-name、分片上传+合并、instant-upload 404、传统 upload、folder 创建与重名。
+S7 e2e 覆盖：tags CRUD、versions 列表/回滚/下载、archive 403/entries/conflicts/extract。
+S8 e2e 覆盖：friendship 请求/接受/列表/删除、message 发送/历史/已读/未读汇总、share 创建/公开访问/我的分享/访问日志。
+
+## API 对照（S8 Friendship + Message + Share）
+
+| Express | Nest | 状态 |
+|---------|------|------|
+| `GET /api/friendships` | 同 | ✅ |
+| `GET /api/friendships/requests/pending` | 同 | ✅ |
+| `POST /api/friendships/request` | 同 | ✅ |
+| `PUT /api/friendships/request/:requestId/accept` | 同 | ✅ |
+| `PUT /api/friendships/request/:requestId/reject` | 同 | ✅ |
+| `DELETE /api/friendships/:friendId` | 同 | ✅ |
+| `GET /api/messages/unread-summary` | 同 | ✅ |
+| `POST /api/messages` | 同 | ✅ |
+| `GET /api/messages/:friendId` | 同 | ✅ |
+| `PUT /api/messages/:friendId/read` | 同 | ✅ |
+| `POST /api/shares` | 同 | ✅ |
+| `GET /api/shares/mine` | 同 | ✅ |
+| `GET /api/shares/:shareId/access-logs` | 同 | ✅ |
+| `GET /api/shares/public/:shareCode` | 同（公开） | ✅ |
+| `POST /api/shares/public/:shareCode/access` | 同（公开） | ✅ |
+| `GET /api/shares/public/:shareCode/file/:userFileId/download` | 同（公开） | ✅ |
+| `POST /api/files/:id/save-to-my-drive` | 同（好友/链接分享转存） | ✅ |
+
+Socket 推送（好友同步、`message:new`）留 **S9**；`ShareService.verifySharedFileForSave` 供转存校验复用。
+
+## S8 验收
+
+验证：加好友、发消息、创建分享链接、未登录访问公开分享页。

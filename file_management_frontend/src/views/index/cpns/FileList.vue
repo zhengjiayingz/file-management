@@ -197,6 +197,7 @@ import { useI18n } from 'vue-i18n'
 import { formatFileSize } from '@utils/fileUpload'
 import { getFileTypeSymbolId } from '@utils/fileTypeIcons'
 import { getFileEntryCategory } from '@utils/fileCategory'
+import { isAudioMedia, isVideoMedia } from '@utils/mediaFileDetect'
 import FileTypeColoredIcon from '@components/FileTypeColoredIcon/index.vue'
 import type { FileItem as FileInfo, FileTagItem } from '@typing/file'
 import { useAuthStore } from '@stores/auth'
@@ -311,29 +312,23 @@ const isImageFile = (file: FileInfo) => {
         /\.(jpg|jpeg|png|gif|webp|bmp)$/i.test(file.fileName)
 }
 
-const isVideoFile = (file: FileInfo) => {
-    return (file.mimeType && file.mimeType.startsWith('video/')) ||
-        /\.(mp4|webm|ogg|mov|wmv|flv|avi|rmvb|mkv)$/i.test(file.fileName)
-}
+const isVideoFile = (file: FileInfo) => isVideoMedia(file)
 
-const isAudioFile = (file: FileInfo) => {
-    return (file.mimeType && file.mimeType.startsWith('audio/')) ||
-        /\.(mp3|wav|ogg|flac|aac)$/i.test(file.fileName)
-}
+const isAudioFile = (file: FileInfo) => isAudioMedia(file)
 
 const getFileIcon = (file: FileInfo) => {
     if (file.fileType === 'folder') return Folder
     if (isImageFile(file)) return Picture
-    if (isVideoFile(file)) return VideoPlay
     if (isAudioFile(file)) return Headset
+    if (isVideoFile(file)) return VideoPlay
     return Document
 }
 
 const getFileIconColor = (file: FileInfo): string => {
     if (file.fileType === 'folder') return '#ffd04b'
     if (isImageFile(file)) return '#67c23a'
-    if (isVideoFile(file)) return '#f56c6c'
     if (isAudioFile(file)) return '#e6a23c'
+    if (isVideoFile(file)) return '#f56c6c'
     return '#909399'
 }
 

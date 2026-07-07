@@ -107,6 +107,27 @@ export class FilesManageController {
     return this.filesManageService.deleteFile(req, user.id, fileId);
   }
 
+  @Post(':id/save-to-my-drive')
+  @HttpCode(HttpStatus.OK)
+  saveSharedFileToMyDrive(
+    @Req() req: Request,
+    @CurrentUser() user: RequestUser,
+    @Param('id', ParseIntPipe) fileId: number,
+    @Body()
+    body: {
+      parentId?: unknown;
+      shareCode?: unknown;
+      extractCode?: unknown;
+    },
+  ) {
+    return this.filesManageService.saveSharedFileToMyDrive(
+      req,
+      user.id,
+      fileId,
+      body,
+    );
+  }
+
   @Post(':id/restore')
   @HttpCode(HttpStatus.OK)
   restoreFile(

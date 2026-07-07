@@ -20,6 +20,10 @@ import {
 import { ensureDirectoryExists } from '../utils/file.utils';
 import { resolveStorageFilePath } from '../utils/storagePath.utils';
 import {
+  resolveDownloadContentType,
+  sendLocalFileWithRange,
+} from '../utils/download-response.utils';
+import {
   LogOperationType,
   LogResourceType,
   OperationLogService,
@@ -303,21 +307,11 @@ export class FilesQueryService {
 
     const isPreview = req.query.preview === 'true';
     const disposition = isPreview ? 'inline' : 'attachment';
-    let contentType = userFile.storage.mimeType;
+    let contentType = resolveDownloadContentType(
+      userFile.fileName,
+      userFile.storage.mimeType,
+    );
     const ext = path.extname(userFile.fileName).toLowerCase();
-    const mimeMap: Record<string, string> = {
-      '.mp4': 'video/mp4',
-      '.webm': 'video/webm',
-      '.ogg': 'video/ogg',
-      '.mov': 'video/quicktime',
-      '.avi': 'video/x-msvideo',
-      '.wmv': 'video/x-ms-wmv',
-      '.flv': 'video/x-flv',
-      '.mkv': 'video/x-matroska',
-      '.rmvb': 'application/vnd.rn-realmedia',
-      '.rm': 'application/vnd.rn-realmedia',
-    };
-    if (mimeMap[ext]) contentType = mimeMap[ext];
 
     const textPreviewExts = new Set([
       '.txt',
@@ -340,13 +334,6 @@ export class FilesQueryService {
       if (!contentType.includes('charset')) contentType += '; charset=utf-8';
     }
 
-    res.setHeader(
-      'Content-Disposition',
-      `${disposition}; filename="${encodeURIComponent(userFile.fileName)}"`,
-    );
-    res.setHeader('Content-Type', contentType);
-    res.setHeader('Accept-Ranges', 'bytes');
-
     await this.operationLogService.logOperation({
       req,
       userId,
@@ -355,6 +342,23 @@ export class FilesQueryService {
       resourceId: userFile.id,
       description: `Downloaded file: ${userFile.fileName}`,
     });
+
+    if (this.storageService.getStorageDriver() === 'local') {
+      const physicalPath = resolveStorageFilePath(userFile.storage.filePath);
+      sendLocalFileWithRange(req, res, physicalPath, {
+        contentType,
+        disposition,
+        fileName: userFile.fileName,
+      });
+      return;
+    }
+
+    res.setHeader(
+      'Content-Disposition',
+      `${disposition}; filename="${encodeURIComponent(userFile.fileName)}"`,
+    );
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Accept-Ranges', 'bytes');
 
     const stream = await storage.getReadStream(userFile.storage.filePath);
     stream.on('error', (err) => {

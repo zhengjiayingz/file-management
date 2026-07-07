@@ -275,6 +275,7 @@ import { useAuthStore } from '@stores/auth'
 import { useMessageUnreadStore } from '@stores/messageUnread'
 import fileApiService from '@api/file'
 import type { FileItem } from '@typing/file'
+import { notifyDriveFilesChanged } from '@utils/driveEvents'
 import { useI18n } from 'vue-i18n'
 import { vipApi } from '@api/vip'
 import type { VipPendingItem } from '@api/vip'
@@ -709,6 +710,7 @@ const confirmSaveFileHere = async () => {
         )
         ElMessage.success(t('friendPanel.msg.savedToDrive'))
         savePickerVisible.value = false
+        notifyDriveFilesChanged(currentPickFolderId.value ?? null)
     } catch (e: any) {
         ElMessage.error(e.response?.data?.message || t('friendPanel.msg.saveFailed'))
     } finally {
