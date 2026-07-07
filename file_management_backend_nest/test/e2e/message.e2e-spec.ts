@@ -1,4 +1,5 @@
 import request from 'supertest';
+import { apiBody, FileListItem } from '../helpers/api-response';
 import { createE2eApp, E2eApp } from '../helpers/app-bootstrap';
 import { seedTextFile } from '../helpers/files.helper';
 import {
@@ -87,6 +88,43 @@ describe('Message (e2e)', () => {
     expect(res.body.message).toBe('成功存入您的网盘');
     expect(res.body.data.userId).toBe(userB.userId);
     expect(res.body.data.fileName).toContain('share-save');
+
+    const list = await request(app.getHttpServer())
+      .get('/api/files')
+      .set('Authorization', `Bearer ${userB.accessToken}`);
+    const savedIds = apiBody<FileListItem[]>(list.body).data.map((f) => f.id);
+    expect(savedIds).toContain(res.body.data.id);
+  });
+
+  it('POST /api/messages 带 fileId 后好友应可转存到网盘', async () => {
+    const userA = await registerE2eUser(app);
+    const userB = await registerE2eUser(app);
+    await makeFriends(app, userA, userB);
+
+    const { userFile } = await seedTextFile(
+      app,
+      userA.userId,
+      'chat-file-payload',
+      `chat-file-${Date.now()}.txt`,
+    );
+
+    const msg = await request(app.getHttpServer())
+      .post('/api/messages')
+      .set('Authorization', `Bearer ${userA.accessToken}`)
+      .send({
+        receiverId: userB.userId,
+        content: '分享文件',
+        messageType: 'file',
+        fileId: userFile.id,
+      });
+    expect(msg.status).toBe(201);
+
+    const save = await request(app.getHttpServer())
+      .post(`/api/files/${userFile.id}/save-to-my-drive`)
+      .set('Authorization', `Bearer ${userB.accessToken}`)
+      .send({ parentId: null });
+    expect(save.status).toBe(200);
+    expect(save.body.data.userId).toBe(userB.userId);
   });
 
   it('PUT read + GET unread-summary 应标记已读', async () => {

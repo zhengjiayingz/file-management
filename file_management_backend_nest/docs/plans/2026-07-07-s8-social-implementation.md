@@ -68,3 +68,14 @@ Modify: `src/app.module.ts`
 
 - Modify: `MIGRATION.md`
 - Modify: `docs/plans/2026-07-06-nest-migration-design.md`（S8 ✅）
+
+---
+
+## Task 7: 回归测试补全（手测缺陷 → e2e）
+
+> 见 [2026-07-07-regression-tests-supplement.md](./2026-07-07-regression-tests-supplement.md)
+
+- `files-manage.e2e-spec.ts`：`save-to-my-drive` 路由 + shareCode 转存
+- `message.e2e-spec.ts`：转存后列表可见、聊天 fileId 转存
+- `share.e2e-spec.ts`：公开分享 → 访问 → 转存完整流程
+- `files-query.e2e-spec.ts`：audio/ogg MIME、Accept-Ranges、206 Range

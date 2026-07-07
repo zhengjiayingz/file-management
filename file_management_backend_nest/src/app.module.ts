@@ -17,6 +17,7 @@ import { UserPreferenceModule } from './user-preference/user-preference.module';
 import { FriendshipModule } from './friendship/friendship.module';
 import { MessageModule } from './message/message.module';
 import { ShareModule } from './share/share.module';
+import { RealtimeModule } from './realtime/realtime.module';
 
 @Module({
   imports: [
@@ -44,6 +45,7 @@ import { ShareModule } from './share/share.module';
     FriendshipModule,
     MessageModule,
     ShareModule,
+    RealtimeModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

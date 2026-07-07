@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { FriendshipStatus } from '@prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
+import { RealtimeEmitterService } from '@/realtime/realtime-emitter.service';
 
 function asOptionalInt(value: unknown): number | null {
   if (typeof value === 'number' && Number.isInteger(value)) return value;
@@ -18,11 +19,13 @@ function asOptionalInt(value: unknown): number | null {
 
 @Injectable()
 export class FriendshipService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly realtime: RealtimeEmitterService,
+  ) {}
 
-  /** S9 补 Socket 推送 */
-  private emitFriendshipSync(): void {
-    // no-op in S8
+  private emitFriendshipSync(...userIds: number[]): void {
+    this.realtime.emitFriendshipSync(...userIds);
   }
 
   async sendFriendRequest(
@@ -84,7 +87,7 @@ export class FriendshipService {
       },
     });
 
-    this.emitFriendshipSync();
+    this.emitFriendshipSync(friend.id);
 
     return {
       message: '好友请求发送成功',
@@ -114,7 +117,7 @@ export class FriendshipService {
       data: { status: FriendshipStatus.accepted },
     });
 
-    this.emitFriendshipSync();
+    this.emitFriendshipSync(userId, friendship.userId);
 
     return {
       message: '已接受好友申请',
@@ -144,7 +147,7 @@ export class FriendshipService {
       data: { status: FriendshipStatus.rejected },
     });
 
-    this.emitFriendshipSync();
+    this.emitFriendshipSync(userId, friendship.userId);
 
     return {
       message: '已拒绝好友申请',
@@ -246,7 +249,7 @@ export class FriendshipService {
       where: { id: friendship.id },
     });
 
-    this.emitFriendshipSync();
+    this.emitFriendshipSync(userId, friendId);
 
     return { message: '已删除好友' };
   }

@@ -1,4 +1,5 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { IoAdapter } from '@nestjs/platform-socket.io';
 import { Test, TestingModule } from '@nestjs/testing';
 import { App } from 'supertest/types';
 import { AppModule } from '@/app.module';
@@ -12,6 +13,7 @@ export async function createE2eApp(): Promise<E2eApp> {
   }).compile();
 
   const app = moduleFixture.createNestApplication();
+  app.useWebSocketAdapter(new IoAdapter(app));
   app.setGlobalPrefix('api', { exclude: ['health'] });
   app.useGlobalPipes(
     new ValidationPipe({

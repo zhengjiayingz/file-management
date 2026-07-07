@@ -3,6 +3,7 @@ import { apiBody } from '../helpers/api-response';
 import { createE2eApp, E2eApp } from '../helpers/app-bootstrap';
 import { loginAndGetTokens } from '../helpers/auth.helper';
 import { getUserId, seedTextFile } from '../helpers/files.helper';
+import { registerE2eUser } from '../helpers/social.helper';
 
 describe('Share (e2e)', () => {
   let app: E2eApp;
@@ -142,5 +143,39 @@ describe('Share (e2e)', () => {
     expect(logs.body.success).toBe(true);
     expect(logs.body.data.total).toBeGreaterThanOrEqual(1);
     expect(logs.body.data.list.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('公开分享完整流程：创建 → 访问 → 转存到网盘', async () => {
+    const owner = await registerE2eUser(app);
+    const visitor = await registerE2eUser(app);
+    const { userFile } = await seedTextFile(
+      app,
+      owner.userId,
+      'full-flow-share',
+      `flow-${Date.now()}.txt`,
+    );
+
+    const created = await request(app.getHttpServer())
+      .post('/api/shares')
+      .set('Authorization', `Bearer ${owner.accessToken}`)
+      .send({
+        userFileIds: [userFile.id],
+        extractMode: 'custom',
+        customExtract: 'FL01',
+      });
+    const { shareCode } = apiBody<{ shareCode: string }>(created.body).data;
+
+    const access = await request(app.getHttpServer())
+      .post(`/api/shares/public/${shareCode}/access`)
+      .send({ extractCode: 'FL01' });
+    expect(access.status).toBe(200);
+    expect(access.body.data.files[0].id).toBe(userFile.id);
+
+    const save = await request(app.getHttpServer())
+      .post(`/api/files/${userFile.id}/save-to-my-drive`)
+      .set('Authorization', `Bearer ${visitor.accessToken}`)
+      .send({ parentId: null, shareCode, extractCode: 'FL01' });
+    expect(save.status).toBe(200);
+    expect(save.body.data.userId).toBe(visitor.userId);
   });
 });

@@ -3,6 +3,13 @@ import { apiBody, FileListItem } from '../helpers/api-response';
 import { createE2eApp, E2eApp } from '../helpers/app-bootstrap';
 import { loginAndGetTokens } from '../helpers/auth.helper';
 import { getUserId, seedFolder, seedTextFile } from '../helpers/files.helper';
+import { makeFriends, registerE2eUser } from '../helpers/social.helper';
+
+interface SavedToDriveItem {
+  id: number;
+  userId: number;
+  fileName: string;
+}
 
 describe('Files Manage (e2e)', () => {
   let app: E2eApp;
@@ -252,5 +259,68 @@ describe('Files Manage (e2e)', () => {
       .set('Authorization', `Bearer ${accessToken}`);
     const activeIds = apiBody<FileListItem[]>(list.body).data.map((f) => f.id);
     expect(activeIds).toEqual(expect.arrayContaining(ids));
+  });
+
+  it('POST /api/files/:id/save-to-my-drive 路由应存在（回归：S8 漏迁导致 404）', async () => {
+    const userA = await registerE2eUser(app);
+    const userB = await registerE2eUser(app);
+    await makeFriends(app, userA, userB);
+
+    const { userFile } = await seedTextFile(
+      app,
+      userA.userId,
+      'friend-share-payload',
+      `friend-save-${Date.now()}.txt`,
+    );
+
+    const res = await request(app.getHttpServer())
+      .post(`/api/files/${userFile.id}/save-to-my-drive`)
+      .set('Authorization', `Bearer ${userB.accessToken}`)
+      .send({ parentId: null });
+
+    expect(res.status).toBe(200);
+    const saved = apiBody<SavedToDriveItem>(res.body);
+    expect(saved.success).toBe(true);
+    expect(saved.data.userId).toBe(userB.userId);
+
+    const list = await request(app.getHttpServer())
+      .get('/api/files')
+      .set('Authorization', `Bearer ${userB.accessToken}`);
+    const names = apiBody<FileListItem[]>(list.body).data.map(
+      (f) => f.fileName,
+    );
+    expect(names.some((n) => (n ?? '').includes('friend-save'))).toBe(true);
+  });
+
+  it('POST /api/files/:id/save-to-my-drive 应支持 shareCode 公开分享转存', async () => {
+    const owner = await registerE2eUser(app);
+    const saver = await registerE2eUser(app);
+    const { userFile } = await seedTextFile(
+      app,
+      owner.userId,
+      'public-share-save',
+      `pub-save-${Date.now()}.txt`,
+    );
+
+    const created = await request(app.getHttpServer())
+      .post('/api/shares')
+      .set('Authorization', `Bearer ${owner.accessToken}`)
+      .send({
+        userFileIds: [userFile.id],
+        extractMode: 'custom',
+        customExtract: 'SV88',
+      });
+    expect(created.status).toBe(201);
+    const { shareCode } = apiBody<{ shareCode: string }>(created.body).data;
+
+    const res = await request(app.getHttpServer())
+      .post(`/api/files/${userFile.id}/save-to-my-drive`)
+      .set('Authorization', `Bearer ${saver.accessToken}`)
+      .send({ parentId: null, shareCode, extractCode: 'SV88' });
+
+    expect(res.status).toBe(200);
+    const saved = apiBody<SavedToDriveItem>(res.body);
+    expect(saved.success).toBe(true);
+    expect(saved.data.userId).toBe(saver.userId);
   });
 });

@@ -134,6 +134,65 @@ export async function seedImageFile(
   return { storage, userFile };
 }
 
+/** 任意 MIME 的二进制文件（OGG/媒体下载 Range 等回归测试） */
+export async function seedBinaryFile(
+  app: E2eApp,
+  userId: number,
+  content: Buffer | string,
+  fileName: string,
+  mimeType: string,
+  parentId: number | null = null,
+) {
+  const prisma = app.get(PrismaService);
+  const uploadRoot = getUploadRootDir();
+  fs.mkdirSync(uploadRoot, { recursive: true });
+
+  const buf = typeof content === 'string' ? Buffer.from(content) : content;
+  const hash = crypto.createHash('sha256').update(buf).digest('hex');
+  const storedName = `e2e_${hash.slice(0, 12)}_${fileName}`;
+  const absPath = path.join(uploadRoot, storedName);
+  fs.writeFileSync(absPath, buf);
+
+  const uploadRel = (process.env.UPLOAD_PATH || 'uploads')
+    .trim()
+    .replace(/^\.\//, '')
+    .replace(/\\/g, '/');
+  const filePath = `${uploadRel}/${storedName}`;
+
+  let storage = await prisma.fileStorage.findUnique({
+    where: { fileHash: hash },
+  });
+  if (!storage) {
+    storage = await prisma.fileStorage.create({
+      data: {
+        fileHash: hash,
+        filePath,
+        fileSize: BigInt(buf.length),
+        mimeType,
+        referenceCount: 1,
+      },
+    });
+  } else {
+    await prisma.fileStorage.update({
+      where: { id: storage.id },
+      data: { referenceCount: { increment: 1 } },
+    });
+  }
+
+  const userFile = await prisma.userFile.create({
+    data: {
+      userId,
+      storageId: storage.id,
+      parentId,
+      fileName,
+      fileType: 'file',
+      isDeleted: false,
+    },
+  });
+
+  return { storage, userFile, content: buf };
+}
+
 const MINIMAL_PDF = Buffer.from(
   '%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Count 1/Kids[3 0 R]>>endobj\n3 0 obj<</Type/Page/MediaBox[0 0 3 3]>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF',
   'utf-8',

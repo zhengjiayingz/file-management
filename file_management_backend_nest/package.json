@@ -29,8 +29,11 @@
     "@nestjs/core": "^11.0.1",
     "@nestjs/jwt": "^11.0.2",
     "@nestjs/platform-express": "^11.0.1",
+    "@nestjs/platform-socket.io": "^11.1.27",
     "@nestjs/serve-static": "^5.0.5",
+    "@nestjs/websockets": "^11.1.27",
     "@prisma/client": "^5.22.0",
+    "@socket.io/redis-adapter": "^8.3.0",
     "ai": "7.0.8",
     "archiver": "7.0.1",
     "bullmq": "^5.79.3",
@@ -51,6 +54,7 @@
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "sharp": "0.34.5",
+    "socket.io": "^4.8.3",
     "yauzl": "^3.4.0"
   },
   "devDependencies": {
@@ -75,6 +79,7 @@
     "jest": "^30.0.0",
     "prettier": "^3.4.2",
     "prisma": "^5.22.0",
+    "socket.io-client": "^4.8.3",
     "source-map-support": "^0.5.21",
     "supertest": "^7.0.0",
     "ts-jest": "^29.2.5",

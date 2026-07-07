@@ -2,7 +2,7 @@
 
 > **版本**：v1.1  
 > **日期**：2026-07-06（进度更新：2026-07-07）  
-> **状态**：实施中 — **S1～S8 已完成**，S9 待开始  
+> **状态**：实施中 — **S1～S9 已完成**，S10 待开始  
 > **关联文档**：[MIGRATION.md](../../MIGRATION.md)（当前进度与验收）、[MIGRATION_PLAN.md](../../MIGRATION_PLAN.md)（端点清单与工期粗估）
 
 ---
@@ -11,18 +11,21 @@
 
 ### 1.1 项目背景
 
-网盘后端当前运行于 Express（`../file_management_backend`，端口 **3000**），约 94 个 REST 端点 + Socket.IO + 预览 Worker。Nest 迁移版（`file_management_backend_nest`，端口 **3002**）已完成阶段 0～1 及 **S1～S6**：
+网盘后端当前运行于 Express（`../file_management_backend`，端口 **3000**），约 94 个 REST 端点 + Socket.IO + 预览 Worker。Nest 迁移版（`file_management_backend_nest`，端口 **3002**）已完成阶段 0～1 及 **S1～S9**：
 
 | 已完成 | 未完成 |
 |--------|--------|
-| 脚手架、Config、Prisma、Health、ValidationPipe | Versions / Archive（S7 剩余） |
-| Redis、全局限流、登录限流、Guards、异常 Filter | Socket Gateway（S9） |
-| **S1** Auth 15 端点全量 | Socket Gateway（S9） |
-| **S2** Files 读（列表、下载、回收站、批量等 11 端点） | Admin / VIP / Log（S10） |
-| **S3** AI 流式问答 | Express 下线（S11） |
-| **S4** Office 预览 + BullMQ 入队 | 预览 Worker 迁入 Nest（S11） |
+| 脚手架、Config、Prisma、Health、ValidationPipe | Admin / VIP / Log（S10） |
+| Redis、全局限流、登录限流、Guards、异常 Filter | Express 下线（S11） |
+| **S1** Auth 15 端点全量 | 预览 Worker 迁入 Nest（S11） |
+| **S2** Files 读（列表、下载、回收站、批量等 11 端点） | |
+| **S3** AI 流式问答 | |
+| **S4** Office 预览 + BullMQ 入队 | |
 | **S5** User + UserPreference（6 端点） | |
 | **S6** Files 上传（8 端点：分片、秒传、传统上传、建文件夹） | |
+| **S7** Tags / Versions / Archive | |
+| **S8** Friendship + Message + Share（16 端点） | |
+| **S9** Socket Gateway（`message:new`、`friendship:sync`） | |
 | Files 标签（5 端点，**已提前迁入**，归入 S7 验收） | |
 
 ### 1.2 终局目标
@@ -336,19 +339,22 @@ src/
 
 **实施文档**：[2026-07-07-s8-social-design.md](./2026-07-07-s8-social-design.md)
 
-**验收**：Share 公开链接 e2e；Message Socket 推送留 S9。
+**验收**：Share 公开链接 e2e；Message / Friendship Socket 推送见 S9 ✅。
 
 ---
 
-### S9 — Socket Gateway（3 天）
+### S9 — Socket Gateway（3 天）✅
 
 **来源**：Express `src/realtime/socket.ts`
 
-- `MessagesGateway` + Redis Adapter（多实例）
-- 握手校验 JWT + `sessionVersion`
-- 与 Message REST 联调
+- `ContactsGateway` + Redis Adapter（多实例）
+- 握手校验 JWT + `sessionVersion` + `mustChangePassword`
+- `RealtimeEmitterService`：`message:new`、`friendship:sync`
+- Message / Friendship Service 注入推送
 
-**验收**：消息推送手测 + 握手拒绝非法 Token。
+**实施文档**：[2026-07-07-s9-socket-design.md](./2026-07-07-s9-socket-design.md)、[2026-07-07-s9-socket-implementation.md](./2026-07-07-s9-socket-implementation.md)
+
+**验收**：`test/e2e/socket.e2e-spec.ts`（5 用例）+ 双账号手测实时消息。
 
 ---
 
@@ -392,7 +398,7 @@ S1 Auth ✅ ──► S2 Files读 ✅ ──► S3 AI ✅
                     │
 S5 User ✅ ◄──（已与 S3/S4 并行完成）
 
-S8 社交 ✅ ──► S9 Socket ⬜ ──► S10 Admin/VIP/Log ⬜ ──► S11 下线 ⬜
+S8 社交 ✅ ──► S9 Socket ✅ ──► S10 Admin/VIP/Log ⬜ ──► S11 下线 ⬜
 ```
 
 **暂停策略**：任一阶段可暂停；已迁模块留 Nest，未迁走 Express 3000；恢复时从下一阶段继续，无需推倒重来。
@@ -597,7 +603,7 @@ VITE_API_BASE_URL=http://localhost:3000   # 回退 Express
 
 ## 9. 端点进度总览
 
-> 最后更新：2026-07-07（S6 完成）
+> 最后更新：2026-07-07（S9 完成）
 
 | 模块 | 进度 | 阶段 | 状态 |
 |------|------|------|------|
@@ -614,13 +620,13 @@ VITE_API_BASE_URL=http://localhost:3000   # 回退 Express
 | Friendship | 6/6 | S8 | ✅ |
 | Message | 4/4 | S8 | ✅ |
 | Share | 6/6 | S8 | ✅ |
-| Socket | 0/1 | S9 | ⬜ |
+| Socket | 1/1 | S9 | ✅ |
 | Admin | 0/9 | S10 | ⬜ |
 | VIP | 0/8 | S10 | ⬜ |
 | Log | 0/1 | S10 | ⬜ |
 
-**已迁 REST 端点合计**：约 **76/94**（含 S8 社交 16 端点）。  
-**当前 e2e**：16 suites / 86 tests 全绿（`pnpm test:e2e`）。
+**已迁 REST 端点合计**：约 **76/94**（含 S8 社交 16 端点）；Socket 实时层 S9 ✅。  
+**当前 e2e**：17 suites / 98 tests 全绿（`pnpm test:e2e`）。
 
 全部 ✅ 后执行 S11 下线 Express。
 
@@ -628,10 +634,9 @@ VITE_API_BASE_URL=http://localhost:3000   # 回退 Express
 
 ## 10. 下一步
 
-1. **S9 Socket Gateway**（与 Message 联调）
-2. **S10 Admin + VIP + Log**
-3. **S11**：下线 Express
+1. **S10 Admin + VIP + Log**
+2. **S11**：下线 Express
 
 ---
 
-*本文档由 superpowers brainstorming 流程产出；v1.2 同步 S1～S8 完成进度。*
+*本文档由 superpowers brainstorming 流程产出；v1.3 同步 S1～S9 完成进度。*

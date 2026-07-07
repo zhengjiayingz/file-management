@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { FriendshipStatus, MessageType } from '@prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
+import { RealtimeEmitterService } from '@/realtime/realtime-emitter.service';
 import { loadMessageForEmit } from './message-payload.util';
 
 function asInt(value: unknown): number | null {
@@ -18,17 +19,19 @@ function asInt(value: unknown): number | null {
 
 @Injectable()
 export class MessageService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly realtime: RealtimeEmitterService,
+  ) {}
 
-  /** S9 补 Socket `message:new` 推送 */
   private async notifyNewMessage(
     receiverId: number,
     messageId: number,
   ): Promise<void> {
-    void receiverId;
-    void messageId;
-    // no-op in S8; loadMessageForEmit ready for S9
-    await loadMessageForEmit(this.prisma, messageId);
+    const full = await loadMessageForEmit(this.prisma, messageId);
+    if (full) {
+      this.realtime.emitToUser(receiverId, 'message:new', { message: full });
+    }
   }
 
   async sendMessage(

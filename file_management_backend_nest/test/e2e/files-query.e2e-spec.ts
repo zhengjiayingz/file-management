@@ -2,11 +2,7 @@ import request from 'supertest';
 import { apiBody, FileListItem, TextChunkData } from '../helpers/api-response';
 import { createE2eApp, E2eApp } from '../helpers/app-bootstrap';
 import { loginAndGetTokens } from '../helpers/auth.helper';
-import {
-  getUserId,
-  seedImageFile,
-  seedTextFile,
-} from '../helpers/files.helper';
+import { getUserId, seedImageFile, seedTextFile, seedBinaryFile } from '../helpers/files.helper';
 import { PrismaService } from '@/prisma/prisma.service';
 
 describe('Files Query (e2e)', () => {
@@ -234,5 +230,51 @@ describe('Files Query (e2e)', () => {
     const body = apiBody<{ id: number; tagName: string }[]>(res.body);
     expect(body.success).toBe(true);
     expect(Array.isArray(body.data)).toBe(true);
+  });
+
+  it('GET /api/files/:id/download?preview=true 对 audio/ogg 应返回 audio/ogg 与 Accept-Ranges', async () => {
+    const { accessToken, username } = await loginAndGetTokens(app);
+    const userId = await getUserId(app, username);
+    const payload = Buffer.alloc(4096, 0xab);
+    const fileName = `audio-${Date.now()}.ogg`;
+    const { userFile } = await seedBinaryFile(
+      app,
+      userId,
+      payload,
+      fileName,
+      'audio/ogg',
+    );
+
+    const res = await request(app.getHttpServer())
+      .get(`/api/files/${userFile.id}/download`)
+      .query({ preview: 'true' })
+      .set('Authorization', `Bearer ${accessToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toMatch(/^audio\/ogg/);
+    expect(res.headers['accept-ranges']).toBe('bytes');
+    expect(res.headers['content-length']).toBe(String(payload.length));
+  });
+
+  it('GET /api/files/:id/download 应支持 Range 返回 206 Partial Content', async () => {
+    const { accessToken, username } = await loginAndGetTokens(app);
+    const userId = await getUserId(app, username);
+    const payload = Buffer.from(`range-test-${Date.now()}`);
+    const { userFile } = await seedBinaryFile(
+      app,
+      userId,
+      payload,
+      `range-${Date.now()}.ogg`,
+      'audio/ogg',
+    );
+
+    const res = await request(app.getHttpServer())
+      .get(`/api/files/${userFile.id}/download`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .set('Range', 'bytes=0-9');
+
+    expect(res.status).toBe(206);
+    expect(res.headers['content-range']).toMatch(/bytes 0-9\/\d+/);
+    expect(Buffer.isBuffer(res.body) ? res.body.length : res.text.length).toBe(10);
   });
 });
