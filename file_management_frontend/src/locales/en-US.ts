@@ -564,7 +564,23 @@ export default {
     textChunkError: 'Load failed',
     textChunkBytesHint: 'Large files load in segments; scroll to the bottom to load more',
     textChunkReflow:
-      'Reflow: join line breaks within paragraphs, wrap to panel width (off = match source newlines)'
+      'Reflow: join line breaks within paragraphs, wrap to panel width (off = match source newlines)',
+    aiAskTitle: 'Ask AI',
+    aiAskHint: 'Select text on the left for context; chat on the right and keep asking follow-ups.',
+    aiAskSelected: 'Selected',
+    aiAskSelectedEmpty: 'Select text in the document on the left first',
+    aiAskQuestionPlaceholder: 'Type a message. Enter to send, Shift+Enter for newline…',
+    aiAskSubmit: 'Send',
+    aiAskStop: 'Stop',
+    aiAskThinking: 'Answering…',
+    aiAskError: 'AI request failed',
+    aiAskNoSelection: 'Select text on the left first',
+    aiAskNoQuestion: 'Enter a question',
+    aiChatEmpty: 'Select text on the left to start chatting with AI',
+    aiChatContext: 'Selected context',
+    aiChatClear: 'Clear chat',
+    aiChatYou: 'You',
+    aiChatAssistant: 'AI'
   },
   friendPanel: {
     chatWith: 'Chat with {name}',

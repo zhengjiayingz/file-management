@@ -1,0 +1,443 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             Int      @id @default(autoincrement())
+  username       String   @unique @db.VarChar(50)
+  password       String   @db.VarChar(64)
+  email          String?  @unique @db.VarChar(100)
+  /// 头像 URL 路径，如 /uploads/avatars/xxx.jpg（可为空）
+  avatarUrl      String?  @map("avatar_url") @db.VarChar(500)
+  role           Role     @default(user)
+  storageQuota   BigInt   @map("storage_quota")
+  storageUsed    BigInt   @default(0) @map("storage_used")
+  status         Status   @default(active)
+  /// 管理员重置为临时密码后，为 true；用户修改为符合策略的密码后为 false
+  mustChangePassword Boolean @default(false) @map("must_change_password")
+  /// 会话版本：递增后此前签发的 Access Token 全部失效（踢人、改密、禁用等）
+  sessionVersion Int @default(0) @map("session_version")
+  /// 管理员「踢出登录」标记时间；登录成功会清空，供管理端「登录状态」开关展示
+  lastSessionKickAt DateTime? @map("last_session_kick_at")
+  vipExpireAt    DateTime? @map("vip_expire_at")
+  /// 管理员可选：TOTP 两步验证已启用
+  totpEnabled    Boolean  @default(false) @map("totp_enabled")
+  /// 已激活的 TOTP 密钥（Base32）；仅当 totpEnabled 为 true 时有值
+  totpSecret     String?  @map("totp_secret") @db.VarChar(64)
+  /// 设置流程中的临时密钥，确认前未生效
+  totpSetupSecret String? @map("totp_setup_secret") @db.VarChar(64)
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  userFiles      UserFile[]
+  fileShares     FileShare[]
+  sentFriendships     Friendship[] @relation("UserFriendships")
+  receivedFriendships Friendship[] @relation("FriendFriendships")
+  sentMessages   Message[] @relation("SentMessages")
+  receivedMessages Message[] @relation("ReceivedMessages")
+  fileTags       FileTag[]
+  operationLogs  OperationLog[]
+  loginLogs      LoginLog[]
+  refreshTokens  RefreshToken[]
+  uploadChunks   UploadChunk[]
+  shareAccessLogs ShareAccessLog[]
+  userPreference UserPreference?
+  vipUpgradeRequestsAsApplicant VipUpgradeRequest[] @relation("VipApplicant")
+  vipUpgradeRequestsProcessed   VipUpgradeRequest[] @relation("VipProcessedBy")
+
+  @@map("users")
+}
+
+/// 用户申请升级 VIP（管理员在通讯录中审核）
+model VipUpgradeRequest {
+  id            Int               @id @default(autoincrement())
+  applicantId   Int               @map("applicant_id")
+  status        VipUpgradeStatus  @default(pending)
+  processedById Int?              @map("processed_by_id")
+  processedAt   DateTime?       @map("processed_at")
+  createdAt     DateTime          @default(now()) @map("created_at")
+
+  applicant   User @relation("VipApplicant", fields: [applicantId], references: [id], onDelete: Cascade)
+  processedBy User? @relation("VipProcessedBy", fields: [processedById], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([applicantId, status])
+  @@map("vip_upgrade_requests")
+}
+
+enum VipUpgradeStatus {
+  pending
+  approved
+  rejected
+}
+
+model UserPreference {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @unique @map("user_id")
+  locale    String   @default("auto") @db.VarChar(10)  // 'zh-CN', 'zh-TW', 'en-US', 'auto'
+  theme     String   @default("auto") @db.VarChar(10)  // 'light', 'dark', 'auto'
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_preferences")
+}
+
+/// 全局系统配置（单行 id=1）：密码策略、按角色默认空间、标签上限等
+model SystemSettings {
+  id Int @id @default(1)
+
+  /// 密码最短长度
+  passwordMinLength     Int @default(8) @map("password_min_length")
+  /// 须同时满足的字符类别（JSON 数组，元素为 digit | lower | upper | special）
+  passwordRequiredCategories Json @default("[\"digit\",\"lower\",\"upper\",\"special\"]") @map("password_required_categories")
+  /// 在已勾选的类别中，密码至少须满足其中几类（1～勾选数量，可与勾选数相等表示全部须满足）
+  passwordMinCategoriesInPool Int @default(4) @map("password_min_categories_in_pool")
+
+  /// 普通用户默认空间（字节）
+  storageQuotaUserBytes  BigInt @default(1073741824) @map("storage_quota_user_bytes")
+  /// VIP 用户默认/升级后空间（字节）
+  storageQuotaVipBytes   BigInt @default(2147483648) @map("storage_quota_vip_bytes")
+  /// 管理员默认空间（字节）
+  storageQuotaAdminBytes BigInt @default(107374182400) @map("storage_quota_admin_bytes")
+
+  maxTagsUser Int @default(2) @map("max_tags_user")
+  maxTagsVip  Int @default(5) @map("max_tags_vip")
+
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("system_settings")
+}
+
+model FileStorage {
+  id              Int      @id @default(autoincrement())
+  fileHash        String   @unique @map("file_hash") @db.VarChar(64)
+  filePath        String   @map("file_path") @db.VarChar(500) // 相对项目根，如 uploads/...
+  fileSize        BigInt   @map("file_size")
+  mimeType        String   @map("mime_type") @db.VarChar(100)
+  referenceCount  Int      @default(0) @map("reference_count")
+  status          FileStatus @default(active)
+  markedDeleteAt  DateTime? @map("marked_delete_at")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  // Relations
+  userFiles       UserFile[]
+  // uploadChunks    UploadChunk[]
+  fileHistories   FileHistory[]
+
+  @@map("file_storage")
+}
+
+model UserFile {
+  id         Int      @id @default(autoincrement())
+  userId     Int      @map("user_id")
+  storageId  Int?     @map("storage_id")
+  parentId   Int?     @map("parent_id")
+  fileName   String   @map("file_name") @db.VarChar(255)
+  fileType   FileType @map("file_type")
+  isDeleted  Boolean  @default(false) @map("is_deleted")
+  version    Int      @default(1)
+  deletedAt  DateTime? @map("deleted_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  storage    FileStorage? @relation(fields: [storageId], references: [id], onDelete: SetNull)
+  parent     UserFile? @relation("UserFileHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  children   UserFile[] @relation("UserFileHierarchy")
+  fileShares FileShare[]
+  userFileTags UserFileTag[]
+  fileHistories FileHistory[]
+  messages   Message[]
+
+  @@index([userId, parentId, isDeleted])
+  @@index([storageId])
+  @@map("user_files")
+}
+
+model UploadChunk {
+  id         Int      @id @default(autoincrement())
+  userId     Int      @map("user_id")
+  fileHash   String   @map("file_hash") @db.VarChar(64)
+  chunkIndex Int      @map("chunk_index")
+  chunkHash  String   @map("chunk_hash") @db.VarChar(64)
+  chunkSize  Int      @map("chunk_size")
+  chunkPath  String   @map("chunk_path") @db.VarChar(500) // 相对项目根 chunks/...
+  status     ChunkStatus @default(uploading)
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  // Relations
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // storage    FileStorage? @relation(fields: [fileHash], references: [fileHash])
+
+  @@unique([fileHash, chunkIndex])
+  @@index([userId, fileHash])
+  @@map("upload_chunks")
+}
+
+model FileShare {
+  id               Int      @id @default(autoincrement())
+  userId           Int      @map("user_id")
+  userFileId       Int      @map("user_file_id")
+  /// 批量分享时的全部 user_files.id（JSON 数组）；与 userFileId（首项）同时写入便于校验与扩展
+  userFileIds      Json?    @map("user_file_ids")
+  shareCode        String   @unique @map("share_code") @db.VarChar(32)
+  extractCode      String?  @map("extract_code") @db.VarChar(6)
+  permission       SharePermission @default(download)
+  expireAt         DateTime? @map("expire_at")
+  /// 是否将提取码附加在分享 URL 查询参数中（访客端解析用）
+  autoFillExtract  Boolean  @default(false) @map("auto_fill_extract")
+  /// 访问人数上限；null 表示不限制（按独立访客 IP 计数，见 share.controller）
+  maxVisitors      Int?     @map("max_visitors")
+  viewCount        Int      @default(0) @map("view_count")
+  downloadCount    Int      @default(0) @map("download_count")
+  status           ShareStatus @default(active)
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  // Relations
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userFile      UserFile @relation(fields: [userFileId], references: [id], onDelete: Cascade)
+  accessLogs    ShareAccessLog[]
+
+  @@index([userId])
+  @@index([status, expireAt])
+  @@map("file_shares")
+}
+
+model ShareAccessLog {
+  id         Int      @id @default(autoincrement())
+  shareId    Int      @map("share_id")
+  visitorId  Int?     @map("visitor_id")
+  ipAddress  String   @map("ip_address") @db.VarChar(45)
+  userAgent  String?  @map("user_agent") @db.VarChar(500)
+  action     AccessAction
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  // Relations
+  share      FileShare @relation(fields: [shareId], references: [id], onDelete: Cascade)
+  visitor    User?     @relation(fields: [visitorId], references: [id], onDelete: SetNull)
+
+  @@index([shareId, createdAt])
+  @@map("share_access_logs")
+}
+
+model Friendship {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  friendId  Int      @map("friend_id")
+  status    FriendshipStatus @default(pending)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user      User     @relation("UserFriendships", fields: [userId], references: [id], onDelete: Cascade)
+  friend    User     @relation("FriendFriendships", fields: [friendId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, friendId])
+  @@index([friendId, status])
+  @@map("friendships")
+}
+
+model Message {
+  id          Int      @id @default(autoincrement())
+  senderId    Int      @map("sender_id")  //发送者Id
+  receiverId  Int      @map("receiver_id")//接收者Id
+  content     String   @db.Text
+  messageType MessageType @default(text) @map("message_type")
+  fileId      Int?     @map("file_id") // 文件消息关联 UserFile
+  isRead      Boolean  @default(false) @map("is_read")
+  readAt      DateTime? @map("read_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  // Relations
+  sender      User     @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver    User     @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
+  file        UserFile? @relation(fields: [fileId], references: [id], onDelete: SetNull)
+
+  @@index([receiverId, isRead, createdAt])
+  @@index([senderId, createdAt])
+  @@map("messages")
+}
+
+model FileTag {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  tagName   String   @map("tag_name") @db.VarChar(50)
+  color     String?  @db.VarChar(7)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userFileTags UserFileTag[]
+
+  @@unique([userId, tagName])
+  @@map("file_tags")
+}
+
+model UserFileTag {
+  id         Int      @id @default(autoincrement())
+  userFileId Int      @map("user_file_id")
+  tagId      Int      @map("tag_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  // Relations
+  userFile   UserFile @relation(fields: [userFileId], references: [id], onDelete: Cascade)
+  tag        FileTag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([userFileId, tagId])
+  @@index([tagId])
+  @@map("user_file_tags")
+}
+
+model OperationLog {
+  id            Int      @id @default(autoincrement())
+  userId        Int      @map("user_id")
+  operationType String   @map("operation_type") @db.VarChar(50)
+  resourceType  String   @map("resource_type") @db.VarChar(50)
+  resourceId    Int?     @map("resource_id")
+  description   String?  @db.VarChar(500)
+  ipAddress     String   @map("ip_address") @db.VarChar(45)
+  userAgent     String?  @map("user_agent") @db.VarChar(500)
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  // Relations
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([operationType, createdAt])
+  @@map("operation_logs")
+}
+
+model LoginLog {
+  id         Int      @id @default(autoincrement())
+  userId     Int?     @map("user_id")
+  username   String?  @map("username") @db.VarChar(50)
+  ipAddress  String   @map("ip_address") @db.VarChar(45)
+  location   String?  @db.VarChar(100)
+  device     String?  @db.VarChar(100)
+  userAgent  String?  @map("user_agent") @db.VarChar(500)
+  status     LoginStatus
+  failReason String?  @map("fail_reason") @db.VarChar(200)
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  // Relations
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([ipAddress, createdAt])
+  @@index([username])
+  @@map("login_logs")
+}
+
+model RefreshToken {
+  id          Int      @id @default(autoincrement())
+  userId      Int      @map("user_id")
+  token       String   @unique @db.VarChar(500)
+  deviceName  String?  @map("device_name") @db.VarChar(100)
+  deviceType  String?  @map("device_type") @db.VarChar(50)
+  ipAddress   String   @map("ip_address") @db.VarChar(45)
+  userAgent   String?  @map("user_agent") @db.VarChar(500)
+  isRevoked   Boolean  @default(false) @map("is_revoked")
+  expiresAt   DateTime @map("expires_at")
+  lastUsedAt  DateTime? @map("last_used_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  // Relations
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRevoked, expiresAt])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
+}
+
+model FileHistory {
+  id            Int      @id @default(autoincrement())
+  userFileId    Int      @map("user_file_id")
+  storageId     Int      @map("storage_id")
+  fileName      String   @map("file_name") @db.VarChar(255)
+  version       Int      @map("version")
+  fileSize      BigInt   @map("file_size")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  // Relations
+  userFile      UserFile @relation(fields: [userFileId], references: [id], onDelete: Cascade)
+  storage       FileStorage @relation(fields: [storageId], references: [id], onDelete: Cascade)
+
+  @@index([userFileId, version])
+  @@map("file_histories")
+}
+
+// Enums
+enum Role {
+  user
+  vip
+  admin
+}
+
+enum Status {
+  active
+  disabled
+}
+
+enum FileStatus {
+  active
+  pending_delete
+}
+
+enum FileType {
+  file
+  folder
+}
+
+enum ChunkStatus {
+  uploading
+  completed
+  failed
+}
+
+enum SharePermission {
+  view
+  download
+  edit
+}
+
+enum ShareStatus {
+  active
+  expired
+  cancelled
+}
+
+enum AccessAction {
+  view
+  download
+  save
+}
+
+enum FriendshipStatus {
+  pending
+  accepted
+  rejected
+  blocked
+}
+
+enum MessageType {
+  text
+  file
+}
+
+enum LoginStatus {
+  success
+  failed
+}

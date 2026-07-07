@@ -541,8 +541,7 @@ const isDocumentFile = (file: FileInfo) => {
     /\.(pdf|txt|md|json|xml|html|js|css|ts)$/i.test(name)
 }
 
-/** 与后端 getTextFileChunk 白名单一致，用于大文件分块预览（排除 PDF） */
-const TEXT_CHUNK_SIZE_THRESHOLD = 200 * 1024
+/** 与后端 getTextFileChunk 白名单一致，用于文本分块预览（排除 PDF） */
 const isTextLikeForChunk = (file: FileInfo) => {
   const mime = (file.mimeType || '').toLowerCase()
   if (mime === 'application/pdf') return false
@@ -602,7 +601,7 @@ const handleFileDoubleClick = async (file: FileInfo) => {
       currentOfficeFile.value = file
       officePreviewVisible.value = true
     } else if (isDocumentFile(file)) {
-      if (isTextLikeForChunk(file) && (file.fileSize ?? 0) >= TEXT_CHUNK_SIZE_THRESHOLD) {
+      if (isTextLikeForChunk(file)) {
         textChunkFileId.value = file.id
         textChunkFileName.value = file.fileName
         textChunkPreviewVisible.value = true
@@ -948,7 +947,7 @@ const deleteFile = async (file: FileInfo) => {
       }
     )
 
-    await fileApiService.deleteFile(file.id)
+    await fileApiService.deleteFilesBatch([file.id])
 
     // 从列表中移除
     const index = files.value.findIndex((f: FileInfo) => f.id === file.id)
