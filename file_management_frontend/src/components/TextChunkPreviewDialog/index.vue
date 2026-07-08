@@ -13,13 +13,18 @@
           }}
         </p>
         <div class="text-chunk-options">
-          <el-checkbox v-model="reflowForReading" :disabled="initialLoading">
+          <el-checkbox v-if="!isMarkdownFile" v-model="reflowForReading" :disabled="initialLoading">
             {{ t('preview.textChunkReflow') }}
           </el-checkbox>
         </div>
         <div ref="scrollRef" v-loading="initialLoading" class="text-chunk-scroll" @scroll.passive="onScroll"
           @mouseup="captureSelection">
-          <div v-if="!initialLoading" class="vlist-inner" :style="{
+          <div
+            v-if="isMarkdownFile && !initialLoading"
+            class="markdown-preview-body"
+            v-html="renderedMarkdown"
+          />
+          <div v-else-if="!initialLoading" class="vlist-inner" :style="{
             height: `${vTotalSize}px`,
             position: 'relative',
             width: '100%'
@@ -168,6 +173,15 @@ const visible = computed({
 
 const dialogTitle = computed(() =>
   props.fileName ? `${t('preview.textChunkTitle')} - ${props.fileName}` : t('preview.textChunkTitle')
+)
+
+const isMarkdownFile = computed(() => {
+  const name = props.fileName?.toLowerCase() ?? ''
+  return name.endsWith('.md') || name.endsWith('.markdown')
+})
+
+const renderedMarkdown = computed(() =>
+  isMarkdownFile.value ? renderMarkdown(rawText.value) : ''
 )
 
 /** 已顺序拼接的已加载原文（分块接口保证字节顺序，直接 += 与纸面折行/跨块一致） */
@@ -438,6 +452,7 @@ async function fetchChunk(fromOffset: number) {
 
 async function onOpen() {
   reset()
+  reflowForReading.value = !isMarkdownFile.value
   initialLoading.value = true
   loadError.value = ''
   try {
@@ -608,6 +623,116 @@ function onScroll() {
 .vlist-row--blank {
   min-height: 0.75em;
   pointer-events: none;
+}
+
+.markdown-preview-body {
+  font-family: 'Sarasa Term SC', 'Source Han Sans SC', 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC',
+    ui-sans-serif, system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--el-text-color-primary);
+  word-break: break-word;
+
+  :deep(p) {
+    margin: 0 0 0.75em;
+
+    &:last-child {
+      margin-bottom: 0;
+    }
+  }
+
+  :deep(h1) {
+    margin: 0 0 0.6em;
+    font-size: 1.5em;
+    font-weight: 700;
+    line-height: 1.35;
+  }
+
+  :deep(h2) {
+    margin: 1em 0 0.5em;
+    font-size: 1.25em;
+    font-weight: 600;
+    line-height: 1.4;
+  }
+
+  :deep(h3),
+  :deep(h4) {
+    margin: 0.8em 0 0.4em;
+    font-size: 1.1em;
+    font-weight: 600;
+    line-height: 1.4;
+  }
+
+  :deep(ul),
+  :deep(ol) {
+    margin: 0.4em 0 0.75em;
+    padding-left: 1.5em;
+  }
+
+  :deep(li + li) {
+    margin-top: 0.25em;
+  }
+
+  :deep(code) {
+    padding: 0.1em 0.35em;
+    border-radius: 4px;
+    font-size: 0.92em;
+    background: var(--el-fill-color, #f0f2f5);
+  }
+
+  :deep(pre) {
+    margin: 0.6em 0;
+    padding: 10px 12px;
+    border-radius: 6px;
+    overflow: auto;
+    background: var(--el-fill-color, #f0f2f5);
+
+    code {
+      padding: 0;
+      background: transparent;
+    }
+  }
+
+  :deep(blockquote) {
+    margin: 0.6em 0;
+    padding-left: 0.8em;
+    border-left: 3px solid var(--el-border-color);
+    color: var(--el-text-color-secondary);
+  }
+
+  :deep(a) {
+    color: var(--el-color-primary);
+    text-decoration: none;
+
+    &:hover {
+      text-decoration: underline;
+    }
+  }
+
+  :deep(hr) {
+    margin: 1em 0;
+    border: none;
+    border-top: 1px solid var(--el-border-color-lighter);
+  }
+
+  :deep(table) {
+    width: 100%;
+    margin: 0.6em 0;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+
+  :deep(th),
+  :deep(td) {
+    border: 1px solid var(--el-border-color-lighter);
+    padding: 6px 8px;
+    text-align: left;
+  }
+
+  :deep(th) {
+    background: var(--el-fill-color-lighter, #f5f7fa);
+    font-weight: 600;
+  }
 }
 
 .vlist-appending {
