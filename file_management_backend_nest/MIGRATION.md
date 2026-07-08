@@ -1,6 +1,8 @@
 # Express → Nest 迁移路线图
 
-与 `../file_management_backend` 共用 Prisma / MySQL。Nest 默认端口 **3002**。
+> **状态：迁移完成（S11）** — Nest 为唯一运行后端，默认端口 **3000**。Express 已归档。
+
+与 `../file_management_backend` 共用 Prisma / MySQL（schema 权威：`prisma/schema.prisma`）。
 
 ## 阶段进度
 
@@ -18,15 +20,22 @@
 | **S7** | **Tags + Versions + Archive** | **✅** |
 | **S8** | **Friendship + Message + Share** | **✅** |
 | **S9** | **Socket Gateway（实时推送）** | **✅** |
+| **S10** | **Admin + VIP + Log** | **✅** |
+| **S11** | **Swagger + 定时清理 + Preview Worker + Express 下线** | **✅** |
 
 ## 启动
 
 ```bash
-cp .env.example .env   # 或与 Express 共用 .env（e2e 会自动读取 ../file_management_backend/.env）
+cp .env.example .env
 pnpm install
 pnpm prisma:generate
-pnpm start:dev
+pnpm start:dev          # API http://localhost:3000
+pnpm start:worker:dev   # 预览 Worker（需 REDIS_URL + LibreOffice）
 ```
+
+Swagger：`http://localhost:3000/api-docs`
+
+Docker：`docker compose up -d`（见 `docker-compose.yml`）
 
 ## API 对照（Auth 全量）
 
@@ -54,7 +63,7 @@ pnpm start:dev
 
 ```bash
 # file_management_frontend/.env
-VITE_API_BASE_URL=http://localhost:3002
+VITE_API_BASE_URL=http://localhost:3000
 ```
 
 验证：注册、登录、MFA、会话管理、改密、忘记密码。
@@ -85,7 +94,7 @@ VITE_API_BASE_URL=http://localhost:3002
 
 ```bash
 # file_management_frontend/.env
-VITE_API_BASE_URL=http://localhost:3002
+VITE_API_BASE_URL=http://localhost:3000
 ```
 
 验证：文件列表、下载、txt 预览、回收站（删除/恢复/永久删除）、重命名、移动、批量操作。
@@ -106,7 +115,7 @@ VITE_API_BASE_URL=http://localhost:3002
 
 ```bash
 # file_management_frontend/.env
-VITE_API_BASE_URL=http://localhost:3002
+VITE_API_BASE_URL=http://localhost:3000
 ```
 
 验证：`TextChunkPreviewDialog` 划词问答、流式输出、点击停止可中断。
@@ -123,13 +132,13 @@ VITE_API_BASE_URL=http://localhost:3002
 | `GET /api/files/:id/preview-state` | 同 | ✅ |
 | `GET /api/files/:id/preview-status` | 同 | ✅ |
 
-BullMQ 队列名 `preview-convert` 不变；预览缓存默认目录 `../file_management_backend/previews`（与 Express Worker 共用）。Worker 仍跑 Express `preview.worker.ts`。
+BullMQ 队列名 `preview-convert` 不变；预览缓存默认目录 `../file_management_backend/previews`。Worker：`pnpm start:worker:dev`（Nest `@nestjs/bullmq` Processor）。
 
 ## S4 验收后前端切换
 
 ```bash
 # file_management_frontend/.env
-VITE_API_BASE_URL=http://localhost:3002
+VITE_API_BASE_URL=http://localhost:3000
 ```
 
 验证：双击 Word/PPT 打开 `OfficePreviewDialog`、PDF 预览、状态栏轮询 partial→full。
@@ -176,7 +185,7 @@ VITE_API_BASE_URL=http://localhost:3002
 
 ```bash
 # file_management_frontend/.env
-VITE_API_BASE_URL=http://localhost:3002
+VITE_API_BASE_URL=http://localhost:3000
 ```
 
 验证：拖拽/选择上传、大文件分片、秒传、新建文件夹。
@@ -219,6 +228,7 @@ S6 e2e 覆盖：check-exists、check-name、分片上传+合并、instant-upload
 S7 e2e 覆盖：tags CRUD、versions 列表/回滚/下载、archive 403/entries/conflicts/extract。
 S8 e2e 覆盖：friendship 请求/接受/列表/删除、message 发送/历史/已读/未读汇总、share 创建/公开访问/我的分享/访问日志、**save-to-my-drive 转存（好友/分享链接/聊天 fileId）**。
 S9 e2e 覆盖：Socket 无 token/无效 token 拒绝、有效 token 连接、`message:new` 推送、`friendship:sync` 推送。
+S10 e2e 覆盖：Admin 403/仪表盘/用户列表/禁用用户/系统设置；VIP 申请/重复申请/审核通过；Log 分页与 `transferOnly` 上传记录。
 S6–S8 手测缺陷回归见 `docs/plans/2026-07-07-regression-tests-supplement.md`（OGG Range/MIME、转存 404 等）。
 
 ## API 对照（S8 Friendship + Message + Share）
@@ -262,9 +272,44 @@ S6–S8 手测缺陷回归见 `docs/plans/2026-07-07-regression-tests-supplement
 
 1. 账号 A、B 互加好友后，A 发消息，B 聊天页**无需刷新**即出现新消息（`message:new`）。
 2. A 向 B 发好友请求，B 好友页**实时**出现待处理请求（`friendship:sync`）。
-3. 前端 `VITE_API_BASE_URL` 指向 Nest `3002`，确认 `contactsSocket.ts` 能连上。
+3. 前端 `VITE_API_BASE_URL` 指向 Nest `3000`，确认 `contactsSocket.ts` 能连上。
 
-VIP/Admin 相关 Socket 推送留 **S10**。
+VIP/Admin 相关 Socket 推送见 **S10**（VIP 申请 `message:new`）。
+
+## S10 — Admin + VIP + Log
+
+**实施文档**：`docs/plans/2026-07-07-s10-admin-vip-log-design.md`、`docs/plans/2026-07-07-s10-admin-vip-log-implementation.md`
+
+| Express | Nest | 状态 |
+|---------|------|------|
+| `GET /api/admin/dashboard` 等 9 端点 | `src/admin/` + `@Roles('admin')` | ✅ |
+| `GET /api/vip/tier-config` 等 8 端点 | `src/vip/` | ✅ |
+| `GET /api/logs` | `src/operation-log/operation-log.controller.ts` | ✅ |
+| VIP 申请通知 admin（`message:new`） | `VipService.notifyAdminsVipApply` | ✅ |
+
+**手测清单**：
+
+1. 管理员登录 → 仪表盘数据正常、用户列表、禁用/重置密码。
+2. 普通用户提交 VIP 申请 → 管理员通讯录实时收到通知。
+3. 管理员审核通过 → 用户角色变 VIP、配额更新。
+4. 传输记录页（`transferOnly=true`）显示上传/下载日志。
+
+## S11 — 收尾与 Express 下线
+
+**实施文档**：`docs/plans/2026-07-08-s11-shutdown-design.md`
+
+| 任务 | Nest | 状态 |
+|------|------|------|
+| Swagger `/api-docs` | `@nestjs/swagger` | ✅ |
+| 定时清理 | `JobsModule` + `@Cron('0 * * * *')` | ✅ |
+| Preview Worker | `PreviewProcessor` + `pnpm start:worker` | ✅ |
+| 默认端口 3000 | `main.ts` / `.env.example` | ✅ |
+| Docker | `Dockerfile` + `docker-compose.yml` | ✅ |
+| GitHub CI | `.github/workflows/backend-ci.yml` → Nest e2e | ✅ |
+| Express 归档 | `file_management_backend/README.md` DEPRECATED | ✅ |
+| Prisma 权威 | `file_management_backend_nest/prisma/schema.prisma` | ✅ |
+
+**e2e**：21 suites（含 `swagger.e2e-spec.ts`）；`pnpm test:e2e` 结束后自动清理测试数据。
 
 ## S8 验收
 

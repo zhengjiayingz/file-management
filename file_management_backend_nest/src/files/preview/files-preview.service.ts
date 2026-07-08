@@ -16,6 +16,7 @@ import { getPreviewsRootDir } from './preview-path.utils';
 import { PreviewQueueService } from './preview-queue.service';
 import type {
   PreviewConvertJobData,
+  PreviewConvertJobResult,
   PreviewJobInfo,
 } from './preview-queue.types';
 
@@ -486,6 +487,106 @@ export class FilesPreviewService {
     sourceFilePath: string,
   ): Promise<void> {
     await this.tryScheduleFullAfterPartialExpansion(fileHash, sourceFilePath);
+  }
+
+  /** 快览分批未完成时，后台全文任务应让路（Worker 用） */
+  shouldDeferFullConversion(fileHash: string): boolean {
+    if (fs.existsSync(getPreviewCachePath(fileHash))) return false;
+    const partialPath = getPreviewPartialPath(fileHash);
+    if (!fs.existsSync(partialPath)) return false;
+    const meta = readPartialMeta(fileHash);
+    if (meta?.reachedEnd) return false;
+    const available = meta?.availableSlides ?? countPdfPages(partialPath);
+    return available > 0 && available < PPT_PREVIEW_MAX_SLIDES;
+  }
+
+  /** BullMQ Worker 消费入口 */
+  async processPreviewConvertJob(
+    data: PreviewConvertJobData,
+  ): Promise<PreviewConvertJobResult> {
+    if (data.op === 'impress-partial') {
+      try {
+        const p = await this.doImpressPartial(data.sourceFilePath, data.fileHash);
+        if (!fs.existsSync(getPreviewCachePath(data.fileHash))) {
+          await this.scheduleNextPartialBatch(data.fileHash, data.sourceFilePath);
+        }
+        return { path: p, phase: 'partial' };
+      } catch (partialErr) {
+        this.logger.warn(
+          `[Preview] 部分页 PPT 转换失败，回退为全文 fileHash=${data.fileHash}`,
+          partialErr,
+        );
+        const p = await this.doFullConvert(data.sourceFilePath, data.fileHash);
+        return { path: p, phase: 'full' };
+      }
+    }
+
+    if (data.op === 'impress-partial-more') {
+      const targetSlides =
+        data.targetSlides ?? PPT_PREVIEW_FIRST_SLIDES * 2;
+      const partialPath = getPreviewPartialPath(data.fileHash);
+      const prevMeta = readPartialMeta(data.fileHash);
+      const prevCount = prevMeta?.availableSlides ?? countPdfPages(partialPath);
+
+      if (
+        fs.existsSync(getPreviewCachePath(data.fileHash)) ||
+        prevMeta?.reachedEnd
+      ) {
+        return { path: partialPath, phase: 'partial' };
+      }
+
+      try {
+        await this.doImpressPartial(
+          data.sourceFilePath,
+          data.fileHash,
+          targetSlides,
+          true,
+        );
+        const newCount = countPdfPages(partialPath) || prevCount;
+
+        if (newCount <= prevCount) {
+          writePartialMeta(data.fileHash, {
+            availableSlides: prevCount,
+            reachedEnd: true,
+            updatedAt: new Date().toISOString(),
+          });
+          this.logger.log(
+            `[Preview] 快览已触顶 fileHash=${data.fileHash} slides=${prevCount}`,
+          );
+          await this.tryScheduleFullAfterPartialExpansion(
+            data.fileHash,
+            data.sourceFilePath,
+          );
+        } else {
+          writePartialMeta(data.fileHash, {
+            availableSlides: newCount,
+            reachedEnd: false,
+            updatedAt: new Date().toISOString(),
+          });
+          this.logger.log(
+            `[Preview] 快览分批扩展完成 fileHash=${data.fileHash} slides=${newCount}`,
+          );
+          await this.scheduleNextPartialBatch(data.fileHash, data.sourceFilePath);
+        }
+        return { path: partialPath, phase: 'partial' };
+      } catch (err) {
+        this.logger.warn(
+          `[Preview] 快览分批扩展失败 fileHash=${data.fileHash}`,
+          err,
+        );
+        throw err;
+      }
+    }
+
+    if (data.op === 'full') {
+      const p = await this.doFullConvert(data.sourceFilePath, data.fileHash);
+      if (data.isBackground) {
+        this.logger.log(`[Preview] 后台全文 PDF 已就绪 fileHash=${data.fileHash}`);
+      }
+      return { path: p, phase: 'full' };
+    }
+
+    throw new Error(`未知预览操作: ${data.op}`);
   }
 
   async doFullConvert(

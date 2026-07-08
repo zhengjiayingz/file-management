@@ -190,6 +190,31 @@ describe('Files Upload (e2e)', () => {
     expect(fs.existsSync(stored)).toBe(true);
   });
 
+  it('POST /api/files/upload 应支持 .md 文件', async () => {
+    const { accessToken } = await loginAndGetTokens(app);
+    const content = `# E2E Markdown\n\nupload-md-${Date.now()}`;
+    const fileName = `e2e-upload-${Date.now()}.md`;
+
+    const res = await request(app.getHttpServer())
+      .post('/api/files/upload')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .attach('file', Buffer.from(content, 'utf-8'), {
+        filename: fileName,
+        contentType: 'text/markdown',
+      });
+
+    expect(res.status).toBe(201);
+    const body = apiBody<{ id: number; fileName: string; mimeType: string }>(
+      res.body,
+    );
+    expect(body.success).toBe(true);
+    expect(body.data.fileName).toBe(fileName);
+    expect(body.data.mimeType).toMatch(/markdown|plain/);
+
+    const stored = path.join(getUploadRootDir(), `${md5(content)}-${fileName}`);
+    expect(fs.readFileSync(stored, 'utf-8')).toBe(content);
+  });
+
   it('POST /api/files/folder 应创建文件夹；重名应 400', async () => {
     const { accessToken } = await loginAndGetTokens(app);
     const name = `folder-${Date.now()}`;

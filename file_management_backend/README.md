@@ -1,5 +1,7 @@
 # File Management Backend
 
+> **DEPRECATED（S11）**：Express 版已停止维护。请使用 [`../file_management_backend_nest`](../file_management_backend_nest)（Nest，端口 **3000**）。本文档与代码仅作归档参考。
+
 基于 Node.js + Express + TypeScript + Prisma 的文件管理系统后端。
 
 ## 📁 目录结构

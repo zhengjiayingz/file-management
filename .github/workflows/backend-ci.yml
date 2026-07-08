@@ -1,59 +1,75 @@
 name: Backend CI
 
 on:
-  push:   # 有人push到远程仓库的时候触发
-    paths: # 改动了以下路径才触发
-      - 'file_management_backend/**'    # 后端目录任意文件变更 → 跑 CI
-      - '.github/workflows/backend-ci.yml' # 只改 CI 配置本身 → 也要跑（验证配置是否还能用）
-  pull_request:                           # 有人 开 PR / 更新 PR 时同样规则
+  push:
     paths:
-      - 'file_management_backend/**'
+      - 'file_management_backend_nest/**'
+      - '.github/workflows/backend-ci.yml'
+  pull_request:
+    paths:
+      - 'file_management_backend_nest/**'
       - '.github/workflows/backend-ci.yml'
 
-jobs:             #  要执行什么任务，一个 workflow 里可以多个 job；这里只有一个
-  test:           # Job 的 ID（内部名），可自定义
-    runs-on: ubuntu-latest  # 在 GitHub 提供的 Ubuntu 最新版 虚拟机上跑
+jobs:
+  test:
+    runs-on: ubuntu-latest
 
-    services:     # 和主 Job 一起启动的附加容器
+    services:
       mysql:
-        image: mysql:8   # 使用官方 MySQL 8 镜像
-        env: 
-          MYSQL_ROOT_PASSWORD: test  # root 密码设为 test（仅 CI 临时环境）
-          MYSQL_DATABASE: file_mgmt_test # 启动时自动创建库 file_mgmt_test
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: test
+          MYSQL_DATABASE: file_mgmt_test
         ports:
-          - 3306:3306 # 把容器 3306 映射到 runner 本机 3306，Prisma 才能 127.0.0.1:3306 连接
-        options: >-  # Docker 额外参数（多行折叠成一行）用 mysqladmin ping 做健康检查，MySQL 就绪后才开始 steps，减少 “连不上库”
+          - 3306:3306
+        options: >-
           --health-cmd="mysqladmin ping -h localhost -uroot -ptest"
           --health-interval=10s
           --health-timeout=5s
           --health-retries=5
 
-    env:  # 本 Job 的环境变量
-      DATABASE_URL: mysql://root:test@127.0.0.1:3306/file_mgmt_test # Prisma / 测试连 CI 里的 MySQL（用户 root，密码 test，库 file_mgmt_test）
-      JWT_SECRET: test-secret-key-at-least-32-chars-long # 登录、JWT 签发用的密钥（测试用固定串，不是生产密钥）
-      NODE_ENV: test # 标记测试环境
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    env:
+      DATABASE_URL: mysql://root:test@127.0.0.1:3306/file_mgmt_test
+      JWT_SECRET: test-secret-key-at-least-32-chars-long
+      NODE_ENV: test
+      REDIS_URL: redis://127.0.0.1:6379
+      CORS_ORIGIN: http://localhost:5173
 
     steps:
-      - uses: actions/checkout@v4  # 拉代码
+      - uses: actions/checkout@v4
 
-      - uses: pnpm/action-setup@v4 # 安装 pnpm9
+      - uses: pnpm/action-setup@v4
         with:
           version: 9
 
-      - uses: actions/setup-node@v4 # 安装 Node + 缓存
+      - uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: pnpm # 根据 lockfile 缓存 node_modules，加快下次 CI
-          cache-dependency-path: file_management_backend/pnpm-lock.yaml # lockfile 在后端子目录，要指到正确路径
+          cache: pnpm
+          cache-dependency-path: file_management_backend_nest/pnpm-lock.yaml
 
-      - name: Install dependencies # 安装依赖,在 Actions 网页上显示的步骤名
-        working-directory: file_management_backend # 进入 后端子目录 再执行命令（仓库是 monorepo 结构）
-        run: pnpm install --frozen-lockfile # 严格按 pnpm-lock.yaml 装，lock 和 package.json 不一致会失败（保证可复现）
+      - name: Install dependencies
+        working-directory: file_management_backend_nest
+        run: pnpm install --frozen-lockfile
 
-      - name: Apply database schema 
-        working-directory: file_management_backend
-        run: pnpm exec prisma migrate deploy # 数据库迁移
+      - name: Apply database schema
+        working-directory: file_management_backend_nest
+        run: pnpm exec prisma db push --accept-data-loss
 
-      - name: Run tests 
-        working-directory: file_management_backend
-        run: pnpm test # 跑测试
+      - name: Build
+        working-directory: file_management_backend_nest
+        run: pnpm build
+
+      - name: Run e2e tests
+        working-directory: file_management_backend_nest
+        run: pnpm test:e2e

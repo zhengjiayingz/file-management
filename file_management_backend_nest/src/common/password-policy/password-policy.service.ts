@@ -32,6 +32,8 @@ const CATEGORY_TEST: Record<PasswordCategoryKey, RegExp> = {
   special: /[!@#$%^&*(),.?":{}|<>]/,
 };
 
+export const ADMIN_TEMP_RESET_PASSWORD = '111111';
+
 @Injectable()
 export class PasswordPolicyService {
   constructor(private readonly prisma: PrismaService) {}
@@ -55,7 +57,7 @@ export class PasswordPolicyService {
       'upper',
       'special',
     ];
-    const requiredCategories = this.parseRequiredCategoriesFromSettingsJson(
+    const requiredCategories = this.parseRequiredCategoriesFromSettingsJsonPrivate(
       row.passwordRequiredCategories,
       fallback,
     );
@@ -130,7 +132,33 @@ export class PasswordPolicyService {
     };
   }
 
-  private parseRequiredCategoriesFromSettingsJson(
+  parseAdminRequiredCategories(
+    input: unknown,
+  ): PasswordCategoryKey[] | null {
+    if (!Array.isArray(input) || input.length === 0) {
+      return null;
+    }
+    const allowed = new Set<string>(PASSWORD_CATEGORY_ORDER);
+    const picked = new Set<string>();
+    for (const x of input) {
+      if (typeof x === 'string' && allowed.has(x)) {
+        picked.add(x);
+      }
+    }
+    if (picked.size === 0) {
+      return null;
+    }
+    return PASSWORD_CATEGORY_ORDER.filter((k) => picked.has(k));
+  }
+
+  parseRequiredCategoriesFromSettingsJson(
+    value: unknown,
+    fallback: PasswordCategoryKey[],
+  ): PasswordCategoryKey[] {
+    return this.parseRequiredCategoriesFromSettingsJsonPrivate(value, fallback);
+  }
+
+  private parseRequiredCategoriesFromSettingsJsonPrivate(
     value: unknown,
     fallback: PasswordCategoryKey[],
   ): PasswordCategoryKey[] {

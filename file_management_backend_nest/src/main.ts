@@ -9,6 +9,7 @@ import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { RateLimitService } from './common/rate-limit/rate-limit.service';
+import { setupSwagger } from './common/swagger/setup-swagger';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
@@ -18,7 +19,9 @@ async function bootstrap() {
   app.useLogger(app.get(Logger));
   const config = app.get(ConfigService);
 
-  app.setGlobalPrefix('api', { exclude: ['health'] });
+  app.setGlobalPrefix('api', {
+    exclude: ['health', 'api-docs', 'api-docs-json'],
+  });
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -59,14 +62,17 @@ async function bootstrap() {
   );
   app.useStaticAssets(uploadsPath, { prefix: '/uploads' });
 
+  setupSwagger(app, config.get<number>('PORT', 3000));
+
   await app.init();
 
   const rateLimitService = app.get(RateLimitService);
   const expressApp = app.getHttpAdapter().getInstance();
   expressApp.use('/api', rateLimitService.getApiLimiter());
 
-  const port = config.get<number>('PORT', 3002);
+  const port = config.get<number>('PORT', 3000);
   await app.listen(port);
   console.log(`[Nest] Server running on http://localhost:${port}`);
+  console.log(`[Nest] Swagger: http://localhost:${port}/api-docs`);
 }
 void bootstrap();

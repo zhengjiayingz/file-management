@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
+import { BullModule } from '@nestjs/bullmq';
 import { LoggerModule } from 'nestjs-pino';
 import { AdminFriendModule } from './common/admin-friend/admin-friend.module';
 import { AuthModule } from './auth/auth.module';
@@ -18,10 +19,24 @@ import { FriendshipModule } from './friendship/friendship.module';
 import { MessageModule } from './message/message.module';
 import { ShareModule } from './share/share.module';
 import { RealtimeModule } from './realtime/realtime.module';
+import { AdminModule } from './admin/admin.module';
+import { VipModule } from './vip/vip.module';
+import { OperationLogModule } from './operation-log/operation-log.module';
+import { JobsModule } from './jobs/jobs.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    BullModule.forRootAsync({
+      imports: [ConfigModule],
+      useFactory: (config: ConfigService) => ({
+        connection: {
+          url: config.get<string>('REDIS_URL'),
+          maxRetriesPerRequest: null,
+        },
+      }),
+      inject: [ConfigService],
+    }),
     LoggerModule.forRoot({
       pinoHttp: {
         autoLogging: {
@@ -46,6 +61,10 @@ import { RealtimeModule } from './realtime/realtime.module';
     MessageModule,
     ShareModule,
     RealtimeModule,
+    OperationLogModule,
+    AdminModule,
+    VipModule,
+    JobsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

@@ -1,6 +1,6 @@
 # 网盘后端 Nest 迁移版
 
-与 `../file_management_backend`（Express）**共用 MySQL**，默认端口 **3002**，用于逐步迁移 API。
+Express → Nest 迁移已完成，**Nest 为唯一运行后端**，默认端口 **3000**（Express 已归档）。
 
 ## 快速开始
 
@@ -13,9 +13,10 @@ pnpm prisma:generate   # schema 变更后需重新 generate
 pnpm start:dev
 ```
 
-- 健康检查：`GET http://localhost:3002/health`
-- 登录：`POST http://localhost:3002/api/auth/login`
-- 资料：`GET http://localhost:3002/api/user/profile`（需 Bearer Token）
+- 健康检查：`GET http://localhost:3000/health`
+- Swagger：`GET http://localhost:3000/api-docs`
+- 登录：`POST http://localhost:3000/api/auth/login`
+- 资料：`GET http://localhost:3000/api/user/profile`（需 Bearer Token）
 
 ## 目录说明
 

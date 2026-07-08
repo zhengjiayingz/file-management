@@ -1,3 +1,6 @@
+// DEPRECATED: Prisma schema 权威维护已迁至 ../file_management_backend_nest/prisma/schema.prisma（S11）
+// 本文件仅作归档，请勿在此修改后 migrate。
+
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 

@@ -2,7 +2,7 @@
 
 > **版本**：v1.1  
 > **日期**：2026-07-06（进度更新：2026-07-07）  
-> **状态**：实施中 — **S1～S9 已完成**，S10 待开始  
+> **状态**：**迁移完成** — **S1～S11 全部完成**（2026-07-08）  
 > **关联文档**：[MIGRATION.md](../../MIGRATION.md)（当前进度与验收）、[MIGRATION_PLAN.md](../../MIGRATION_PLAN.md)（端点清单与工期粗估）
 
 ---
@@ -11,13 +11,13 @@
 
 ### 1.1 项目背景
 
-网盘后端当前运行于 Express（`../file_management_backend`，端口 **3000**），约 94 个 REST 端点 + Socket.IO + 预览 Worker。Nest 迁移版（`file_management_backend_nest`，端口 **3002**）已完成阶段 0～1 及 **S1～S9**：
+网盘后端已完成 Express → Nest 迁移。Nest 版（`file_management_backend_nest`，端口 **3000**）为唯一运行后端；Express（`../file_management_backend`）已归档停服。
 
-| 已完成 | 未完成 |
+| 已完成 | 说明 |
 |--------|--------|
-| 脚手架、Config、Prisma、Health、ValidationPipe | Admin / VIP / Log（S10） |
-| Redis、全局限流、登录限流、Guards、异常 Filter | Express 下线（S11） |
-| **S1** Auth 15 端点全量 | 预览 Worker 迁入 Nest（S11） |
+| 脚手架、Config、Prisma、Health、ValidationPipe | |
+| Redis、全局限流、登录限流、Guards、异常 Filter | |
+| **S1** Auth 15 端点全量 | |
 | **S2** Files 读（列表、下载、回收站、批量等 11 端点） | |
 | **S3** AI 流式问答 | |
 | **S4** Office 预览 + BullMQ 入队 | |
@@ -26,6 +26,8 @@
 | **S7** Tags / Versions / Archive | |
 | **S8** Friendship + Message + Share（16 端点） | |
 | **S9** Socket Gateway（`message:new`、`friendship:sync`） | |
+| **S10** Admin + VIP + Log（18 端点） | |
+| **S11** Swagger / 定时清理 / Preview Worker / Express 下线 | |
 | Files 标签（5 端点，**已提前迁入**，归入 S7 验收） | |
 
 ### 1.2 终局目标
@@ -358,15 +360,17 @@ src/
 
 ---
 
-### S10 — Admin + VIP + Log（3 天）
+### S10 — Admin + VIP + Log（3 天）✅
 
 | 模块 | 端点数 | 备注 |
 |------|--------|------|
 | Admin | 9 | `@Roles('admin')` |
-| VIP | 8 | 申请审核 |
-| Log | 1 | 操作日志 |
+| VIP | 8 | 申请审核 + Socket 通知 |
+| Log | 1 | 操作日志查询 |
 
-**验收**：管理员权限 e2e。
+**实施文档**：[2026-07-07-s10-admin-vip-log-design.md](./2026-07-07-s10-admin-vip-log-design.md)
+
+**验收**：`admin.e2e-spec.ts`、`vip.e2e-spec.ts`、`log.e2e-spec.ts` + 管理后台手测。
 
 ---
 
@@ -385,6 +389,10 @@ src/
 
 **此阶段后**：双栈期结束，仅运行 Nest 单进程。
 
+**实施文档**：[2026-07-08-s11-shutdown-design.md](./2026-07-08-s11-shutdown-design.md)
+
+**验收**：`swagger.e2e-spec.ts` + cleanup 单元测试 + `pnpm test:e2e` 21 suites / 111 tests 全绿 ✅
+
 ---
 
 ### 阶段依赖图
@@ -398,7 +406,7 @@ S1 Auth ✅ ──► S2 Files读 ✅ ──► S3 AI ✅
                     │
 S5 User ✅ ◄──（已与 S3/S4 并行完成）
 
-S8 社交 ✅ ──► S9 Socket ✅ ──► S10 Admin/VIP/Log ⬜ ──► S11 下线 ⬜
+S8 社交 ✅ ──► S9 Socket ✅ ──► S10 Admin/VIP/Log ✅ ──► S11 下线 ✅
 ```
 
 **暂停策略**：任一阶段可暂停；已迁模块留 Nest，未迁走 Express 3000；恢复时从下一阶段继续，无需推倒重来。
@@ -440,8 +448,9 @@ test/
     friendship.e2e-spec.ts     # ✅ S8
     message.e2e-spec.ts        # ✅ S8
     share.e2e-spec.ts          # ✅ S8
-    admin.e2e-spec.ts          # ⬜ S10
-    vip.e2e-spec.ts            # ⬜ S10
+    admin.e2e-spec.ts          # ✅ S10
+    vip.e2e-spec.ts            # ✅ S10
+    log.e2e-spec.ts            # ✅ S10
 ```
 
 ### 4.3 e2e 脚手架
@@ -603,7 +612,7 @@ VITE_API_BASE_URL=http://localhost:3000   # 回退 Express
 
 ## 9. 端点进度总览
 
-> 最后更新：2026-07-07（S9 完成）
+> 最后更新：2026-07-07（S10 完成）
 
 | 模块 | 进度 | 阶段 | 状态 |
 |------|------|------|------|
@@ -621,22 +630,21 @@ VITE_API_BASE_URL=http://localhost:3000   # 回退 Express
 | Message | 4/4 | S8 | ✅ |
 | Share | 6/6 | S8 | ✅ |
 | Socket | 1/1 | S9 | ✅ |
-| Admin | 0/9 | S10 | ⬜ |
-| VIP | 0/8 | S10 | ⬜ |
-| Log | 0/1 | S10 | ⬜ |
+| Admin | 9/9 | S10 | ✅ |
+| VIP | 8/8 | S10 | ✅ |
+| Log | 1/1 | S10 | ✅ |
 
-**已迁 REST 端点合计**：约 **76/94**（含 S8 社交 16 端点）；Socket 实时层 S9 ✅。  
-**当前 e2e**：17 suites / 98 tests 全绿（`pnpm test:e2e`）。
+**已迁 REST 端点合计**：约 **94/94**（全部 REST 端点）。  
+**当前 e2e**：21 suites / 111 tests 全绿（`pnpm test:e2e`）。
 
-全部 ✅ 后执行 S11 下线 Express。
+Express 已下线，双栈期结束。
 
 ---
 
 ## 10. 下一步
 
-1. **S10 Admin + VIP + Log**
-2. **S11**：下线 Express
+迁移已完成。后续按需：生产部署（docker-compose）、监控、性能优化。
 
 ---
 
-*本文档由 superpowers brainstorming 流程产出；v1.3 同步 S1～S9 完成进度。*
+*本文档由 superpowers brainstorming 流程产出；v1.5 同步 S1～S11 完成进度。*

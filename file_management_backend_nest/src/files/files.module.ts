@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { OperationLogModule } from '../operation-log/operation-log.module';
 import { PasswordPolicyService } from '../common/password-policy/password-policy.service';
 import { ShareModule } from '../share/share.module';
 import { StorageModule } from '../storage/storage.module';
@@ -21,10 +22,9 @@ import { FilesQueryController } from './query/files-query.controller';
 import { FilesQueryService } from './query/files-query.service';
 import { FilesTagController } from './tag/files-tag.controller';
 import { FilesTagService } from './tag/files-tag.service';
-import { OperationLogService } from '../operation-log/operation-log.service';
 
 @Module({
-  imports: [StorageModule, ShareModule],
+  imports: [StorageModule, ShareModule, OperationLogModule],
   controllers: [
     FilesUploadController,
     FilesTagController,
@@ -47,7 +47,6 @@ import { OperationLogService } from '../operation-log/operation-log.service';
     FilesPreviewService,
     PreviewQueueService,
     FileBatchHelper,
-    OperationLogService,
     PasswordPolicyService,
   ],
 })

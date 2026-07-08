@@ -54,17 +54,17 @@ export const fileUploadOptions: MulterOptions = {
     }
 
     const allowedTypes =
-      /jpeg|jpg|png|gif|webp|pdf|doc|docx|xls|xlsx|ppt|pptx|txt|zip|rar|7z|mp3|wav|ogg|mp4|avi|mov|rmvb/;
-    const extnameOk = allowedTypes.test(
-      extname(file.originalname).toLowerCase(),
-    );
+      /jpeg|jpg|png|gif|webp|pdf|doc|docx|xls|xlsx|ppt|pptx|txt|md|markdown|zip|rar|7z|mp3|wav|ogg|mp4|avi|mov|rmvb/;
+    const ext = extname(file.originalname).toLowerCase();
+    const extnameOk = allowedTypes.test(ext);
     const mimetypeOk = allowedTypes.test(file.mimetype);
 
     if (extnameOk && mimetypeOk) {
       cb(null, true);
       return;
     }
-    if (extname(file.originalname).toLowerCase() === '.rmvb') {
+    // 部分浏览器对 .md / .rmvb 会上报 application/octet-stream 等非标准 MIME
+    if (ext === '.rmvb' || ext === '.md') {
       cb(null, true);
       return;
     }

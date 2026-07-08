@@ -24,6 +24,8 @@ export const SUPPORTED_FILE_TYPES = {
   'application/vnd.ms-powerpoint': ['.ppt'],
   'application/vnd.openxmlformats-officedocument.presentationml.presentation': ['.pptx'],
   'text/plain': ['.txt'],
+  'text/markdown': ['.md'],
+  'text/x-markdown': ['.md'],
 
   // 压缩文件
   'application/zip': ['.zip'],
