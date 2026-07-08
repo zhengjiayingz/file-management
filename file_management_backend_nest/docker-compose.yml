@@ -1,8 +1,6 @@
 services:
   redis:
     image: redis:7
-    ports:
-      - "6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -42,10 +40,13 @@ services:
       context: .
       dockerfile: Dockerfile
       target: worker
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     env_file:
       - .env
     environment:
       NODE_ENV: production
+      DATABASE_URL: ${DOCKER_DATABASE_URL:-${DATABASE_URL}}
       REDIS_URL: redis://redis:6379
       UPLOAD_PATH: ./uploads
     volumes:

@@ -13,7 +13,8 @@ RUN corepack enable && corepack prepare pnpm@9 --activate
 FROM base AS deps
 COPY package.json pnpm-lock.yaml ./
 COPY prisma ./prisma
-RUN pnpm install --frozen-lockfile
+RUN printf 'node-linker=hoisted\n' > .npmrc \
+  && pnpm install --frozen-lockfile
 
 FROM deps AS build
 COPY . .
@@ -22,7 +23,8 @@ RUN pnpm build
 FROM base AS runtime-base
 COPY package.json pnpm-lock.yaml ./
 COPY prisma ./prisma
-RUN pnpm install --frozen-lockfile --prod --ignore-scripts \
+RUN printf 'node-linker=hoisted\n' > .npmrc \
+  && pnpm install --frozen-lockfile --prod --ignore-scripts \
   && pnpm add prisma@5.22.0 --save-dev \
   && pnpm exec prisma generate
 ENV NODE_ENV=production
