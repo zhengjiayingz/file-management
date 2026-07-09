@@ -161,6 +161,8 @@ model UserFile {
   userFileTags UserFileTag[]
   fileHistories FileHistory[]
   messages   Message[]
+  documentIndexJob DocumentIndexJob?
+  documentChunks   DocumentChunk[]
 
   @@index([userId, parentId, isDeleted])
   @@index([storageId])
@@ -440,4 +442,70 @@ enum MessageType {
 enum LoginStatus {
   success
   failed
+}
+
+// --- Document Intelligence (S12 index; Summary/Knowledge deferred to S13/S14) ---
+
+enum DocumentIndexStatus {
+  pending
+  extracting
+  chunking
+  embedding
+  summarizing
+  extracting_knowledge
+  ready
+  failed
+}
+
+enum DocumentIndexMode {
+  general
+  academic
+}
+
+enum DocumentChunkSection {
+  unknown
+  abstract
+  introduction
+  method
+  results
+  discussion
+  references
+  body
+  chapter
+}
+
+model DocumentIndexJob {
+  id           Int                  @id @default(autoincrement())
+  userFileId   Int                  @unique @map("user_file_id")
+  mode         DocumentIndexMode
+  status       DocumentIndexStatus  @default(pending)
+  progress     Int                  @default(0)        // 0-100
+  progressMsg  String?              @map("progress_msg") @db.VarChar(255)
+  errorMessage String?              @map("error_message") @db.Text
+  chunkCount   Int                  @default(0) @map("chunk_count")
+  createdAt    DateTime             @default(now()) @map("created_at")
+  updatedAt    DateTime             @updatedAt @map("updated_at")
+
+  userFile UserFile @relation(fields: [userFileId], references: [id], onDelete: Cascade)
+
+  @@map("document_index_jobs")
+}
+
+model DocumentChunk {
+  id          Int                   @id @default(autoincrement())
+  userFileId  Int                   @map("user_file_id")
+  chunkIndex  Int                   @map("chunk_index")
+  section     DocumentChunkSection  @default(body)
+  sectionTitle String?              @map("section_title") @db.VarChar(255)
+  chapterNo   Int?                  @map("chapter_no")
+  content     String                @db.Text
+  tokenEstimate Int?                @map("token_estimate")
+  embedding   Json?                 // number[]，MVP 存 MySQL；量大迁向量库
+  createdAt   DateTime              @default(now()) @map("created_at")
+
+  userFile UserFile @relation(fields: [userFileId], references: [id], onDelete: Cascade)
+
+  @@unique([userFileId, chunkIndex])
+  @@index([userFileId, section])
+  @@map("document_chunks")
 }

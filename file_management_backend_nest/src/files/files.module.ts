@@ -10,8 +10,10 @@ import { FilesVersionController } from './version/files-version.controller';
 import { FilesVersionService } from './version/files-version.service';
 import { FilesArchiveController } from './archive/files-archive.controller';
 import { FilesArchiveService } from './archive/files-archive.service';
-import { FilesAiController } from './ai/files-ai.controller';
-import { FilesAiService } from './ai/files-ai.service';
+import { DocumentIndexQueueService } from '@/files/ai/document-index-queue.service';
+import { FilesAiController } from '@/files/ai/files-ai.controller';
+import { FilesAiIndexService } from '@/files/ai/files-ai-index.service';
+import { FilesAiService } from '@/files/ai/files-ai.service';
 import { FilesPreviewController } from './preview/files-preview.controller';
 import { FilesPreviewService } from './preview/files-preview.service';
 import { PreviewQueueService } from './preview/preview-queue.service';
@@ -22,6 +24,7 @@ import { FilesQueryController } from './query/files-query.controller';
 import { FilesQueryService } from './query/files-query.service';
 import { FilesTagController } from './tag/files-tag.controller';
 import { FilesTagService } from './tag/files-tag.service';
+import { FilesAiRagService } from '@/files/ai/files-ai-rag.service';
 
 @Module({
   imports: [StorageModule, ShareModule, OperationLogModule],
@@ -44,6 +47,9 @@ import { FilesTagService } from './tag/files-tag.service';
     FilesManageService,
     FilesTagService,
     FilesAiService,
+    FilesAiIndexService,
+    FilesAiRagService,
+    DocumentIndexQueueService,
     FilesPreviewService,
     PreviewQueueService,
     FileBatchHelper,

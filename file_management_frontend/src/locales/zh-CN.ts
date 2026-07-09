@@ -576,7 +576,17 @@ export default {
     aiChatContext: '当前选中上下文',
     aiChatClear: '清空对话',
     aiChatYou: '我',
-    aiChatAssistant: 'AI'
+    aiChatAssistant: 'AI',
+    aiIndexTrigger: '建立索引',
+    aiIndexStatusNone: '未建立索引',
+    aiIndexStatusPending: '{msg}（{progress}%）',
+    aiIndexStatusReady: '索引就绪（{count} 块）',
+    aiIndexStatusFailed: '索引失败：{reason}',
+    aiIndexTriggerError: '触发索引失败',
+    aiChatModeSelection: '划词问答',
+    aiChatModeRag: '全文问答',
+    aiRagHint: '基于文档索引回答全文问题，无需选中文字；请先建立索引。',
+    aiRagNotReady: '请先建立索引并等待完成'
   },
   friendPanel: {
     chatWith: '与 {name} 聊天',
