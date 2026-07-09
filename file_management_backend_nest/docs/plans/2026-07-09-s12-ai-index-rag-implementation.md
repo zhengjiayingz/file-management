@@ -203,7 +203,7 @@ Run: `pnpm test:e2e -- test/e2e/files-ai-index.e2e-spec.ts test/e2e/files-ai-rag
 
 **已知差异（MVP）：**
 
-- `ready` 后再次 `POST index` 允许强制重建（非 409）；后续可加 `indexedFileHash` 防误点。
+- `ready` 且 `indexedFileHash` 未变时再次 `POST index` 返回 409「文档未更新」；内容变更后允许重建。
 - 前端入口在文本预览弹窗（划词 / 全文切换），非独立「文件详情 Tab」。
 
 ---
