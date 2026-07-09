@@ -72,11 +72,14 @@ export class FilesAiIndexService {
       },
     });
     // 文件存在性校验
-    if (!userFile || !userFile.storage) {
+    if (!userFile) {
       throw new NotFoundException('文件不存在');
     }
     if (userFile.fileType === 'folder') {
-      throw new BadRequestException('文件夹不支持索引'); //拒绝文件夹
+      throw new BadRequestException('文件夹不支持索引');
+    }
+    if (!userFile.storage) {
+      throw new NotFoundException('文件不存在');
     }
     // 格式校验 txt/md，扩展名 + MIME 双判断
     if (

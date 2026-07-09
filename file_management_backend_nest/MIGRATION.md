@@ -22,6 +22,7 @@
 | **S9** | **Socket Gateway（实时推送）** | **✅** |
 | **S10** | **Admin + VIP + Log** | **✅** |
 | **S11** | **Swagger + 定时清理 + Preview Worker + Express 下线** | **✅** |
+| **S12** | **AI 文档索引 + RAG 全文问答（F-01 / F-02）** | **✅** |
 
 ## 启动
 
@@ -30,7 +31,7 @@ cp .env.example .env
 pnpm install
 pnpm prisma:generate
 pnpm start:dev          # API http://localhost:3000
-pnpm start:worker:dev   # 预览 Worker（需 REDIS_URL + LibreOffice）
+pnpm start:worker:dev   # 预览 + 文档索引 Worker（需 REDIS_URL；预览另需 LibreOffice）
 ```
 
 Swagger：`http://localhost:3000/api-docs`
@@ -110,6 +111,35 @@ VITE_API_BASE_URL=http://localhost:3000
 | `POST /api/files/:id/ai/ask` | 同 | ✅ |
 
 流式响应为 `text/plain`（非 JSON 包装），与 Express 一致。需配置 `AI_API_KEY`（及可选 `AI_BASE_URL`、`AI_MODEL`）。
+
+## API 对照（S12 AI 文档索引 + RAG）
+
+**实施文档**：`docs/plans/2026-07-09-s12-ai-index-rag-implementation.md`
+
+| Express | Nest | 状态 |
+|---------|------|------|
+| `POST /api/files/:id/ai/index` | 同 | ✅ |
+| `GET /api/files/:id/ai/index/status` | 同 | ✅ |
+| `POST /api/files/:id/ai/rag-ask` | 同 | ✅ |
+
+- 索引：异步 BullMQ 队列 `document-index`（`pnpm start:worker:dev` 消费）；仅 `.txt` / `.md`。
+- RAG：需 `status=ready`；`embed(question)` → Top-K chunk → `streamText` 流式 `text/plain`。
+- **Embedding 与对话可分离配置**：`AI_EMBEDDING_BASE_URL`、`AI_EMBEDDING_API_KEY`、`AI_EMBEDDING_MODEL`（DeepSeek 无 `/embeddings`，需硅基流动等兼容服务）；对话仍用 `AI_BASE_URL` / `AI_MODEL`。
+- Prisma：`DocumentIndexJob`、`DocumentChunk`（embedding 存 JSON）。
+
+## S12 验收
+
+验证：`TextChunkPreviewDialog` 建立索引 → 状态轮询至 ready →「全文问答」流式输出；划词 `ai/ask` 仍正常。
+
+```bash
+# .env 示例（对话 + Embedding 分离）
+AI_BASE_URL=https://api.deepseek.com
+AI_MODEL=deepseek-chat
+AI_API_KEY=...
+AI_EMBEDDING_BASE_URL=https://api.siliconflow.cn/v1
+AI_EMBEDDING_API_KEY=...
+AI_EMBEDDING_MODEL=BAAI/bge-m3
+```
 
 ## S3 验收后前端切换
 
@@ -222,6 +252,7 @@ pnpm test:e2e    # Auth + Health + Files + User + UserPreference e2e
 
 S2 e2e 覆盖：列表、详情、下载、text-chunk、回收站、重命名、移动、批量删除/恢复。
 S3 e2e 覆盖：AI 401/400/404、text/plain 流式 mock 响应。
+S12 e2e 覆盖：`files-ai-index`（index/status 401/404/400、pending/ready/reindex）、`files-ai-rag`（rag-ask 401/404/409/400、流式 mock）；mock embedding + BullMQ 入队。
 S4 e2e 覆盖：预览 401/404/400、preview-state/status JSON、有缓存时 PDF 流。
 S5 e2e 覆盖：profile GET/PUT、avatar 上传、user search、user-preferences GET/PUT。
 S6 e2e 覆盖：check-exists、check-name、分片上传+合并、instant-upload 404、传统 upload、folder 创建与重名。
@@ -309,7 +340,7 @@ VIP/Admin 相关 Socket 推送见 **S10**（VIP 申请 `message:new`）。
 | Express 归档 | `file_management_backend/README.md` DEPRECATED | ✅ |
 | Prisma 权威 | `file_management_backend_nest/prisma/schema.prisma` | ✅ |
 
-**e2e**：21 suites（含 `swagger.e2e-spec.ts`）；`pnpm test:e2e` 结束后自动清理测试数据。
+**e2e**：23 suites（含 `swagger.e2e-spec.ts`、`files-ai-index.e2e-spec.ts`、`files-ai-rag.e2e-spec.ts`）；`pnpm test:e2e` 结束后自动清理测试数据。
 
 ## S8 验收
 

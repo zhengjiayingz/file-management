@@ -18,7 +18,6 @@ jest.mock('@/files/ai/document-index-queue.service', () => ({
 }));
 
 import request from 'supertest';
-import { PrismaService } from '@/prisma/prisma.service';
 import { apiMessage } from '../helpers/api-response';
 import { createE2eApp, E2eApp } from '../helpers/app-bootstrap';
 import { loginAndGetTokens } from '../helpers/auth.helper';
@@ -131,57 +130,29 @@ describe('Files AI RAG (e2e)', () => {
     expect(res.text).toContain(MOCK_AI_STREAM_TEXT);
   });
 
-  it('POST /api/files/:id/ai/index 进行中应返回 409', async () => {
+  it('POST /api/files/:id/ai/rag-ask 对话历史格式无效应返回 400', async () => {
     const { accessToken, username } = await loginAndGetTokens(app);
     const userId = await getUserId(app, username);
     const { userFile } = await seedTextFile(
       app,
       userId,
-      'index pending',
-      `index-pending-${Date.now()}.txt`,
-    );
-    const prisma = app.get(PrismaService);
-    await prisma.documentIndexJob.create({
-      data: {
-        userFileId: userFile.id,
-        mode: 'general',
-        status: 'pending',
-        progress: 0,
-        progressMsg: '排队中',
-        chunkCount: 0,
-      },
-    });
-
-    const res = await request(app.getHttpServer())
-      .post(`/api/files/${userFile.id}/ai/index`)
-      .set('Authorization', `Bearer ${accessToken}`)
-      .send({ mode: 'general' });
-
-    expect(res.status).toBe(409);
-    const body = apiMessage(res.body);
-    expect(body.message).toMatch(/索引任务进行中/);
-  });
-
-  it('POST /api/files/:id/ai/index ready 后允许重新索引', async () => {
-    const { accessToken, username } = await loginAndGetTokens(app);
-    const userId = await getUserId(app, username);
-    const { userFile } = await seedTextFile(
-      app,
-      userId,
-      'index reindex',
-      `index-reindex-${Date.now()}.txt`,
+      'rag bad messages',
+      `rag-bad-msg-${Date.now()}.txt`,
     );
     await seedReadyDocumentIndex(app, userFile.id, [
-      { content: 'old chunk', embedding: [1, 0] },
+      { content: '测试片段', embedding: [1, 0] },
     ]);
 
     const res = await request(app.getHttpServer())
-      .post(`/api/files/${userFile.id}/ai/index`)
+      .post(`/api/files/${userFile.id}/ai/rag-ask`)
       .set('Authorization', `Bearer ${accessToken}`)
-      .send({ mode: 'general' });
+      .send({
+        question: '这篇文档讲了什么？',
+        messages: [{ role: 'system', content: 'invalid role' }],
+      });
 
-    expect(res.status).toBe(201);
-    expect(res.body.success).toBe(true);
-    expect(res.body.data.status).toBe('pending');
+    expect(res.status).toBe(400);
+    const body = apiMessage(res.body);
+    expect(body.message).toMatch(/对话历史/);
   });
 });
