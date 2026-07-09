@@ -43,11 +43,11 @@ export class PasswordPolicyService {
   }
 
   async getSystemSettings(): Promise<SystemSettings> {
-    const existing = await this.prisma.systemSettings.findUnique({
+    return this.prisma.systemSettings.upsert({
       where: { id: 1 },
+      create: { id: 1 },
+      update: {},
     });
-    if (existing) return existing;
-    return this.prisma.systemSettings.create({ data: { id: 1 } });
   }
 
   settingsRowToPolicy(row: SystemSettings): PasswordPolicy {

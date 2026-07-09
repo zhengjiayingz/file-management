@@ -11,12 +11,16 @@ interface AuthTokens {
 
 export async function loginAndGetTokens(app: E2eApp) {
   const username = `e2e_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-  await request(app.getHttpServer())
+  const registerRes = await request(app.getHttpServer())
     .post('/api/auth/register')
     .send({ username, password: TEST_PASSWORD });
+  expect(registerRes.status).toBe(201);
+
   const res = await request(app.getHttpServer())
     .post('/api/auth/login')
     .send({ username, password: TEST_PASSWORD });
+  expect(res.status).toBe(200);
+
   const body = apiBody<AuthTokens>(res.body);
   return {
     accessToken: body.data.accessToken,
