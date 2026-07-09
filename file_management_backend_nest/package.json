@@ -6,8 +6,8 @@
   "private": true,
   "license": "UNLICENSED",
   "scripts": {
-    "prisma:generate": "prisma generate",
-    "postinstall": "prisma generate",
+    "prisma:generate": "prisma generate && node prisma/scripts/sync-prisma-client.mjs",
+    "postinstall": "prisma generate && node prisma/scripts/sync-prisma-client.mjs",
     "build": "nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",

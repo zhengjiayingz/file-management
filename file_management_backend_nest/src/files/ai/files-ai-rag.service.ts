@@ -59,16 +59,14 @@ function asEmbedding(value: unknown): number[] | null {
 
 function buildRagSystemPrompt(chunks: RagChunk[], fileName?: string): string {
   const fileLine = fileName ? `【文件】${fileName}\n` : '';
-  const chunkBlocks = chunks
-    .map((chunk, i) => `[片段 ${i + 1}]\n${chunk.content}`)
-    .join('\n\n');
+  const chunkBlocks = chunks.map((chunk) => chunk.content).join('\n\n---\n\n');
 
   return [
     '你是网盘文档阅读助手。',
     '请仅根据下方「检索片段」及对话历史回答问题。',
     '若检索片段中没有足够信息，请明确说明不知道，不要编造。',
     '用户可能会连续追问，请结合上下文作答。',
-    '回答时可引用片段编号，例如「根据[片段 1]……」。',
+    '回答时直接陈述内容，不要在回答中出现「片段 N」「参考材料」等内部标记或编号。',
     '回答简洁清晰，优先使用中文。',
     '',
     fileLine,
