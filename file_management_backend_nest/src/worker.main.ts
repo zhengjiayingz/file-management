@@ -7,7 +7,9 @@ async function bootstrap() {
   await NestFactory.createApplicationContext(PreviewWorkerModule, {
     logger: ['error', 'warn', 'log'],
   });
-  logger.log('Preview BullMQ worker started (queue: preview-convert)');
+  logger.log(
+    'BullMQ workers started (queues: preview-convert, document-index)',
+  );
 }
 
 void bootstrap();

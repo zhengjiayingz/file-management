@@ -580,7 +580,17 @@ export default {
     aiChatContext: 'Selected context',
     aiChatClear: 'Clear chat',
     aiChatYou: 'You',
-    aiChatAssistant: 'AI'
+    aiChatAssistant: 'AI',
+    aiIndexTrigger: 'Build index',
+    aiIndexStatusNone: 'Not indexed',
+    aiIndexStatusPending: '{msg} ({progress}%)',
+    aiIndexStatusReady: 'Index ready ({count} chunks)',
+    aiIndexStatusFailed: 'Index failed: {reason}',
+    aiIndexTriggerError: 'Failed to start indexing',
+    aiChatModeSelection: 'Selection Q&A',
+    aiChatModeRag: 'Document Q&A',
+    aiRagHint: 'Ask about the whole document via index; no text selection needed. Build the index first.',
+    aiRagNotReady: 'Build the index and wait until it is ready'
   },
   friendPanel: {
     chatWith: 'Chat with {name}',

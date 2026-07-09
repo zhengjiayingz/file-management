@@ -157,7 +157,10 @@ Run: `pnpm test:e2e -- test/e2e/files-ai.e2e-spec.ts` — 确认 S3 基线绿
 
 ## Task 1.6 E2E
 
-**Create:** `test/e2e/files-ai-rag.e2e-spec.ts`
+**Create:**
+
+- `test/e2e/files-ai-index.e2e-spec.ts` — F-01 索引/status
+- `test/e2e/files-ai-rag.e2e-spec.ts` — F-02 rag-ask
 
 **Mock：**
 ```typescript
@@ -175,7 +178,7 @@ jest.mock('@/files/ai/embedding/embedding.provider', () => ({
 - 索引后 rag-ask → 200 text/plain 含 mock 文本
 - POST index 重复 → 行为符合设计（409 或 reindex）
 
-Run: `pnpm test:e2e -- test/e2e/files-ai-rag.e2e-spec.ts`
+Run: `pnpm test:e2e -- test/e2e/files-ai-index.e2e-spec.ts test/e2e/files-ai-rag.e2e-spec.ts`
 
 ---
 
@@ -191,12 +194,17 @@ Run: `pnpm test:e2e -- test/e2e/files-ai-rag.e2e-spec.ts`
 
 ## S12 验收清单
 
-- [ ] `pnpm build`
-- [ ] `pnpm test:e2e` 全绿（含新 spec）
-- [ ] txt 上传 → index → rag-ask 手测通过
-- [ ] 划词 `ai/ask` 仍正常
-- [ ] Worker 单独进程 `pnpm start:worker:dev` 可处理 index job
-- [ ] MIGRATION.md 或 README 追加 S12 API 对照
+- [x] `pnpm build`
+- [x] `pnpm test:e2e` 全绿（含 `files-ai-index`、`files-ai-rag` spec）
+- [x] txt 上传 → index → rag-ask 手测通过
+- [x] 划词 `ai/ask` 仍正常
+- [x] Worker 单独进程 `pnpm start:worker:dev` 可处理 index job
+- [x] MIGRATION.md 追加 S12 API 对照
+
+**已知差异（MVP）：**
+
+- `ready` 且 `indexedFileHash` 未变时再次 `POST index` 返回 409「文档未更新」；内容变更后允许重建。
+- 前端入口在文本预览弹窗（划词 / 全文切换），非独立「文件详情 Tab」。
 
 ---
 

@@ -385,3 +385,57 @@ export async function setUserRole(
     data: { role },
   });
 }
+
+/** 为 RAG e2e 直接写入 ready 索引与带向量的 chunks（绕过 Worker） */
+export async function seedReadyDocumentIndex(
+  app: E2eApp,
+  userFileId: number,
+  chunks: Array<{ content: string; embedding: number[] }>,
+  options?: { indexedFileHash?: string | null },
+) {
+  const prisma = app.get(PrismaService);
+
+  let indexedFileHash = options?.indexedFileHash;
+  if (indexedFileHash === undefined) {
+    const userFile = await prisma.userFile.findUnique({
+      where: { id: userFileId },
+      select: { storage: { select: { fileHash: true } } },
+    });
+    indexedFileHash = userFile?.storage?.fileHash ?? null;
+  }
+
+  await prisma.documentChunk.deleteMany({ where: { userFileId } });
+  await prisma.documentIndexJob.upsert({
+    where: { userFileId },
+    create: {
+      userFileId,
+      mode: 'general',
+      status: 'ready',
+      progress: 100,
+      progressMsg: '索引完成',
+      chunkCount: chunks.length,
+      errorMessage: null,
+      indexedFileHash,
+    },
+    update: {
+      mode: 'general',
+      status: 'ready',
+      progress: 100,
+      progressMsg: '索引完成',
+      chunkCount: chunks.length,
+      errorMessage: null,
+      indexedFileHash,
+    },
+  });
+
+  for (let i = 0; i < chunks.length; i++) {
+    await prisma.documentChunk.create({
+      data: {
+        userFileId,
+        chunkIndex: i,
+        content: chunks[i].content,
+        embedding: chunks[i].embedding,
+      },
+    });
+  }
+}

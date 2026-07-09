@@ -468,9 +468,9 @@ AI_DAILY_ASK_LIMIT=100                      # 每用户每日 AI 请求上限（
 
 **验收：**
 
-- [ ] 上传 `test.txt`（>5KB）→ index → ready
-- [ ] rag-ask 返回与内容相关的流式回答
-- [ ] `pnpm test:e2e` 全绿
+- [x] 上传 `test.txt`（>5KB）→ index → ready
+- [x] rag-ask 返回流式回答（mock / 手测）
+- [x] `pnpm test:e2e` 含 `files-ai-index`、`files-ai-rag`
 
 ---
 

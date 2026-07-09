@@ -60,14 +60,37 @@
           <header class="ai-chat-header">
             <div>
               <h4 class="ai-chat-title">{{ t('preview.aiAskTitle') }}</h4>
-              <p class="ai-chat-hint">{{ t('preview.aiAskHint') }}</p>
+              <p class="ai-chat-hint">
+                {{ chatMode === 'selection' ? t('preview.aiAskHint') : t('preview.aiRagHint') }}
+              </p>
             </div>
             <el-button v-if="chatMessages.length > 0" size="small" text type="danger" @click="clearChat">
               {{ t('preview.aiChatClear') }}
             </el-button>
           </header>
 
-          <div class="ai-chat-context">
+          <div class="ai-index-bar">
+            <el-button
+              size="small"
+              type="primary"
+              plain
+              :loading="indexTriggering"
+              :disabled="indexTriggering || indexPolling"
+              @click="triggerIndex"
+            >
+              {{ t('preview.aiIndexTrigger') }}
+            </el-button>
+            <span class="ai-index-status">{{ indexStatusLabel }}</span>
+          </div>
+
+          <div class="ai-chat-mode">
+            <el-radio-group v-model="chatMode" size="small">
+              <el-radio-button value="selection">{{ t('preview.aiChatModeSelection') }}</el-radio-button>
+              <el-radio-button value="rag">{{ t('preview.aiChatModeRag') }}</el-radio-button>
+            </el-radio-group>
+          </div>
+
+          <div v-if="chatMode === 'selection'" class="ai-chat-context">
             <span class="ai-chat-context-label">{{ t('preview.aiChatContext') }}</span>
             <p v-if="selectedText" class="ai-chat-context-text">{{ selectedPreview }}</p>
             <p v-else class="ai-chat-context-empty">{{ t('preview.aiAskSelectedEmpty') }}</p>
@@ -113,10 +136,28 @@ import { ref, computed, watch, nextTick, onUnmounted, type ComponentPublicInstan
 import { useI18n } from 'vue-i18n'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import fileApiService from '@api/file'
-import { streamAskAboutSelection, type AiChatMessage } from '@api/ai'
+import {
+  getDocumentIndexStatus,
+  streamAskAboutSelection,
+  streamRagAsk,
+  triggerDocumentIndex,
+  type AiChatMessage,
+  type DocumentIndexStatus,
+  type DocumentIndexStatusData,
+} from '@api/ai'
 import { renderMarkdown } from '@utils/renderMarkdown'
 
 const SELECTED_PREVIEW_MAX = 200
+const INDEX_POLL_INTERVAL_MS = 2500
+
+const INDEX_ACTIVE_STATUSES: DocumentIndexStatus[] = [
+  'pending',
+  'extracting',
+  'chunking',
+  'embedding',
+  'summarizing',
+  'extracting_knowledge',
+]
 
 type UiChatMessage = {
   id: string
@@ -248,15 +289,43 @@ const fileEncoding = ref<'utf-8' | 'gb18030' | undefined>(undefined)
 
 const selectedText = ref('')
 const question = ref('')
+const chatMode = ref<'selection' | 'rag'>('selection')
 const chatMessages = ref<UiChatMessage[]>([])
 const asking = ref(false)
 const askError = ref('')
 let askAbort: AbortController | null = null
 
+const indexStatus = ref<DocumentIndexStatusData | null>(null)
+const indexTriggering = ref(false)
+const indexPolling = ref(false)
+let indexPollTimer: ReturnType<typeof setInterval> | null = null
+
 const selectedPreview = computed(() => {
   const s = selectedText.value
   if (s.length <= SELECTED_PREVIEW_MAX) return s
   return `${s.slice(0, SELECTED_PREVIEW_MAX)}…`
+})
+
+const indexStatusLabel = computed(() => {
+  const data = indexStatus.value
+  if (!data || data.status === 'none') {
+    return t('preview.aiIndexStatusNone')
+  }
+  if (data.status === 'ready') {
+    return t('preview.aiIndexStatusReady', { count: data.chunkCount })
+  }
+  if (data.status === 'failed') {
+    return t('preview.aiIndexStatusFailed', {
+      reason: data.errorMessage || t('preview.jobUnknownError'),
+    })
+  }
+  if (INDEX_ACTIVE_STATUSES.includes(data.status)) {
+    return t('preview.aiIndexStatusPending', {
+      msg: data.progressMsg || data.status,
+      progress: data.progress,
+    })
+  }
+  return data.status
 })
 
 // 必须整体传入 computed，让 count 为 number；若只写 count: computed(()=>n)，Virtualizer 会把 Ref 当数字用导致 NaN，列表永远空白
@@ -319,7 +388,62 @@ function onDialogOpened() {
 onUnmounted(() => {
   resizeUnsub?.()
   stopAsk()
+  stopIndexPolling()
 })
+
+function stopIndexPolling() {
+  if (indexPollTimer) {
+    clearInterval(indexPollTimer)
+    indexPollTimer = null
+  }
+  indexPolling.value = false
+}
+
+function shouldPollIndex(status: DocumentIndexStatus): boolean {
+  return INDEX_ACTIVE_STATUSES.includes(status)
+}
+
+async function refreshIndexStatus() {
+  try {
+    const data = await getDocumentIndexStatus(props.fileId)
+    indexStatus.value = data
+    if (shouldPollIndex(data.status)) {
+      if (!indexPollTimer) {
+        indexPolling.value = true
+        indexPollTimer = setInterval(() => {
+          void refreshIndexStatus()
+        }, INDEX_POLL_INTERVAL_MS)
+      }
+    } else {
+      stopIndexPolling()
+    }
+  } catch {
+    /* 索引状态查询失败时保持当前展示 */
+  }
+}
+
+async function triggerIndex() {
+  if (indexTriggering.value) return
+  indexTriggering.value = true
+  try {
+    const data = await triggerDocumentIndex(props.fileId, 'general')
+    indexStatus.value = data
+    if (shouldPollIndex(data.status)) {
+      stopIndexPolling()
+      indexPolling.value = true
+      indexPollTimer = setInterval(() => {
+        void refreshIndexStatus()
+      }, INDEX_POLL_INTERVAL_MS)
+    }
+  } catch (e: unknown) {
+    const msg =
+      (e as { response?: { data?: { message?: string } } })?.response?.data
+        ?.message || t('preview.aiIndexTriggerError')
+    askError.value = msg
+  } finally {
+    indexTriggering.value = false
+  }
+}
 
 function scrollChatToBottom() {
   void nextTick(() => {
@@ -366,46 +490,59 @@ function captureSelection() {
 async function submitChat() {
   if (asking.value) return
   askError.value = ''
-  if (!selectedText.value) {
-    askError.value = t('preview.aiAskNoSelection')
-    return
-  }
   const userContent = question.value.trim()
   if (!userContent) {
     askError.value = t('preview.aiAskNoQuestion')
     return
   }
 
+  if (chatMode.value === 'selection') {
+    if (!selectedText.value) {
+      askError.value = t('preview.aiAskNoSelection')
+      return
+    }
+  } else if (indexStatus.value?.status !== 'ready') {
+    askError.value = t('preview.aiRagNotReady')
+    return
+  }
+
   const history: AiChatMessage[] = chatMessages.value
     .filter((m) => !m.streaming && m.content.trim())
     .map(({ role, content }) => ({ role, content }))
-  // 先画界面，再等网络
   const userId = genChatId()
-  const assistantId = genChatId() // 给用户消息、AI 消息各生成唯一 id
-  chatMessages.value.push({ id: userId, role: 'user', content: userContent }) // 立刻显示用户刚输入的问题
-  chatMessages.value.push({ id: assistantId, role: 'assistant', content: '', streaming: true }) //立刻显示 AI 气泡，content: ''
-  question.value = '' // 清空输入框，方便继续输入
+  const assistantId = genChatId()
+  chatMessages.value.push({ id: userId, role: 'user', content: userContent })
+  chatMessages.value.push({ id: assistantId, role: 'assistant', content: '', streaming: true })
+  question.value = ''
   scrollChatToBottom()
 
-  asking.value = true // 禁用发送
-  askAbort = new AbortController() // 新建中止控制器，给 stopAsk() 用
+  asking.value = true
+  askAbort = new AbortController()
 
   try {
-    await streamAskAboutSelection({ // 调 api/ai.ts，用 fetch 读流,fetch方法支持流式输出
+    const streamParams = {
       fileId: props.fileId,
       question: userContent,
-      selectedText: selectedText.value,
-      messages: history, // 之前几轮对话，多轮上下文
-      fileName: props.fileName,
-      signal: askAbort.signal, // 传给 fetch；用户点「停止」会 abort()
-      onChunk: (chunk) => { // 每收到一块文字就执行
-        const msg = chatMessages.value.find((m) => m.id === assistantId) // 找到 AI 气泡
+      messages: history,
+      signal: askAbort.signal,
+      onChunk: (chunk: string) => {
+        const msg = chatMessages.value.find((m) => m.id === assistantId)
         if (msg) {
-          msg.content += chunk //  拼字，实现打字机效果
-          scrollChatToBottom() // 每来一块就滚到底
+          msg.content += chunk
+          scrollChatToBottom()
         }
       },
-    })
+    }
+
+    if (chatMode.value === 'selection') {
+      await streamAskAboutSelection({
+        ...streamParams,
+        selectedText: selectedText.value,
+        fileName: props.fileName,
+      })
+    } else {
+      await streamRagAsk(streamParams)
+    }
   } catch (e: unknown) {
     if (e instanceof DOMException && e.name === 'AbortError') {
       return //用户主动停止，不算错误，不弹错误、不删已有内容
@@ -427,6 +564,10 @@ async function submitChat() {
 
 function reset() {
   resetAiAsk()
+  stopIndexPolling()
+  indexStatus.value = null
+  indexTriggering.value = false
+  chatMode.value = 'selection'
   resizeUnsub?.()
   resizeUnsub = null
   rawText.value = ''
@@ -455,6 +596,7 @@ async function onOpen() {
   reflowForReading.value = !isMarkdownFile.value
   initialLoading.value = true
   loadError.value = ''
+  void refreshIndexStatus()
   try {
     const data = await fetchChunk(0)
     if (data.fileEncoding) fileEncoding.value = data.fileEncoding
@@ -791,6 +933,26 @@ function onScroll() {
   font-size: 12px;
   line-height: 1.45;
   color: var(--el-text-color-secondary);
+}
+
+.ai-index-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  background: var(--el-fill-color-blank, #fff);
+}
+
+.ai-index-status {
+  font-size: 12px;
+  color: var(--el-text-color-regular);
+  line-height: 1.4;
+}
+
+.ai-chat-mode {
+  padding: 8px 14px 0;
 }
 
 .ai-chat-context {

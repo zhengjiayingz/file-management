@@ -573,10 +573,20 @@ export default {
     aiAskNoSelection: '請先在左側選取要提問的內容',
     aiAskNoQuestion: '請輸入問題',
     aiChatEmpty: '選取左側文字後，在這裡開始與 AI 對話',
-    aiChatContext: '目前選取上下文',
+    aiChatContext: '目前選取上下文', 
     aiChatClear: '清空對話',
     aiChatYou: '我',
-    aiChatAssistant: 'AI'
+    aiChatAssistant: 'AI',
+    aiIndexTrigger: '建立索引',
+    aiIndexStatusNone: '未建立索引',
+    aiIndexStatusPending: '{msg}（{progress}%）',
+    aiIndexStatusReady: '索引就緒（{count} 塊）',
+    aiIndexStatusFailed: '索引失敗：{reason}',
+    aiIndexTriggerError: '觸發索引失敗',
+    aiChatModeSelection: '劃詞問答',
+    aiChatModeRag: '全文問答',
+    aiRagHint: '基於文檔索引回答全文問題，無需選中文字；請先建立索引。',
+    aiRagNotReady: '請先建立索引並等待完成'
   },
   friendPanel: {
     chatWith: '與 {name} 聊天',

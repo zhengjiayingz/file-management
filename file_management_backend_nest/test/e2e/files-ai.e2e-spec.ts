@@ -3,8 +3,7 @@ import { apiMessage } from '../helpers/api-response';
 import { createE2eApp, E2eApp } from '../helpers/app-bootstrap';
 import { loginAndGetTokens } from '../helpers/auth.helper';
 import { getUserId, seedTextFile } from '../helpers/files.helper';
-
-const MOCK_AI_STREAM_TEXT = 'mock-ai-stream-chunk';
+import { MOCK_AI_STREAM_TEXT } from '../setup-e2e';
 
 describe('Files AI (e2e)', () => {
   let app: E2eApp;
