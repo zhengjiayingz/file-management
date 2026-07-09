@@ -224,4 +224,4 @@ Run: `pnpm test:e2e -- test/e2e/files-ai-index.e2e-spec.ts test/e2e/files-ai-rag
 
 ## 完成后
 
-进入 [路线图 §9 阶段 2](./2026-07-08-ai-capability-roadmap-design.md) — 分层摘要 + theme + PDF。
+进入 [S13 实施清单](./2026-07-09-s13-ai-summary-implementation.md) — 6 体裁结构化摘要；可选 F-04 主题 + F-05 PDF。
