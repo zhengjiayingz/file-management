@@ -68,7 +68,7 @@ export class FilesAiIndexService {
         id: true,
         fileName: true,
         fileType: true,
-        storage: { select: { mimeType: true, filePath: true } },
+        storage: { select: { mimeType: true, filePath: true, fileHash: true } },
       },
     });
     // 文件存在性校验
@@ -98,8 +98,15 @@ export class FilesAiIndexService {
     if (existing && ACTIVE_STATUSES.includes(existing.status)) {
       throw new ConflictException('索引任务进行中，请稍后再试');
     }
+    if (
+      existing?.status === 'ready' &&
+      existing.indexedFileHash &&
+      existing.indexedFileHash === userFile.storage.fileHash
+    ) {
+      throw new ConflictException('检查到文档未更新，无需重新建立索引');
+    }
 
-    // ready / failed / 无记录 → 允许（重新）索引
+    // ready（内容已变）/ failed / 无记录 → 允许（重新）索引
     await this.prisma.$transaction(async (tx) => {
       await tx.documentChunk.deleteMany({ where: { userFileId: fileId } }); //删除旧chunk
       // 创建或更新 index job

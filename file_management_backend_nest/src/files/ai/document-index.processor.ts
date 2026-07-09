@@ -34,6 +34,7 @@ export class DocumentIndexProcessor extends WorkerHost {
       progressMsg?: string;
       chunkCount?: number;
       errorMessage?: string | null;
+      indexedFileHash?: string | null;
     },
   ) {
     // 每个文件对应一条 documentIndexJob（主键是 userFileId）
@@ -58,7 +59,9 @@ export class DocumentIndexProcessor extends WorkerHost {
         where: { id: userFileId, userId, isDeleted: false },
         select: {
           fileName: true,
-          storage: { select: { filePath: true, mimeType: true } },
+          storage: {
+            select: { filePath: true, mimeType: true, fileHash: true },
+          },
         },
       });
       // 文件或 storage 不存在则失败
@@ -135,6 +138,7 @@ export class DocumentIndexProcessor extends WorkerHost {
         progress: 100,
         progressMsg: '索引完成',
         errorMessage: null,
+        indexedFileHash: userFile.storage.fileHash,
       });
       // 打成功日志
       this.logger.log(

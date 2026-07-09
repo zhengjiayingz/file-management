@@ -391,8 +391,18 @@ export async function seedReadyDocumentIndex(
   app: E2eApp,
   userFileId: number,
   chunks: Array<{ content: string; embedding: number[] }>,
+  options?: { indexedFileHash?: string | null },
 ) {
   const prisma = app.get(PrismaService);
+
+  let indexedFileHash = options?.indexedFileHash;
+  if (indexedFileHash === undefined) {
+    const userFile = await prisma.userFile.findUnique({
+      where: { id: userFileId },
+      select: { storage: { select: { fileHash: true } } },
+    });
+    indexedFileHash = userFile?.storage?.fileHash ?? null;
+  }
 
   await prisma.documentChunk.deleteMany({ where: { userFileId } });
   await prisma.documentIndexJob.upsert({
@@ -405,6 +415,7 @@ export async function seedReadyDocumentIndex(
       progressMsg: '索引完成',
       chunkCount: chunks.length,
       errorMessage: null,
+      indexedFileHash,
     },
     update: {
       mode: 'general',
@@ -413,6 +424,7 @@ export async function seedReadyDocumentIndex(
       progressMsg: '索引完成',
       chunkCount: chunks.length,
       errorMessage: null,
+      indexedFileHash,
     },
   });
 

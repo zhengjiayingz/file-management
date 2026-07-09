@@ -203,7 +203,30 @@ describe('Files AI Index (e2e)', () => {
     expect(msgBody.message).toMatch(/索引任务进行中/);
   });
 
-  it('POST /api/files/:id/ai/index ready 后允许重新索引并清空旧 chunks', async () => {
+  it('POST /api/files/:id/ai/index ready 且文档未更新应返回 409', async () => {
+    const { accessToken, username } = await loginAndGetTokens(app);
+    const userId = await getUserId(app, username);
+    const { userFile } = await seedTextFile(
+      app,
+      userId,
+      'index unchanged',
+      `index-unchanged-${Date.now()}.txt`,
+    );
+    await seedReadyDocumentIndex(app, userFile.id, [
+      { content: 'stable chunk', embedding: [1, 0] },
+    ]);
+
+    const res = await request(app.getHttpServer())
+      .post(`/api/files/${userFile.id}/ai/index`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ mode: 'general' });
+
+    expect(res.status).toBe(409);
+    const msgBody = apiMessage(res.body);
+    expect(msgBody.message).toMatch(/文档未更新/);
+  });
+
+  it('POST /api/files/:id/ai/index ready 且文档已更新应允许重新索引并清空旧 chunks', async () => {
     const { accessToken, username } = await loginAndGetTokens(app);
     const userId = await getUserId(app, username);
     const { userFile } = await seedTextFile(
@@ -212,9 +235,12 @@ describe('Files AI Index (e2e)', () => {
       'index reindex chunks',
       `index-reindex-${Date.now()}.txt`,
     );
-    await seedReadyDocumentIndex(app, userFile.id, [
-      { content: 'old chunk', embedding: [1, 0] },
-    ]);
+    await seedReadyDocumentIndex(
+      app,
+      userFile.id,
+      [{ content: 'old chunk', embedding: [1, 0] }],
+      { indexedFileHash: 'stale-file-hash' },
+    );
     const prisma = app.get(PrismaService);
 
     const res = await request(app.getHttpServer())
