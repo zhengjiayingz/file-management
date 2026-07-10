@@ -23,6 +23,7 @@
 | **S10** | **Admin + VIP + Log** | **✅** |
 | **S11** | **Swagger + 定时清理 + Preview Worker + Express 下线** | **✅** |
 | **S12** | **AI 文档索引 + RAG 全文问答（F-01 / F-02）** | **✅** |
+| **S13** | **分层摘要 + 体裁化输出 + 前端摘要 Tab（F-03）** | **✅** |
 
 ## 启动
 
@@ -118,8 +119,8 @@ VITE_API_BASE_URL=http://localhost:3000
 
 | Express | Nest | 状态 |
 |---------|------|------|
-| `POST /api/files/:id/ai/index` | 同 | ✅ |
-| `GET /api/files/:id/ai/index/status` | 同 | ✅ |
+| `POST /api/files/:id/ai/index` | 同（S13 扩展 body，见下） | ✅ |
+| `GET /api/files/:id/ai/index/status` | 同（含 `summarizing`、`summaryGenre`） | ✅ |
 | `POST /api/files/:id/ai/rag-ask` | 同 | ✅ |
 
 - 索引：异步 BullMQ 队列 `document-index`（`pnpm start:worker:dev` 消费）；仅 `.txt` / `.md`。
@@ -127,9 +128,43 @@ VITE_API_BASE_URL=http://localhost:3000
 - **Embedding 与对话可分离配置**：`AI_EMBEDDING_BASE_URL`、`AI_EMBEDDING_API_KEY`、`AI_EMBEDDING_MODEL`（DeepSeek 无 `/embeddings`，需硅基流动等兼容服务）；对话仍用 `AI_BASE_URL` / `AI_MODEL`。
 - Prisma：`DocumentIndexJob`、`DocumentChunk`（embedding 存 JSON）。
 
+## API 对照（S13 分层摘要）
+
+**实施文档**：`docs/plans/2026-07-09-s13-ai-summary-implementation.md`
+
+| 端点 | 说明 | 状态 |
+|------|------|------|
+| `POST /api/files/:id/ai/index` | Body：`{ summaryGenre, force? }`；`summaryGenre` 必填（6 体裁）；`force: true` 可强制 reindex（补旧 S12 索引摘要） | ✅ |
+| `GET /api/files/:id/ai/index/status` | 含 `summarizing` 阶段、`progressMsg`、`summaryGenre` | ✅ |
+| `GET /api/files/:id/ai/summary` | Query：`type=book\|chapter`（默认 book）、`chapterNo?`；索引 `ready` 后读库，不调 LLM | ✅ |
+
+**体裁 `summaryGenre`（6 项）**：`novel` | `general_nonfiction` | `technical` | `textbook` | `lab_report` | `paper`
+
+**索引流程（Worker）**：extracting → chunking → embedding → **summarizing（Map-Reduce）** → ready
+
+**Prisma 新增**：`DocumentSummary`（`type` + `refKey` + `payload` Json）；`DocumentIndexJob.summaryGenre`
+
+**实现要点**：
+
+- `src/files/ai/summary/` — Map-Reduce、Zod schema、体裁 Prompt
+- `src/files/ai/utils/structured-object.util.ts` — DeepSeek 等网关不支持 `json_schema` 时降级 `json_object`，Prompt 注入 Schema + 重试
+- 前端 `TextChunkPreviewDialog`：体裁下拉 +「问答 / 摘要」Tab + `SummaryPanel`；ready 时显示「重新建立索引」
+
+**不变**：`POST .../ai/ask`（划词）、`POST .../ai/rag-ask`（全文问答）
+
 ## S12 验收
 
 验证：`TextChunkPreviewDialog` 建立索引 → 状态轮询至 ready →「全文问答」流式输出；划词 `ai/ask` 仍正常。
+
+## S13 验收
+
+验证（需 **Worker 运行** + DeepSeek + Embedding 配置正确）：
+
+1. 文本预览 → 选体裁（如「小说」）→「建立索引」或「重新建立索引」
+2. 状态经 `summarizing` 至 `ready`
+3.「摘要」Tab 展示结构化字段（oneLiner、overview、plotPoints 等）
+4. 再次 `GET .../ai/summary` 读库一致，不重复调 LLM
+5.「全文问答」RAG 仍可用
 
 ```bash
 # .env 示例（对话 + Embedding 分离）
@@ -139,7 +174,11 @@ AI_API_KEY=...
 AI_EMBEDDING_BASE_URL=https://api.siliconflow.cn/v1
 AI_EMBEDDING_API_KEY=...
 AI_EMBEDDING_MODEL=BAAI/bge-m3
+# 可选：非 DeepSeek 网关若也不支持 json_schema，设为 json_object
+# AI_STRUCTURED_JSON_MODE=json_object
 ```
+
+**单测**：`src/files/ai/summary/*.spec.ts`（schema + Map-Reduce mock）。**E2E**：`files-ai-summary.e2e-spec.ts` 待补；`files-ai-index.e2e` 仍用旧 `{ mode }` body，需后续对齐 `summaryGenre`。
 
 ## S3 验收后前端切换
 
@@ -253,6 +292,7 @@ pnpm test:e2e    # Auth + Health + Files + User + UserPreference e2e
 S2 e2e 覆盖：列表、详情、下载、text-chunk、回收站、重命名、移动、批量删除/恢复。
 S3 e2e 覆盖：AI 401/400/404、text/plain 流式 mock 响应。
 S12 e2e 覆盖：`files-ai-index`（index/status 401/404/400、pending/ready/reindex）、`files-ai-rag`（rag-ask 401/404/409/400、流式 mock）；mock embedding + BullMQ 入队。
+S13 单测：`summary.schemas.spec.ts`、`summary-map-reduce.service.spec.ts`。S13 e2e：`files-ai-summary`（401/404/409、GET book、读库幂等）；`files-ai-index` 已对齐 `summaryGenre` + `force`。
 S4 e2e 覆盖：预览 401/404/400、preview-state/status JSON、有缓存时 PDF 流。
 S5 e2e 覆盖：profile GET/PUT、avatar 上传、user search、user-preferences GET/PUT。
 S6 e2e 覆盖：check-exists、check-name、分片上传+合并、instant-upload 404、传统 upload、folder 创建与重名。

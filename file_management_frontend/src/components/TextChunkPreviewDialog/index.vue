@@ -65,6 +65,25 @@
           </header>
 
           <div class="ai-index-bar">
+            <el-select
+              v-model="summaryGenre"
+              size="small"
+              class="ai-index-genre"
+              :disabled="indexTriggering || indexPolling"
+            >
+              <el-option-group
+                v-for="group in SUMMARY_GENRE_GROUPS"
+                :key="group.groupKey"
+                :label="t(`preview.aiSummaryGenreGroup.${group.groupKey}`)"
+              >
+                <el-option
+                  v-for="genre in group.genres"
+                  :key="genre"
+                  :label="t(`preview.aiSummaryGenre.${genre}`)"
+                  :value="genre"
+                />
+              </el-option-group>
+            </el-select>
             <el-button
               size="small"
               type="primary"
@@ -73,53 +92,68 @@
               :disabled="indexTriggering || indexPolling"
               @click="triggerIndex"
             >
-              {{ t('preview.aiIndexTrigger') }}
+              {{ indexTriggerLabel }}
             </el-button>
             <span class="ai-index-status">{{ indexStatusLabel }}</span>
           </div>
 
-          <div class="ai-chat-mode">
-            <el-radio-group v-model="chatMode" size="small">
-              <el-radio-button value="selection">{{ t('preview.aiChatModeSelection') }}</el-radio-button>
-              <el-radio-button value="rag">{{ t('preview.aiChatModeRag') }}</el-radio-button>
-            </el-radio-group>
-          </div>
+          <el-tabs v-model="rightPanelTab" class="ai-right-tabs">
+            <el-tab-pane :label="t('preview.aiTabChat')" name="chat">
+              <div class="ai-chat-tab">
+                <div class="ai-chat-mode">
+                  <el-radio-group v-model="chatMode" size="small">
+                    <el-radio-button value="selection">{{ t('preview.aiChatModeSelection') }}</el-radio-button>
+                    <el-radio-button value="rag">{{ t('preview.aiChatModeRag') }}</el-radio-button>
+                  </el-radio-group>
+                </div>
 
-          <div v-if="chatMode === 'selection'" class="ai-chat-context">
-            <span class="ai-chat-context-label">{{ t('preview.aiChatContext') }}</span>
-            <p v-if="selectedText" class="ai-chat-context-text">{{ selectedPreview }}</p>
-            <p v-else class="ai-chat-context-empty">{{ t('preview.aiAskSelectedEmpty') }}</p>
-          </div>
+                <div v-if="chatMode === 'selection'" class="ai-chat-context">
+                  <span class="ai-chat-context-label">{{ t('preview.aiChatContext') }}</span>
+                  <p v-if="selectedText" class="ai-chat-context-text">{{ selectedPreview }}</p>
+                  <p v-else class="ai-chat-context-empty">{{ t('preview.aiAskSelectedEmpty') }}</p>
+                </div>
 
-          <div ref="chatScrollRef" class="ai-chat-messages">
-            <p v-if="chatMessages.length === 0" class="ai-chat-empty">{{ t('preview.aiChatEmpty') }}</p>
-            <div v-for="msg in chatMessages" :key="msg.id" class="ai-chat-bubble"
-              :class="msg.role === 'user' ? 'ai-chat-bubble--user' : 'ai-chat-bubble--assistant'">
-              <span class="ai-chat-bubble-role">
-                {{ msg.role === 'user' ? t('preview.aiChatYou') : t('preview.aiChatAssistant') }}
-              </span>
-              <div
-                v-if="msg.role === 'assistant' && msg.content"
-                class="ai-chat-bubble-content ai-chat-bubble-content--md"
-                v-html="renderMarkdown(msg.content)"
+                <div ref="chatScrollRef" class="ai-chat-messages">
+                  <p v-if="chatMessages.length === 0" class="ai-chat-empty">{{ t('preview.aiChatEmpty') }}</p>
+                  <div v-for="msg in chatMessages" :key="msg.id" class="ai-chat-bubble"
+                    :class="msg.role === 'user' ? 'ai-chat-bubble--user' : 'ai-chat-bubble--assistant'">
+                    <span class="ai-chat-bubble-role">
+                      {{ msg.role === 'user' ? t('preview.aiChatYou') : t('preview.aiChatAssistant') }}
+                    </span>
+                    <div
+                      v-if="msg.role === 'assistant' && msg.content"
+                      class="ai-chat-bubble-content ai-chat-bubble-content--md"
+                      v-html="renderMarkdown(msg.content)"
+                    />
+                    <p v-else-if="msg.content" class="ai-chat-bubble-content">{{ msg.content }}</p>
+                    <p v-else-if="msg.streaming" class="ai-chat-bubble-content">{{ t('preview.aiAskThinking') }}</p>
+                  </div>
+                </div>
+
+                <div v-if="askError" class="err-line">{{ askError }}</div>
+
+                <div class="ai-chat-input">
+                  <el-input v-model="question" type="textarea" :rows="3" :placeholder="t('preview.aiAskQuestionPlaceholder')"
+                    :disabled="asking" resize="none" @keydown.enter.exact.prevent="submitChat" />
+                  <div class="ai-chat-input-actions">
+                    <el-button type="primary" :loading="asking" :disabled="asking" @click="submitChat">
+                      {{ t('preview.aiAskSubmit') }}
+                    </el-button>
+                    <el-button v-if="asking" @click="stopAsk">{{ t('preview.aiAskStop') }}</el-button>
+                  </div>
+                </div>
+              </div>
+            </el-tab-pane>
+            <el-tab-pane :label="t('preview.aiTabSummary')" name="summary">
+              <SummaryPanel
+                :summary-genre="summaryData?.summaryGenre ?? indexStatus?.summaryGenre ?? null"
+                :payload="summaryData?.payload ?? null"
+                :loading="summaryLoading"
+                :error="summaryError"
+                :ready="indexStatus?.status === 'ready'"
               />
-              <p v-else-if="msg.content" class="ai-chat-bubble-content">{{ msg.content }}</p>
-              <p v-else-if="msg.streaming" class="ai-chat-bubble-content">{{ t('preview.aiAskThinking') }}</p>
-            </div>
-          </div>
-
-          <div v-if="askError" class="err-line">{{ askError }}</div>
-
-          <div class="ai-chat-input">
-            <el-input v-model="question" type="textarea" :rows="3" :placeholder="t('preview.aiAskQuestionPlaceholder')"
-              :disabled="asking" resize="none" @keydown.enter.exact.prevent="submitChat" />
-            <div class="ai-chat-input-actions">
-              <el-button type="primary" :loading="asking" :disabled="asking" @click="submitChat">
-                {{ t('preview.aiAskSubmit') }}
-              </el-button>
-              <el-button v-if="asking" @click="stopAsk">{{ t('preview.aiAskStop') }}</el-button>
-            </div>
-          </div>
+            </el-tab-pane>
+          </el-tabs>
         </div>
       </section>
     </div>
@@ -133,14 +167,19 @@ import { useVirtualizer } from '@tanstack/vue-virtual'
 import fileApiService from '@api/file'
 import {
   getDocumentIndexStatus,
+  getDocumentSummary,
   streamAskAboutSelection,
   streamRagAsk,
   triggerDocumentIndex,
+  SUMMARY_GENRE_GROUPS,
   type AiChatMessage,
   type DocumentIndexStatus,
   type DocumentIndexStatusData,
+  type DocumentSummaryData,
+  type SummaryGenre,
 } from '@api/ai'
 import { renderMarkdown } from '@utils/renderMarkdown'
+import SummaryPanel from '@components/SummaryPanel/index.vue'
 
 const SELECTED_PREVIEW_MAX = 200
 const INDEX_POLL_INTERVAL_MS = 2500
@@ -286,6 +325,12 @@ const indexTriggering = ref(false)
 const indexPolling = ref(false)
 let indexPollTimer: ReturnType<typeof setInterval> | null = null
 
+const summaryGenre = ref<SummaryGenre>('novel')
+const rightPanelTab = ref<'chat' | 'summary'>('chat')
+const summaryData = ref<DocumentSummaryData | null>(null)
+const summaryLoading = ref(false)
+const summaryError = ref('')
+
 const selectedPreview = computed(() => {
   const s = selectedText.value
   if (s.length <= SELECTED_PREVIEW_MAX) return s
@@ -313,6 +358,12 @@ const indexStatusLabel = computed(() => {
   }
   return data.status
 })
+
+const indexTriggerLabel = computed(() =>
+  indexStatus.value?.status === 'ready' || indexStatus.value?.status === 'failed'
+    ? t('preview.aiIndexRetrigger')
+    : t('preview.aiIndexTrigger'),
+)
 
 // 必须整体传入 computed，让 count 为 number；若只写 count: computed(()=>n)，Virtualizer 会把 Ref 当数字用导致 NaN，列表永远空白
 const virtualizer = useVirtualizer(
@@ -361,8 +412,10 @@ watch(displayRows, () => {
   scheduleRemeasure()
 }, { flush: 'post' })
 
-watch(reflowForReading, () => {
-  void nextTick(() => scheduleRemeasure())
+watch(rightPanelTab, (tab) => {
+  if (tab === 'summary' && indexStatus.value?.status === 'ready' && !summaryData.value && !summaryLoading.value) {
+    void loadSummary()
+  }
 })
 
 function onDialogOpened() {
@@ -392,7 +445,14 @@ function shouldPollIndex(status: DocumentIndexStatus): boolean {
 async function refreshIndexStatus() {
   try {
     const data = await getDocumentIndexStatus(props.fileId)
+    const prevStatus = indexStatus.value?.status
     indexStatus.value = data
+    if (data.summaryGenre) {
+      summaryGenre.value = data.summaryGenre
+    }
+    if (data.status === 'ready' && prevStatus !== 'ready') {
+      void loadSummary()
+    }
     if (shouldPollIndex(data.status)) {
       if (!indexPollTimer) {
         indexPolling.value = true
@@ -408,11 +468,35 @@ async function refreshIndexStatus() {
   }
 }
 
+async function loadSummary() {
+  if (indexStatus.value?.status !== 'ready') {
+    summaryData.value = null
+    return
+  }
+  summaryLoading.value = true
+  summaryError.value = ''
+  try {
+    summaryData.value = await getDocumentSummary(props.fileId, { type: 'book' })
+  } catch (e: unknown) {
+    summaryData.value = null
+    const msg =
+      (e as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+      t('preview.aiSummaryLoadError')
+    summaryError.value = msg
+  } finally {
+    summaryLoading.value = false
+  }
+}
+
 async function triggerIndex() {
   if (indexTriggering.value) return
   indexTriggering.value = true
+  summaryData.value = null
+  summaryError.value = ''
+  const force =
+    indexStatus.value?.status === 'ready' || indexStatus.value?.status === 'failed'
   try {
-    const data = await triggerDocumentIndex(props.fileId, 'general')
+    const data = await triggerDocumentIndex(props.fileId, summaryGenre.value, { force })
     indexStatus.value = data
     if (shouldPollIndex(data.status)) {
       stopIndexPolling()
@@ -554,6 +638,11 @@ function reset() {
   indexStatus.value = null
   indexTriggering.value = false
   chatMode.value = 'selection'
+  rightPanelTab.value = 'chat'
+  summaryGenre.value = 'novel'
+  summaryData.value = null
+  summaryLoading.value = false
+  summaryError.value = ''
   resizeUnsub?.()
   resizeUnsub = null
   rawText.value = ''
@@ -824,6 +913,43 @@ function onScroll() {
   font-size: 12px;
   color: var(--el-text-color-regular);
   line-height: 1.4;
+}
+
+.ai-index-genre {
+  width: 148px;
+  flex-shrink: 0;
+}
+
+.ai-right-tabs {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+
+  :deep(.el-tabs__header) {
+    margin: 0;
+    padding: 0 14px;
+  }
+
+  :deep(.el-tabs__content) {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  :deep(.el-tab-pane) {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+}
+
+.ai-chat-tab {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .ai-chat-mode {

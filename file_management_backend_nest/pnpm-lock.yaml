@@ -119,6 +119,9 @@ importers:
       yauzl:
         specifier: ^3.4.0
         version: 3.4.0
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
     devDependencies:
       '@eslint/eslintrc':
         specifier: ^3.2.0

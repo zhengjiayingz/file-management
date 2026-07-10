@@ -10,6 +10,7 @@ import { PreviewProcessor } from '@/files/preview/preview.processor';
 import { OperationLogService } from '@/operation-log/operation-log.service';
 import { PrismaModule } from '@/prisma/prisma.module';
 import { StorageModule } from '@/storage/storage.module';
+import { SummaryMapReduceService } from '@/files/ai/summary/summary-map-reduce.service';
 
 /** 独立 Worker 进程（docker worker / pnpm start:worker） */
 @Module({
@@ -35,6 +36,7 @@ import { StorageModule } from '@/storage/storage.module';
     OperationLogService,
     FilesPreviewService,
     PreviewProcessor,
+    SummaryMapReduceService,
     DocumentIndexProcessor,
   ],
 })

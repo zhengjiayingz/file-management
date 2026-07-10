@@ -23,6 +23,8 @@ import {
   seedTextFile,
 } from '../helpers/files.helper';
 
+const INDEX_BODY = { summaryGenre: 'novel' as const };
+
 describe('Files AI Index (e2e)', () => {
   let app: E2eApp;
 
@@ -74,7 +76,7 @@ describe('Files AI Index (e2e)', () => {
     });
   });
 
-  it('GET /api/files/:id/ai/index/status ready 应返回 chunkCount', async () => {
+  it('GET /api/files/:id/ai/index/status ready 应返回 chunkCount 与 summaryGenre', async () => {
     const { accessToken, username } = await loginAndGetTokens(app);
     const userId = await getUserId(app, username);
     const { userFile } = await seedTextFile(
@@ -94,7 +96,12 @@ describe('Files AI Index (e2e)', () => {
 
     expect(res.status).toBe(200);
     expect(apiBody(res.body)).toMatchObject({
-      data: { status: 'ready', chunkCount: 2, progress: 100 },
+      data: {
+        status: 'ready',
+        chunkCount: 2,
+        progress: 100,
+        summaryGenre: 'novel',
+      },
     });
   });
 
@@ -111,9 +118,29 @@ describe('Files AI Index (e2e)', () => {
     const res = await request(app.getHttpServer())
       .post('/api/files/999999999/ai/index')
       .set('Authorization', `Bearer ${accessToken}`)
-      .send({ mode: 'general' });
+      .send(INDEX_BODY);
 
     expect(res.status).toBe(404);
+  });
+
+  it('POST /api/files/:id/ai/index 缺少 summaryGenre 应返回 400', async () => {
+    const { accessToken, username } = await loginAndGetTokens(app);
+    const userId = await getUserId(app, username);
+    const { userFile } = await seedTextFile(
+      app,
+      userId,
+      'index missing genre',
+      `index-no-genre-${Date.now()}.txt`,
+    );
+
+    const res = await request(app.getHttpServer())
+      .post(`/api/files/${userFile.id}/ai/index`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({});
+
+    expect(res.status).toBe(400);
+    const msgBody = apiMessage(res.body);
+    expect(msgBody.message).toMatch(/summaryGenre/);
   });
 
   it('POST /api/files/:id/ai/index 文件夹应返回 400', async () => {
@@ -124,7 +151,7 @@ describe('Files AI Index (e2e)', () => {
     const res = await request(app.getHttpServer())
       .post(`/api/files/${folder.id}/ai/index`)
       .set('Authorization', `Bearer ${accessToken}`)
-      .send({ mode: 'general' });
+      .send(INDEX_BODY);
 
     expect(res.status).toBe(400);
     const msgBody = apiMessage(res.body);
@@ -143,7 +170,7 @@ describe('Files AI Index (e2e)', () => {
     const res = await request(app.getHttpServer())
       .post(`/api/files/${userFile.id}/ai/index`)
       .set('Authorization', `Bearer ${accessToken}`)
-      .send({ mode: 'general' });
+      .send(INDEX_BODY);
 
     expect(res.status).toBe(400);
     const msgBody = apiMessage(res.body);
@@ -163,12 +190,16 @@ describe('Files AI Index (e2e)', () => {
     const res = await request(app.getHttpServer())
       .post(`/api/files/${userFile.id}/ai/index`)
       .set('Authorization', `Bearer ${accessToken}`)
-      .send({ mode: 'general' });
+      .send(INDEX_BODY);
 
     expect(res.status).toBe(201);
     expect(apiBody(res.body)).toMatchObject({
       success: true,
-      data: { status: 'pending', progress: 0 },
+      data: {
+        status: 'pending',
+        progress: 0,
+        summaryGenre: 'novel',
+      },
     });
   });
 
@@ -186,6 +217,7 @@ describe('Files AI Index (e2e)', () => {
       data: {
         userFileId: userFile.id,
         mode: 'general',
+        summaryGenre: 'novel',
         status: 'embedding',
         progress: 60,
         progressMsg: '正在生成向量',
@@ -196,7 +228,7 @@ describe('Files AI Index (e2e)', () => {
     const res = await request(app.getHttpServer())
       .post(`/api/files/${userFile.id}/ai/index`)
       .set('Authorization', `Bearer ${accessToken}`)
-      .send({ mode: 'general' });
+      .send(INDEX_BODY);
 
     expect(res.status).toBe(409);
     const msgBody = apiMessage(res.body);
@@ -219,11 +251,41 @@ describe('Files AI Index (e2e)', () => {
     const res = await request(app.getHttpServer())
       .post(`/api/files/${userFile.id}/ai/index`)
       .set('Authorization', `Bearer ${accessToken}`)
-      .send({ mode: 'general' });
+      .send(INDEX_BODY);
 
     expect(res.status).toBe(409);
     const msgBody = apiMessage(res.body);
     expect(msgBody.message).toMatch(/文档未更新/);
+  });
+
+  it('POST /api/files/:id/ai/index ready 且 force 应允许强制 reindex', async () => {
+    const { accessToken, username } = await loginAndGetTokens(app);
+    const userId = await getUserId(app, username);
+    const { userFile } = await seedTextFile(
+      app,
+      userId,
+      'index force reindex',
+      `index-force-${Date.now()}.txt`,
+    );
+    await seedReadyDocumentIndex(app, userFile.id, [
+      { content: 'stable chunk', embedding: [1, 0] },
+    ]);
+    const prisma = app.get(PrismaService);
+
+    const res = await request(app.getHttpServer())
+      .post(`/api/files/${userFile.id}/ai/index`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ ...INDEX_BODY, force: true });
+
+    expect(res.status).toBe(201);
+    expect(apiBody(res.body)).toMatchObject({
+      data: { status: 'pending', summaryGenre: 'novel' },
+    });
+
+    const chunkCount = await prisma.documentChunk.count({
+      where: { userFileId: userFile.id },
+    });
+    expect(chunkCount).toBe(0);
   });
 
   it('POST /api/files/:id/ai/index ready 且文档已更新应允许重新索引并清空旧 chunks', async () => {
@@ -246,7 +308,7 @@ describe('Files AI Index (e2e)', () => {
     const res = await request(app.getHttpServer())
       .post(`/api/files/${userFile.id}/ai/index`)
       .set('Authorization', `Bearer ${accessToken}`)
-      .send({ mode: 'general' });
+      .send(INDEX_BODY);
 
     expect(res.status).toBe(201);
     expect(apiBody(res.body)).toMatchObject({

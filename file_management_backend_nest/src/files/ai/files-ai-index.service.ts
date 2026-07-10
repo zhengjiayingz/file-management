@@ -4,10 +4,16 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { DocumentIndexMode, DocumentIndexStatus } from '@prisma/client';
+import type { DocumentIndexMode, DocumentIndexStatus } from '@prisma/client';
+import type { PrismaClient as GeneratedPrismaClient } from '.prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
 import { isIndexableTextDocument } from './chunk/text-extractor';
 import { DocumentIndexQueueService } from '@/files/ai/document-index-queue.service';
+import {
+  isSummaryGenre,
+  toIndexMode,
+  type SummaryGenreValue,
+} from '@/files/ai/summary/summary-genre.types';
 
 const ACTIVE_STATUSES: DocumentIndexStatus[] = [
   'pending',
@@ -18,16 +24,22 @@ const ACTIVE_STATUSES: DocumentIndexStatus[] = [
   'extracting_knowledge',
 ];
 
-function validateIndexMode(body: unknown): DocumentIndexMode {
+function validateIndexBody(body: unknown): {
+  summaryGenre: SummaryGenreValue;
+  force: boolean;
+} {
   if (body == null || typeof body !== 'object') {
-    return 'general';
+    throw new BadRequestException('summaryGenre 必填');
   }
-  const mode = (body as { mode?: unknown }).mode;
-  if (mode == null) return 'general';
-  if (mode === 'general' || mode === 'academic') {
-    return mode;
+  const payload = body as { summaryGenre?: unknown; force?: unknown };
+  const genre = payload.summaryGenre;
+  if (!isSummaryGenre(genre)) {
+    throw new BadRequestException('summaryGenre 无效');
   }
-  throw new BadRequestException('mode 必须是 general 或 academic');
+  return {
+    summaryGenre: genre,
+    force: payload.force === true,
+  };
 }
 
 function toStatusDto(job: {
@@ -37,6 +49,7 @@ function toStatusDto(job: {
   chunkCount: number;
   errorMessage: string | null;
   mode: DocumentIndexMode;
+  summaryGenre: SummaryGenreValue | null;
   updatedAt: Date;
 }) {
   return {
@@ -47,6 +60,7 @@ function toStatusDto(job: {
     chunkCount: job.chunkCount,
     errorMessage: job.errorMessage,
     updatedAt: job.updatedAt.toISOString(),
+    summaryGenre: job.summaryGenre,
   };
 }
 
@@ -60,7 +74,8 @@ export class FilesAiIndexService {
   /** POST /api/files/:id/ai/index */
   // 在用户点「建立索引」时，做校验、重置 DB 状态、把任务丢进 Redis 队列，然后立刻返回当前状态
   async triggerIndex(userId: number, fileId: number, body: unknown) {
-    const mode = validateIndexMode(body); // 解析索引模式，general或者academic
+    const { summaryGenre, force } = validateIndexBody(body);
+    const mode = toIndexMode(summaryGenre); // 用体裁推导索引模式，general或者academic
     // 查文件是否存在且属于当前用户
     const userFile = await this.prisma.userFile.findFirst({
       where: { id: fileId, userId, isDeleted: false },
@@ -99,6 +114,7 @@ export class FilesAiIndexService {
       throw new ConflictException('索引任务进行中，请稍后再试');
     }
     if (
+      !force &&
       existing?.status === 'ready' &&
       existing.indexedFileHash &&
       existing.indexedFileHash === userFile.storage.fileHash
@@ -108,13 +124,17 @@ export class FilesAiIndexService {
 
     // ready（内容已变）/ failed / 无记录 → 允许（重新）索引
     await this.prisma.$transaction(async (tx) => {
-      await tx.documentChunk.deleteMany({ where: { userFileId: fileId } }); //删除旧chunk
-      // 创建或更新 index job
+      const prismaTx = tx as unknown as GeneratedPrismaClient;
+      await tx.documentChunk.deleteMany({ where: { userFileId: fileId } });
+      await prismaTx.documentSummary.deleteMany({
+        where: { userFileId: fileId },
+      });
       await tx.documentIndexJob.upsert({
         where: { userFileId: fileId },
         create: {
           userFileId: fileId,
           mode, // 用户选的 general/academic
+          summaryGenre,
           status: 'pending', //等待 Worker 处理
           progress: 0, // 进度 0%
           progressMsg: '已加入队列', // 给前端看的提示
@@ -124,6 +144,7 @@ export class FilesAiIndexService {
         // 更新的时候
         update: {
           mode, // 用户选的 general/academic
+          summaryGenre,
           status: 'pending', //等待 Worker 处理
           progress: 0, // 进度 0%
           progressMsg: '已加入队列', // 给前端看的提示
@@ -137,6 +158,7 @@ export class FilesAiIndexService {
       userFileId: fileId,
       userId,
       mode,
+      summaryGenre,
     });
     // 读最新状态并返回
     const job = await this.prisma.documentIndexJob.findUniqueOrThrow({
@@ -170,6 +192,7 @@ export class FilesAiIndexService {
         data: {
           status: 'none' as const,
           mode: null,
+          summaryGenre: null,
           progress: 0,
           progressMsg: null,
           chunkCount: 0,

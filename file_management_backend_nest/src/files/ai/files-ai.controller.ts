@@ -5,6 +5,7 @@ import {
   Param,
   ParseIntPipe,
   Post,
+  Query,
   Req,
   Res,
 } from '@nestjs/common';
@@ -14,6 +15,8 @@ import type { RequestUser } from '@/auth/types/jwt-payload.type';
 import { FilesAiIndexService } from '@/files/ai/files-ai-index.service';
 import { FilesAiService } from '@/files/ai/files-ai.service';
 import { FilesAiRagService } from '@/files/ai/files-ai-rag.service';
+import { FilesAiSummaryService } from '@/files/ai/files-ai-summary.service';
+import type { DocumentSummaryResponse } from '@/files/ai/files-ai-summary.service';
 
 @Controller('files')
 export class FilesAiController {
@@ -21,6 +24,7 @@ export class FilesAiController {
     private readonly filesAiService: FilesAiService,
     private readonly filesAiIndexService: FilesAiIndexService,
     private readonly filesAiRagService: FilesAiRagService,
+    private readonly filesAiSummaryService: FilesAiSummaryService,
   ) {}
 
   @Post(':id/ai/ask')
@@ -71,5 +75,21 @@ export class FilesAiController {
     @Param('id', ParseIntPipe) fileId: number,
   ) {
     return this.filesAiIndexService.getIndexStatus(user.id, fileId);
+  }
+
+  /** 读取已入库的结构化摘要（索引 ready 后） */
+  @Get(':id/ai/summary')
+  getSummary(
+    @CurrentUser() user: RequestUser,
+    @Param('id', ParseIntPipe) fileId: number,
+    @Query('type') type?: string,
+    @Query('chapterNo') chapterNo?: string,
+  ): Promise<DocumentSummaryResponse> {
+    const parsedChapterNo =
+      chapterNo != null && chapterNo !== '' ? Number(chapterNo) : undefined;
+    return this.filesAiSummaryService.getSummary(user.id, fileId, {
+      type: type as 'book' | 'chapter' | 'chunk' | undefined,
+      chapterNo: parsedChapterNo,
+    });
   }
 }

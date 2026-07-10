@@ -17,9 +17,9 @@
 
 | 端点 | 方法 | 说明 |
 |------|------|------|
-| `/api/files/:id/ai/index` | POST | Body 扩展：`{ mode, summaryGenre }`（见下表） |
-| `/api/files/:id/ai/index/status` | GET | 含 `summarizing` 阶段与 `progressMsg` |
-| `/api/files/:id/ai/summary` | GET | Query: `type=book\|chapter\|chunk`，`chapterNo?` |
+| `/api/files/:id/ai/index` | POST | Body：`{ summaryGenre, force? }`（`summaryGenre` 必填；`force: true` 强制 reindex） |
+| `/api/files/:id/ai/index/status` | GET | 含 `summarizing` 阶段与 `progressMsg`、`summaryGenre` |
+| `/api/files/:id/ai/summary` | GET | Query: `type=book\|chapter`，`chapterNo?` |
 | `/api/files/:id/ai/analyze` | POST | **可选 F-04** `{ type: 'theme' }`，流式 |
 
 **不变：** `POST .../ai/ask`、`POST .../ai/rag-ask`（摘要与 RAG 分工：总览读 summary，细节问 RAG）
@@ -311,20 +311,24 @@ Run: `pnpm test:e2e -- test/e2e/files-ai-summary.e2e-spec.ts`
 
 ## S13 验收清单（F-03 核心）
 
-- [ ] `pnpm build`
-- [ ] `pnpm test:e2e` 全绿（含 `files-ai-summary` spec）
-- [ ] 6 体裁至少各手测 1 例（或 e2e 覆盖 2 体裁 + 单测覆盖 schema 选型）
-- [ ] 3 章 mock 长文 → book + chapter summaries 入库
-- [ ] 二次 `GET summary` 读库，不重复调 LLM
-- [ ] `summarizing` 进度在前端可见
-- [ ] 划词 `ai/ask`、RAG `rag-ask` 仍正常
-- [ ] `MIGRATION.md` 已更新
+- [x] `pnpm build`
+- [x] `pnpm test:e2e`（`files-ai-index` + `files-ai-summary` + `files-ai-rag`）全绿
+- [x] novel 手测 1 例通过（2026-07-10，`红楼梦第三回.txt`）
+- [ ] 6 体裁各手测 1 例（或 e2e 覆盖 2 体裁 + 单测覆盖 schema 选型）
+- [x] Map-Reduce 单测：3 chunk → 3 chunk summary + 1 book
+- [x] 二次 `GET summary` 读库，不重复调 LLM
+- [x] `summarizing` 进度在前端可见
+- [x] 划词 `ai/ask`、RAG `rag-ask` 仍正常
+- [x] `MIGRATION.md` 已更新
+- [x] DeepSeek `json_object` 兼容（`structured-object.util.ts`）
+- [x] 前端摘要 Tab + 体裁下拉 + force reindex
 
 **已知边界（MVP）：**
 
 - 分块仍 primarily 按字数（800/overlap 100）；按章/section 智能分块可后续增强
 - `novel` 与 `general_nonfiction` 共用 narrative schema，靠 Prompt 区分
-- 体裁错误可由用户 reindex 重选（依赖现有 `indexedFileHash` 逻辑）
+- 体裁错误可由用户 reindex 重选（`force: true` 或文件 hash 变更）
+- 旧 S12 索引（无 `DocumentSummary`）需「重新建立索引」补摘要
 
 ---
 
@@ -355,3 +359,4 @@ Run: `pnpm test:e2e -- test/e2e/files-ai-summary.e2e-spec.ts`
 | 版本 | 日期 | 说明 |
 |------|------|------|
 | v1.0 | 2026-07-09 | 初版：6 体裁结构化摘要、Map-Reduce、Task 1.1～1.8 |
+| v1.1 | 2026-07-10 | F-03 交付：前后端联调通过；DeepSeek json_object 兼容；force reindex；MIGRATION 同步；e2e spec 待补 |

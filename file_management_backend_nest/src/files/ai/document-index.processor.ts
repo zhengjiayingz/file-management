@@ -12,6 +12,8 @@ import {
   type DocumentIndexJobData, // 任务 payload 类型
 } from './document-index-queue.types';
 import { embedMany } from './embedding/embedding.provider';
+import { SummaryMapReduceService } from './summary/summary-map-reduce.service';
+
 //  BullMQ 异步 Worker，负责消费 document-index 队列里的索引任务。用户在前端对某个文件点「建立索引」后，API 只负责入队；真正耗时的活都在这里做
 // @Processor 装饰器，第一个参数表示监听DOCUMENT_INDEX_QUEUE_NAME这个队列，约定了队列只要有任务就调用process方法处理
 // 所以要实现WorkerHost的process方法，这个方法就是 BullMQ 回调：每个 job 进队后执行
@@ -22,6 +24,7 @@ export class DocumentIndexProcessor extends WorkerHost {
   constructor(
     private readonly prisma: PrismaService, // 注入 Prisma
     private readonly storageService: StorageService, // 注入 Storage
+    private readonly summaryMapReduce: SummaryMapReduceService,
   ) {
     super();
   }
@@ -132,6 +135,36 @@ export class DocumentIndexProcessor extends WorkerHost {
           progressMsg: `正在生成向量 ${done}/${chunks.length}`,
         });
       }
+
+      // 1. 进入 summarizing
+      await this.patchJob(userFileId, {
+        status: 'summarizing',
+        progress: 96,
+        progressMsg: '正在生成摘要',
+      });
+      // 2. 从 job.data 取 summaryGenre
+      const { summaryGenre } = job.data;
+      if (!summaryGenre) {
+        throw new Error('缺少 summaryGenre');
+      }
+      // 3. 从 DB 读 chunks（含 content、chapterNo）
+      const dbChunks = await this.prisma.documentChunk.findMany({
+        where: { userFileId },
+        orderBy: { chunkIndex: 'asc' },
+        select: { chunkIndex: true, chapterNo: true, content: true },
+      });
+      const chunkInputs = dbChunks.map((c) => ({
+        chunkIndex: c.chunkIndex,
+        chapterNo: c.chapterNo,
+        content: c.content,
+      }));
+      // 4. 跑 Map-Reduce
+      await this.summaryMapReduce.runMapReduce(
+        userFileId,
+        summaryGenre,
+        chunkInputs,
+      );
+
       // 成功收尾：状态 → ready，进度 100%
       await this.patchJob(userFileId, {
         status: 'ready',

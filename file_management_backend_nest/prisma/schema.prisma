@@ -164,6 +164,7 @@ model UserFile {
   messages   Message[]
   documentIndexJob DocumentIndexJob?
   documentChunks   DocumentChunk[]
+  documentSummaries DocumentSummary[]
 
   @@index([userId, parentId, isDeleted])
   @@index([storageId])
@@ -475,6 +476,22 @@ enum DocumentChunkSection {
   chapter
 }
 
+enum SummaryGenre {
+  novel
+  general_nonfiction
+  technical
+  textbook
+  lab_report
+  paper
+}
+
+enum DocumentSummaryType {
+  chunk
+  chapter
+  book
+  theme
+}
+
 model DocumentIndexJob {
   id           Int                  @id @default(autoincrement())
   userFileId   Int                  @unique @map("user_file_id")
@@ -485,6 +502,7 @@ model DocumentIndexJob {
   errorMessage String?              @map("error_message") @db.Text
   chunkCount   Int                  @default(0) @map("chunk_count")
   indexedFileHash String?           @map("indexed_file_hash") @db.VarChar(64)
+  summaryGenre SummaryGenre?        @map("summary_genre")
   createdAt    DateTime             @default(now()) @map("created_at")
   updatedAt    DateTime             @updatedAt @map("updated_at")
 
@@ -510,4 +528,17 @@ model DocumentChunk {
   @@unique([userFileId, chunkIndex])
   @@index([userFileId, section])
   @@map("document_chunks")
+}
+
+model DocumentSummary {
+  id         Int                 @id @default(autoincrement())
+  userFileId Int                 @map("user_file_id")
+  type       DocumentSummaryType
+  refKey     String              @map("ref_key") @db.VarChar(64)
+  payload    Json
+  createdAt  DateTime            @default(now()) @map("created_at")
+  updatedAt  DateTime            @updatedAt @map("updated_at")
+  userFile UserFile @relation(fields: [userFileId], references: [id], onDelete: Cascade)
+  @@unique([userFileId, type, refKey])
+  @@map("document_summaries")
 }

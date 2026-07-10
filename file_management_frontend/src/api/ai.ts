@@ -7,6 +7,16 @@ export type AiChatMessage = {
   content: string
 }
 
+export type SummaryGenre =
+  | 'novel'
+  | 'general_nonfiction'
+  | 'technical'
+  | 'textbook'
+  | 'lab_report'
+  | 'paper'
+
+export type DocumentSummaryType = 'book' | 'chapter' | 'chunk'
+
 export type DocumentIndexStatus =
   | 'none'
   | 'pending'
@@ -21,11 +31,24 @@ export type DocumentIndexStatus =
 export type DocumentIndexStatusData = {
   status: DocumentIndexStatus
   mode: 'general' | 'academic' | null
+  summaryGenre: SummaryGenre | null
   progress: number
   progressMsg: string | null
   chunkCount: number
   errorMessage: string | null
   updatedAt: string | null
+}
+
+export type DocumentSummaryData = {
+  type: DocumentSummaryType
+  refKey: string
+  summaryGenre: SummaryGenre
+  payload: Record<string, unknown>
+}
+
+export type GetDocumentSummaryParams = {
+  type?: DocumentSummaryType
+  chapterNo?: number
 }
 
 export type StreamAskAboutSelectionParams = {
@@ -45,6 +68,16 @@ export type StreamRagAskParams = {
   signal?: AbortSignal
   onChunk: (text: string) => void
 }
+
+/** 建索引体裁分组（与后端 summary-genre.types 一致） */
+export const SUMMARY_GENRE_GROUPS: ReadonlyArray<{
+  groupKey: 'reading' | 'learning' | 'research'
+  genres: readonly SummaryGenre[]
+}> = [
+  { groupKey: 'reading', genres: ['novel', 'general_nonfiction'] },
+  { groupKey: 'learning', genres: ['technical', 'textbook'] },
+  { groupKey: 'research', genres: ['lab_report', 'paper'] },
+]
 
 async function readTextStream(
   res: Response,
@@ -83,12 +116,16 @@ async function parseErrorResponse(res: Response): Promise<string> {
 /** 触发文档索引（异步，需 Worker 消费队列） */
 export async function triggerDocumentIndex(
   fileId: number,
-  mode: 'general' | 'academic' = 'general',
+  summaryGenre: SummaryGenre,
+  options?: { force?: boolean },
 ): Promise<DocumentIndexStatusData> {
   const res = await request.post<{
     success: boolean
     data: DocumentIndexStatusData
-  }>(`/files/${fileId}/ai/index`, { mode })
+  }>(`/files/${fileId}/ai/index`, {
+    summaryGenre,
+    ...(options?.force ? { force: true } : {}),
+  })
   return res.data.data
 }
 
@@ -100,6 +137,18 @@ export async function getDocumentIndexStatus(
     success: boolean
     data: DocumentIndexStatusData
   }>(`/files/${fileId}/ai/index/status`)
+  return res.data.data
+}
+
+/** 读取已入库的结构化摘要 */
+export async function getDocumentSummary(
+  fileId: number,
+  params: GetDocumentSummaryParams = {},
+): Promise<DocumentSummaryData> {
+  const res = await request.get<{
+    success: boolean
+    data: DocumentSummaryData
+  }>(`/files/${fileId}/ai/summary`, { params })
   return res.data.data
 }
 

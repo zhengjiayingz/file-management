@@ -386,12 +386,15 @@ export async function setUserRole(
   });
 }
 
-/** 为 RAG e2e 直接写入 ready 索引与带向量的 chunks（绕过 Worker） */
+/** 为 RAG / Summary e2e 直接写入 ready 索引与带向量的 chunks（绕过 Worker） */
 export async function seedReadyDocumentIndex(
   app: E2eApp,
   userFileId: number,
   chunks: Array<{ content: string; embedding: number[] }>,
-  options?: { indexedFileHash?: string | null },
+  options?: {
+    indexedFileHash?: string | null;
+    summaryGenre?: 'novel' | 'technical' | 'paper';
+  },
 ) {
   const prisma = app.get(PrismaService);
 
@@ -404,12 +407,15 @@ export async function seedReadyDocumentIndex(
     indexedFileHash = userFile?.storage?.fileHash ?? null;
   }
 
+  const summaryGenre = options?.summaryGenre ?? 'novel';
+
   await prisma.documentChunk.deleteMany({ where: { userFileId } });
   await prisma.documentIndexJob.upsert({
     where: { userFileId },
     create: {
       userFileId,
       mode: 'general',
+      summaryGenre,
       status: 'ready',
       progress: 100,
       progressMsg: '索引完成',
@@ -419,6 +425,7 @@ export async function seedReadyDocumentIndex(
     },
     update: {
       mode: 'general',
+      summaryGenre,
       status: 'ready',
       progress: 100,
       progressMsg: '索引完成',
@@ -438,4 +445,27 @@ export async function seedReadyDocumentIndex(
       },
     });
   }
+}
+
+/** 为 Summary e2e 写入结构化摘要（需配合 seedReadyDocumentIndex） */
+export async function seedDocumentSummary(
+  app: E2eApp,
+  userFileId: number,
+  payload: Record<string, unknown>,
+  options?: {
+    type?: 'book' | 'chapter' | 'chunk';
+    refKey?: string;
+  },
+) {
+  const prisma = app.get(PrismaService);
+  const type = options?.type ?? 'book';
+  const refKey = options?.refKey ?? 'book';
+
+  await prisma.documentSummary.upsert({
+    where: {
+      userFileId_type_refKey: { userFileId, type, refKey },
+    },
+    create: { userFileId, type, refKey, payload },
+    update: { payload },
+  });
 }
