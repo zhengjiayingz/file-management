@@ -23,6 +23,7 @@ import {
   seedPdfFile,
   seedReadyDocumentIndex,
   seedTextFile,
+  seedWordFile,
 } from '../helpers/files.helper';
 
 const INDEX_BODY = { summaryGenre: 'novel' as const };
@@ -160,7 +161,7 @@ describe('Files AI Index (e2e)', () => {
     expect(msgBody.message).toMatch(/文件夹不支持索引/);
   });
 
-  it('POST /api/files/:id/ai/index 非 txt/md/pdf 应返回 400', async () => {
+  it('POST /api/files/:id/ai/index 非 txt/md/pdf/docx 应返回 400', async () => {
     const { accessToken, username } = await loginAndGetTokens(app);
     const userId = await getUserId(app, username);
     const { userFile } = await seedImageFile(
@@ -176,7 +177,7 @@ describe('Files AI Index (e2e)', () => {
 
     expect(res.status).toBe(400);
     const msgBody = apiMessage(res.body);
-    expect(msgBody.message).toMatch(/仅支持 UTF-8.*\.pdf/);
+    expect(msgBody.message).toMatch(/仅支持 UTF-8/);
   });
 
   it('POST /api/files/:id/ai/index PDF 扩展名与 MIME 不匹配应返回 400', async () => {
@@ -197,7 +198,33 @@ describe('Files AI Index (e2e)', () => {
 
     expect(res.status).toBe(400);
     const msgBody = apiMessage(res.body);
-    expect(msgBody.message).toMatch(/仅支持 UTF-8.*\.pdf/);
+    expect(msgBody.message).toMatch(/仅支持 UTF-8/);
+  });
+
+  it('POST /api/files/:id/ai/index docx 首次触发应返回 pending', async () => {
+    const { accessToken, username } = await loginAndGetTokens(app);
+    const userId = await getUserId(app, username);
+    const { userFile } = await seedWordFile(
+      app,
+      userId,
+      undefined,
+      `index-docx-${Date.now()}.docx`,
+    );
+
+    const res = await request(app.getHttpServer())
+      .post(`/api/files/${userFile.id}/ai/index`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send(INDEX_BODY);
+
+    expect(res.status).toBe(201);
+    expect(apiBody(res.body)).toMatchObject({
+      success: true,
+      data: {
+        status: 'pending',
+        progress: 0,
+        summaryGenre: 'novel',
+      },
+    });
   });
 
   it('POST /api/files/:id/ai/index PDF 首次触发应返回 pending', async () => {

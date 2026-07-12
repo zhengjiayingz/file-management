@@ -3,10 +3,14 @@
     <el-dialog
         v-if="modelValue"
         v-model="visible"
-        :width="isFullscreen ? '100%' : '80%'"
+        :width="isFullscreen ? '100%' : dialogWidth"
         :fullscreen="isFullscreen"
         class="office-preview-dialog"
+        :class="{ 'office-preview-dialog--with-ai': enableAiPanel }"
+        :destroy-on-close="enableAiPanel"
+        top="3vh"
         @close="handleClose"
+        @opened="onOpened"
     >
         <!-- 自定义头部（勿同时传 :title，避免与 #header 插槽冲突） -->
         <template #header="{ titleId }">
@@ -35,9 +39,9 @@
             {{ statusBarText }}
         </el-alert>
 
-        <DocumentPreviewLayout :show-ai-panel="false">
+        <DocumentPreviewLayout :show-ai-panel="enableAiPanel">
             <template #preview>
-                <div class="preview-body" :class="{ 'is-fullscreen': isFullscreen }">
+                <div class="preview-body" :class="{ 'is-fullscreen': isFullscreen, 'preview-body--with-ai': enableAiPanel }">
                     <PdfJsViewer
                         v-if="previewUrl && dialogReady"
                         ref="pdfViewerRef"
@@ -49,6 +53,7 @@
                         @loaded="handlePdfLoaded"
                         @error="handlePdfError"
                         @page-change="lastReadingPage = $event"
+                        @selection-change="onSelectionChange"
                     />
 
                     <!-- 加载浮层 -->
@@ -75,6 +80,15 @@
                     </div>
                 </div>
             </template>
+
+            <template v-if="enableAiPanel" #ai>
+                <DocumentAiPanel
+                    ref="aiPanelRef"
+                    :file-id="fileId!"
+                    :file-name="fileName"
+                    v-model:selected-text="selectedText"
+                />
+            </template>
         </DocumentPreviewLayout>
     </el-dialog>
 </template>
@@ -87,6 +101,7 @@ import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@stores/auth'
 import PdfJsViewer from '@components/PdfJsViewer/index.vue'
 import DocumentPreviewLayout from '@components/DocumentPreviewLayout/index.vue'
+import DocumentAiPanel from '@components/DocumentAiPanel/index.vue'
 
 const { t } = useI18n()
 const authStore = useAuthStore()
@@ -99,8 +114,10 @@ const props = withDefaults(
         fileName?: string
         /** 字节数；用于大文件时提示，减轻「以为卡死」的误解 */
         fileSizeBytes?: number
+        /** Word 预览启用右侧 AI 面板（划词 / RAG / 索引 / 摘要） */
+        enableAiPanel?: boolean
     }>(),
-    { fileSizeBytes: 0 }
+    { fileSizeBytes: 0, enableAiPanel: false }
 )
 
 const emit = defineEmits<{
@@ -118,14 +135,32 @@ const visible = computed({
 const loading = ref(true)
 const error = ref<string | null>(null)
 const isFullscreen = ref(false)
+const selectedText = ref('')
 const pdfViewerRef = ref<InstanceType<typeof PdfJsViewer> | null>(null)
+const aiPanelRef = ref<InstanceType<typeof DocumentAiPanel> | null>(null)
 /** 等 dialog 挂载完成后再挂 PDF 查看器，避免 Teleport 插槽上下文丢失 */
 const dialogReady = ref(false)
+
+const dialogWidth = computed(() =>
+    props.enableAiPanel ? 'min(96vw, 1280px)' : '80%',
+)
 
 // 弹窗标题
 const title = computed(() => {
     return props.fileName ? `${t('preview.title')} - ${props.fileName}` : t('preview.title')
 })
+
+function onOpened() {
+    if (props.enableAiPanel) {
+        aiPanelRef.value?.activate()
+    }
+}
+
+function onSelectionChange(text: string) {
+    if (props.enableAiPanel) {
+        selectedText.value = text
+    }
+}
 
 /** 与后端 preview-state 的 firstSlides 一致，每批页数 */
 const firstSlideCount = ref(25)
@@ -443,6 +478,7 @@ watch(
             dialogReady.value = false
             loading.value = true
             error.value = null
+            selectedText.value = ''
             previewPhase.value = null
             lastPolledPhase = null
             lastPolledAvailableSlides = null
@@ -464,6 +500,8 @@ watch(
             })
         } else {
             dialogReady.value = false
+            selectedText.value = ''
+            aiPanelRef.value?.reset()
             document.removeEventListener('visibilitychange', onDocumentVisibility)
             stopPreviewStatePoll()
         }
@@ -511,6 +549,8 @@ function retryPreview() {
 }
 
 function handleClose() {
+    selectedText.value = ''
+    aiPanelRef.value?.reset()
     isFullscreen.value = false
     dialogReady.value = false
     loading.value = true
@@ -538,6 +578,12 @@ function handleClose() {
     :deep(.el-dialog__body) {
         padding: 0;
         overflow: hidden;
+    }
+}
+
+.office-preview-dialog--with-ai {
+    :deep(.el-dialog__body) {
+        padding-top: 8px;
     }
 }
 
@@ -579,8 +625,21 @@ function handleClose() {
     height: 70vh;
     background: #525659;
 
+    &.preview-body--with-ai {
+        min-height: min(72vh, 640px);
+        height: min(72vh, 640px);
+        border: 1px solid var(--el-border-color);
+        border-radius: 8px;
+        overflow: hidden;
+    }
+
     &.is-fullscreen {
         height: calc(100vh - 60px);
+    }
+
+    &.preview-body--with-ai.is-fullscreen {
+        min-height: calc(100vh - 120px);
+        height: calc(100vh - 120px);
     }
 }
 

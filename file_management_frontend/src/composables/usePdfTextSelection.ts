@@ -355,7 +355,7 @@ export function usePdfTextSelection(scrollRef: Ref<HTMLElement | null | undefine
     const parts = buildSelectionParts(allData, dragRect)
     applyParts(parts)
   }
-
+  // 拖动过程中持续更新选区
   function onDocumentPointerMove(ev: PointerEvent) {
     if (!isPointerDown) return
     updateDragSelection({ x: ev.clientX, y: ev.clientY })
@@ -368,7 +368,7 @@ export function usePdfTextSelection(scrollRef: Ref<HTMLElement | null | undefine
     anchorPoint = null
     hasMeaningfulDrag = false
   }
-
+  // 用户在 .textLayer 上按下，记录起点
   function onPointerDown(ev: PointerEvent) {
     if (ev.button !== 0) return
     const root = getRoot()

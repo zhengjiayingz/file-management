@@ -153,6 +153,7 @@
     <OfficePreviewDialog v-model="officePreviewVisible" :file-id="currentOfficeFile?.id"
       :file-name="currentOfficeFile?.fileName"
       :file-size-bytes="currentOfficeFile?.storage?.fileSize ?? currentOfficeFile?.fileSize ?? 0"
+      :enable-ai-panel="officePreviewEnableAi"
       @download="currentOfficeFile && downloadFile(currentOfficeFile)" />
 
     <PdfDocumentPreviewDialog
@@ -321,6 +322,7 @@ const historyFile = ref<FileInfo | null>(null)
 
 // Office 文档预览相关
 const officePreviewVisible = ref(false)
+const officePreviewEnableAi = ref(false)
 const currentOfficeFile = ref<FileInfo | null>(null)
 
 // PDF 文档预览（含 AI）
@@ -629,9 +631,13 @@ const handleFileDoubleClick = async (file: FileInfo) => {
     } else if (isExcelFile(file)) {
       // Excel 文件直接下载（LibreOffice 转换效果不佳）
       downloadFile(file)
-    } else if (isOfficeFile(file)) {
-      // Word/PPT 文件预览（使用后端 LibreOffice 转换为 PDF）
+    } else if (isWordFile(file)) {
       currentOfficeFile.value = file
+      officePreviewEnableAi.value = true
+      officePreviewVisible.value = true
+    } else if (isPptFile(file)) {
+      currentOfficeFile.value = file
+      officePreviewEnableAi.value = false
       officePreviewVisible.value = true
     } else if (isPdfFile(file)) {
       currentPdfFile.value = file
@@ -657,9 +663,14 @@ const isExcelFile = (file: FileInfo) => {
   return /\.(xls|xlsx)$/i.test(file.fileName)
 }
 
-// 判断是否为 Office 文件（仅 Word 和 PPT，双击预览）
-const isOfficeFile = (file: FileInfo) => {
-  return /\.(doc|docx|ppt|pptx)$/i.test(file.fileName)
+// 判断是否为 Word 文件（预览 + AI，后端索引支持 .docx）
+const isWordFile = (file: FileInfo) => {
+  return /\.(doc|docx)$/i.test(file.fileName)
+}
+
+// 判断是否为 PPT 文件（仅预览，暂不启用 AI）
+const isPptFile = (file: FileInfo) => {
+  return /\.(ppt|pptx)$/i.test(file.fileName)
 }
 
 const handleRightClick = (event: MouseEvent, file: FileInfo) => {

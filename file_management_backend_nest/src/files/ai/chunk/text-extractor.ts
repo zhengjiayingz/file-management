@@ -1,6 +1,7 @@
 import type { Readable } from 'node:stream';
 import pdfParseImport from 'pdf-parse';
 import type { StorageProvider } from '@/storage/types';
+import { EmptyDocxError, extractDocxText } from './docx-text.util';
 
 type PdfParseResult = { text: string };
 type PdfParseFn = (dataBuffer: Buffer) => Promise<PdfParseResult>;
@@ -12,7 +13,7 @@ async function parsePdfBuffer(buffer: Buffer): Promise<PdfParseResult> {
 /** 格式不支持（扩展名/MIME 不匹配） */
 export class UnsupportedDocumentFormatError extends Error {
   constructor(
-    message = '不支持的文档格式，仅支持 UTF-8 的 .txt / .md 及含文字层的 .pdf',
+    message = '不支持的文档格式，仅支持 UTF-8 的 .txt / .md、含文字层的 .pdf 及 .docx',
   ) {
     super(message);
     this.name = 'UnsupportedDocumentFormatError';
@@ -53,6 +54,10 @@ function isPdfExtension(fileName: string): boolean {
   return fileName.toLowerCase().endsWith('.pdf');
 }
 
+function isDocxExtension(fileName: string): boolean {
+  return fileName.toLowerCase().endsWith('.docx');
+}
+
 function isTxtMime(mimeType: string): boolean {
   return (
     mimeType === 'text/plain' ||
@@ -74,7 +79,15 @@ function isPdfMime(mimeType: string): boolean {
   return mimeType === 'application/pdf';
 }
 
-/** 扩展名 + MIME 双判断：txt / md / 文字层 pdf */
+function isDocxMime(mimeType: string): boolean {
+  return (
+    mimeType ===
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+    mimeType === 'application/octet-stream'
+  );
+}
+
+/** 扩展名 + MIME 双判断：txt / md / 文字层 pdf / docx */
 export function isIndexableTextDocument(input: {
   fileName: string;
   mimeType?: string | null;
@@ -85,6 +98,7 @@ export function isIndexableTextDocument(input: {
   if (isTxtExtension(input.fileName)) return isTxtMime(mimeType);
   if (isMdExtension(input.fileName)) return isMdMime(mimeType);
   if (isPdfExtension(input.fileName)) return isPdfMime(mimeType);
+  if (isDocxExtension(input.fileName)) return isDocxMime(mimeType);
   return false;
 }
 
@@ -96,6 +110,17 @@ function isPdfDocument(input: {
     isPdfExtension(input.fileName) && isPdfMime(normalizeMime(input.mimeType))
   );
 }
+
+function isDocxDocument(input: {
+  fileName: string;
+  mimeType?: string | null;
+}): boolean {
+  return (
+    isDocxExtension(input.fileName) && isDocxMime(normalizeMime(input.mimeType))
+  );
+}
+
+export { EmptyDocxError };
 
 async function readStreamToBuffer(stream: Readable): Promise<Buffer> {
   const chunks: Buffer[] = [];
@@ -144,6 +169,10 @@ async function extractTextFromBufferInternal(
 
   if (isPdfDocument(input)) {
     return extractPdfText(buffer);
+  }
+
+  if (isDocxDocument(input)) {
+    return extractDocxText(buffer);
   }
 
   return decodeUtf8(buffer);

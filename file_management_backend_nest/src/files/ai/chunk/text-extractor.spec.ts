@@ -1,14 +1,14 @@
 import { Readable } from 'node:stream';
+import archiver from 'archiver';
 import type { StorageProvider } from '@/storage/types';
 
 jest.mock('pdf-parse', () => ({
-  PDFParse: jest.fn().mockImplementation(() => ({
-    getText: jest.fn().mockResolvedValue({ text: '' }),
-    destroy: jest.fn().mockResolvedValue(undefined),
-  })),
+  __esModule: true,
+  default: jest.fn().mockResolvedValue({ text: '' }),
 }));
 
 import {
+  EmptyDocxError,
   ScannedPdfError,
   UnsupportedDocumentFormatError,
   extractTextFromBuffer,
@@ -21,6 +21,22 @@ const MINIMAL_PDF = Buffer.from(
   '%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Count 1/Kids[3 0 R]>>endobj\n3 0 obj<</Type/Page/MediaBox[0 0 3 3]>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF',
   'utf-8',
 );
+
+function buildMinimalDocx(text: string): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    const archive = archiver('zip');
+    archive.on('data', (chunk: Buffer) => chunks.push(chunk));
+    archive.on('end', () => resolve(Buffer.concat(chunks)));
+    archive.on('error', reject);
+    const xml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:body><w:p><w:r><w:t>${text}</w:t></w:r></w:p></w:body>
+</w:document>`;
+    archive.append(xml, { name: 'word/document.xml' });
+    void archive.finalize();
+  });
+}
 
 /** 构造最小 mock，只实现 text-extractor 用到的 3 个方法 */
 function createMockStorage(
@@ -107,6 +123,16 @@ describe('text-extractor', () => {
         }),
       ).toBe(true);
     });
+
+    it('允许 .docx + wordprocessingml MIME', () => {
+      expect(
+        isIndexableTextDocument({
+          fileName: 'report.docx',
+          mimeType:
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        }),
+      ).toBe(true);
+    });
   });
 
   describe('extractTextFromBuffer', () => {
@@ -146,6 +172,29 @@ describe('text-extractor', () => {
           mimeType: 'application/pdf',
         }),
       ).rejects.toThrow(ScannedPdfError);
+    });
+
+    it('应解析 docx 正文', async () => {
+      const buf = await buildMinimalDocx(
+        'This Word document has enough characters for the indexer.',
+      );
+      const text = await extractTextFromBuffer(buf, {
+        fileName: 'notes.docx',
+        mimeType:
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      });
+      expect(text).toContain('Word document');
+    });
+
+    it('过短 docx 应抛 EmptyDocxError', async () => {
+      const buf = await buildMinimalDocx('tiny');
+      await expect(
+        extractTextFromBuffer(buf, {
+          fileName: 'empty.docx',
+          mimeType:
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        }),
+      ).rejects.toThrow(EmptyDocxError);
     });
   });
 

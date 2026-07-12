@@ -472,6 +472,38 @@ export async function seedDocumentSummary(
   });
 }
 
+const DOCX_MIME =
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+
+/** 构造最小合法 docx（仅 word/document.xml），供 AI 索引 e2e 使用 */
+export function buildMinimalDocxBuffer(text: string): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    const archive = archiver('zip');
+    archive.on('data', (chunk: Buffer) => chunks.push(chunk));
+    archive.on('end', () => resolve(Buffer.concat(chunks)));
+    archive.on('error', reject);
+
+    const xml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:body><w:p><w:r><w:t>${text}</w:t></w:r></w:p></w:body>
+</w:document>`;
+    archive.append(xml, { name: 'word/document.xml' });
+    void archive.finalize();
+  });
+}
+
+export async function seedWordFile(
+  app: E2eApp,
+  userId: number,
+  text = 'This is an e2e Word document body with enough text for AI indexing.',
+  fileName = 'e2e-test.docx',
+  parentId: number | null = null,
+) {
+  const buf = await buildMinimalDocxBuffer(text);
+  return seedBinaryFile(app, userId, buf, fileName, DOCX_MIME, parentId);
+}
+
 export async function seedPdfFile(
   app: E2eApp,
   userId: number,

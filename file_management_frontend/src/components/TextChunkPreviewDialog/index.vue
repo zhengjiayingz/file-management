@@ -17,8 +17,7 @@
             {{ t('preview.textChunkReflow') }}
           </el-checkbox>
         </div>
-        <div ref="scrollRef" v-loading="initialLoading" class="text-chunk-scroll" @scroll.passive="onScroll"
-          @mouseup="captureSelection">
+        <div ref="scrollRef" v-loading="initialLoading" class="text-chunk-scroll" @scroll.passive="onScroll">
           <div v-if="!initialLoading" class="vlist-inner" :style="{
             height: `${vTotalSize}px`,
             position: 'relative',
@@ -68,6 +67,7 @@ import { useI18n } from 'vue-i18n'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import fileApiService from '@api/file'
 import DocumentAiPanel from '@components/DocumentAiPanel/index.vue'
+import { useVirtualTextSelection } from '@/composables/useVirtualTextSelection'
 
 const CHUNK_BYTES = 256 * 1024
 /** 无换行超长行切段，避免单行 DOM 仍过高 */
@@ -173,8 +173,16 @@ const appending = ref(false)
 const loadError = ref('')
 const scrollRef = ref<HTMLElement | null>(null)
 const fileEncoding = ref<'utf-8' | 'gb18030' | undefined>(undefined)
-const selectedText = ref('')
 const aiPanelRef = ref<InstanceType<typeof DocumentAiPanel> | null>(null)
+
+const {
+  selectedText,
+  attachSelectionListeners,
+  detachSelectionListeners,
+  clearSelection,
+  refreshVisualHighlight,
+} = useVirtualTextSelection(scrollRef, displayRows)
+
 const virtualizer = useVirtualizer(
   computed(() => ({
     count: displayRows.value.length,
@@ -213,37 +221,32 @@ function scheduleRemeasure() {
   void nextTick(() => {
     requestAnimationFrame(() => {
       virtualizer.value.measure()
+      refreshVisualHighlight()
     })
   })
 }
 
 watch(displayRows, () => {
   scheduleRemeasure()
+  refreshVisualHighlight()
 }, { flush: 'post' })
 
 function onDialogOpened() {
   attachScrollSizeObserver()
+  attachSelectionListeners()
   scheduleRemeasure()
   setTimeout(() => virtualizer.value.measure(), 100)
 }
 
 onUnmounted(() => {
   resizeUnsub?.()
+  detachSelectionListeners()
 })
-
-function captureSelection() {
-  const sel = window.getSelection()
-  if (!sel || sel.isCollapsed) return
-  const root = scrollRef.value
-  if (!root) return
-  const anchor = sel.anchorNode
-  if (!anchor || !root.contains(anchor)) return
-  const text = sel.toString().trim()
-  if (text) selectedText.value = text
-}
 
 function reset() {
   aiPanelRef.value?.reset()
+  detachSelectionListeners()
+  clearSelection()
   resizeUnsub?.()
   resizeUnsub = null
   rawText.value = ''
@@ -256,7 +259,6 @@ function reset() {
   appending.value = false
   loadError.value = ''
   fileEncoding.value = undefined
-  selectedText.value = ''
 }
 
 async function fetchChunk(fromOffset: number) {
@@ -323,6 +325,13 @@ function onScroll() {
   }
 }
 </script>
+
+<style lang="scss">
+::highlight(vlist-sel) {
+  background: rgba(64, 158, 255, 0.35);
+  color: inherit;
+}
+</style>
 
 <style lang="scss" scoped>
 /* 主题里 --el-dialog-width 未覆盖时会回退到 50%（theme-chalk dialog.scss），全屏右侧大片留白时强制拉满 */
@@ -432,6 +441,26 @@ function onScroll() {
   text-align: start;
   letter-spacing: normal;
   text-justify: auto;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: text;
+}
+
+:deep(.vlist-selection-overlay) {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+
+:deep(.vlist-selection-overlay__rect) {
+  position: absolute;
+  background: rgba(64, 158, 255, 0.35);
+  border-radius: 2px;
+}
+
+.text-chunk-scroll::selection {
+  background: transparent;
 }
 
 .vlist-row--para-indent {
