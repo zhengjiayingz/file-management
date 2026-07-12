@@ -5,6 +5,7 @@ import { createWriteStream } from 'node:fs';
 import archiver from 'archiver';
 import { getPreviewsRootDir } from '@/files/preview/preview-path.utils';
 import { getUploadRootDir } from '@/files/utils/storagePath.utils';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
 import { E2eApp } from './app-bootstrap';
 
@@ -460,13 +461,14 @@ export async function seedDocumentSummary(
   const prisma = app.get(PrismaService);
   const type = options?.type ?? 'book';
   const refKey = options?.refKey ?? 'book';
+  const jsonPayload = payload as Prisma.InputJsonValue;
 
   await prisma.documentSummary.upsert({
     where: {
       userFileId_type_refKey: { userFileId, type, refKey },
     },
-    create: { userFileId, type, refKey, payload },
-    update: { payload },
+    create: { userFileId, type, refKey, payload: jsonPayload },
+    update: { payload: jsonPayload },
   });
 }
 
