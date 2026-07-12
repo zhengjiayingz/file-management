@@ -5,6 +5,7 @@ import { loginAndGetTokens } from '../helpers/auth.helper';
 import {
   getUserId,
   seedDocumentSummary,
+  seedPdfFile,
   seedReadyDocumentIndex,
   seedTextFile,
 } from '../helpers/files.helper';
@@ -116,6 +117,39 @@ describe('Files AI Summary (e2e)', () => {
           oneLiner: 'mock 一句话',
           overview: 'mock 概览',
           plotPoints: ['情节 A'],
+        },
+      },
+    });
+  });
+
+  it('GET /api/files/:id/ai/summary PDF 索引 ready 后应返回 payload', async () => {
+    const { accessToken, username } = await loginAndGetTokens(app);
+    const userId = await getUserId(app, username);
+    const { userFile } = await seedPdfFile(
+      app,
+      userId,
+      undefined,
+      `summary-pdf-${Date.now()}.pdf`,
+    );
+    await seedReadyDocumentIndex(app, userFile.id, [
+      { content: 'pdf chunk', embedding: [1, 0] },
+    ]);
+    await seedDocumentSummary(app, userFile.id, BOOK_PAYLOAD);
+
+    const res = await request(app.getHttpServer())
+      .get(`/api/files/${userFile.id}/ai/summary?type=book`)
+      .set('Authorization', `Bearer ${accessToken}`);
+
+    expect(res.status).toBe(200);
+    expect(apiBody(res.body)).toMatchObject({
+      success: true,
+      data: {
+        type: 'book',
+        refKey: 'book',
+        summaryGenre: 'novel',
+        payload: {
+          oneLiner: 'mock 一句话',
+          overview: 'mock 概览',
         },
       },
     });

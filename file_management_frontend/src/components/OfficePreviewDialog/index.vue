@@ -35,44 +35,47 @@
             {{ statusBarText }}
         </el-alert>
 
-        <!-- 预览内容区域 -->
-        <div class="preview-body" :class="{ 'is-fullscreen': isFullscreen }">
-            <PdfJsViewer
-                v-if="previewUrl && dialogReady"
-                ref="pdfViewerRef"
-                class="preview-pdf"
-                :source-url="previewUrl"
-                :document-key="pdfCacheBust"
-                :restore-page="restorePage"
-                :request-headers="pdfRequestHeaders"
-                @loaded="handlePdfLoaded"
-                @error="handlePdfError"
-                @page-change="lastReadingPage = $event"
-            />
+        <DocumentPreviewLayout :show-ai-panel="false">
+            <template #preview>
+                <div class="preview-body" :class="{ 'is-fullscreen': isFullscreen }">
+                    <PdfJsViewer
+                        v-if="previewUrl && dialogReady"
+                        ref="pdfViewerRef"
+                        class="preview-pdf"
+                        :source-url="previewUrl"
+                        :document-key="pdfCacheBust"
+                        :restore-page="restorePage"
+                        :request-headers="pdfRequestHeaders"
+                        @loaded="handlePdfLoaded"
+                        @error="handlePdfError"
+                        @page-change="lastReadingPage = $event"
+                    />
 
-            <!-- 加载浮层 -->
-            <div v-if="loading" class="preview-loading preview-overlay">
-                <el-icon class="loading-icon is-loading" :size="48">
-                    <Loading />
-                </el-icon>
-                <p class="loading-text">{{ loadingText }}</p>
-                <p class="loading-hint">{{ loadingHintText }}</p>
-                <p v-if="isLargeFile" class="loading-hint large-hint">{{ t('preview.largeOfficeHint') }}</p>
-                <el-button v-if="previewUrl" type="primary" text bg class="open-tab-btn" @click="openInNewTab">
-                    {{ t('preview.openInNewTab') }}
-                </el-button>
-            </div>
+                    <!-- 加载浮层 -->
+                    <div v-if="loading" class="preview-loading preview-overlay">
+                        <el-icon class="loading-icon is-loading" :size="48">
+                            <Loading />
+                        </el-icon>
+                        <p class="loading-text">{{ loadingText }}</p>
+                        <p class="loading-hint">{{ loadingHintText }}</p>
+                        <p v-if="isLargeFile" class="loading-hint large-hint">{{ t('preview.largeOfficeHint') }}</p>
+                        <el-button v-if="previewUrl" type="primary" text bg class="open-tab-btn" @click="openInNewTab">
+                            {{ t('preview.openInNewTab') }}
+                        </el-button>
+                    </div>
 
-            <!-- 错误浮层 -->
-            <div v-if="error" class="preview-error preview-overlay">
-                <el-icon :size="64" color="#F56C6C">
-                    <WarningFilled />
-                </el-icon>
-                <p class="error-text">{{ t('preview.error') }}</p>
-                <p class="error-detail">{{ error }}</p>
-                <el-button type="primary" @click="retryPreview">{{ t('preview.retry') }}</el-button>
-            </div>
-        </div>
+                    <!-- 错误浮层 -->
+                    <div v-if="error" class="preview-error preview-overlay">
+                        <el-icon :size="64" color="#F56C6C">
+                            <WarningFilled />
+                        </el-icon>
+                        <p class="error-text">{{ t('preview.error') }}</p>
+                        <p class="error-detail">{{ error }}</p>
+                        <el-button type="primary" @click="retryPreview">{{ t('preview.retry') }}</el-button>
+                    </div>
+                </div>
+            </template>
+        </DocumentPreviewLayout>
     </el-dialog>
 </template>
 
@@ -83,6 +86,7 @@ import { Document, Download, FullScreen, Link, Loading, Minus, WarningFilled } f
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@stores/auth'
 import PdfJsViewer from '@components/PdfJsViewer/index.vue'
+import DocumentPreviewLayout from '@components/DocumentPreviewLayout/index.vue'
 
 const { t } = useI18n()
 const authStore = useAuthStore()

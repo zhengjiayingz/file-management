@@ -26,16 +26,22 @@
                 class="pdf-page-wrap"
                 :data-page="n"
             >
-                <canvas :ref="(el) => setCanvasEl(n, el as HTMLCanvasElement | null)" class="pdf-page-canvas" />
+                <div class="pdf-page-inner">
+                    <canvas :ref="(el) => setCanvasEl(n, el as HTMLCanvasElement | null)" class="pdf-page-canvas" />
+                    <div :ref="(el) => setTextLayerEl(n, el as HTMLDivElement | null)" class="textLayer" />
+                    <div class="selection-highlight-layer" aria-hidden="true" />
+                </div>
             </div>
         </div>
     </div>
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onUnmounted, nextTick } from 'vue'
+import { ref, watch, onUnmounted, onMounted, nextTick } from 'vue'
 import * as pdfjsLib from 'pdfjs-dist'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
+import { usePdfTextSelection } from '@/composables/usePdfTextSelection'
+import 'pdfjs-dist/web/pdf_viewer.css'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
     'pdfjs-dist/build/pdf.worker.min.mjs',
@@ -64,6 +70,7 @@ const emit = defineEmits<{
     (e: 'loaded', payload: { totalPages: number }): void
     (e: 'error', message: string): void
     (e: 'pageChange', page: number): void
+    (e: 'selection-change', text: string): void
 }>()
 
 const scrollRef = ref<HTMLDivElement>()
@@ -73,7 +80,10 @@ const scale = ref(1.15)
 
 const pageEls = new Map<number, HTMLElement>()
 const canvasEls = new Map<number, HTMLCanvasElement>()
+const textLayerEls = new Map<number, HTMLDivElement>()
+const textLayerInstances = new Map<number, pdfjsLib.TextLayer>()
 const renderedPages = new Set<number>()
+const pageRenderTasks = new Map<number, Promise<void>>()
 
 let pdfDoc: PDFDocumentProxy | null = null
 let loadToken = 0
@@ -81,9 +91,21 @@ let observer: IntersectionObserver | null = null
 let scrollRaf = 0
 let alive = true
 
-function safeEmit<E extends 'loaded' | 'error' | 'pageChange'>(
+const {
+    selectedText,
+    attachSelectionListeners,
+    detachSelectionListeners,
+} = usePdfTextSelection(scrollRef)
+
+function safeEmit<E extends 'loaded' | 'error' | 'pageChange' | 'selection-change'>(
     event: E,
-    ...args: E extends 'loaded' ? [{ totalPages: number }] : E extends 'error' ? [string] : [number]
+    ...args: E extends 'loaded'
+        ? [{ totalPages: number }]
+        : E extends 'error'
+          ? [string]
+          : E extends 'selection-change'
+            ? [string]
+            : [number]
 ) {
     if (!alive) return
     // @ts-expect-error vue emit overload
@@ -100,10 +122,25 @@ function setCanvasEl(page: number, el: HTMLCanvasElement | null) {
     else canvasEls.delete(page)
 }
 
-async function waitForPageElement(token: number, page: number, attempts = 30) {
+function setTextLayerEl(page: number, el: HTMLDivElement | null) {
+    if (el) textLayerEls.set(page, el)
+    else textLayerEls.delete(page)
+}
+
+function cancelTextLayers() {
+    for (const layer of textLayerInstances.values()) {
+        layer.cancel()
+    }
+    textLayerInstances.clear()
+    for (const el of textLayerEls.values()) {
+        el.replaceChildren()
+    }
+}
+
+async function waitForPageReady(token: number, page: number, attempts = 50) {
     for (let i = 0; i < attempts; i++) {
         if (token !== loadToken) return
-        if (pageEls.has(page)) return
+        if (pageEls.has(page) && canvasEls.has(page) && textLayerEls.has(page)) return
         await nextTick()
     }
 }
@@ -112,13 +149,16 @@ async function loadDocument() {
     const token = ++loadToken
     const pageToRestore = props.restorePage
     destroyObserver()
+    cancelTextLayers()
     void pdfDoc?.cleanup()
     pdfDoc = null
     totalPages.value = 0
     currentPage.value = 1
     renderedPages.clear()
+    pageRenderTasks.clear()
     pageEls.clear()
     canvasEls.clear()
+    textLayerEls.clear()
 
     if (!props.sourceUrl) return
 
@@ -145,7 +185,7 @@ async function loadDocument() {
 
         await nextTick()
         if (token !== loadToken) return
-        await waitForPageElement(token, pageToRestore ?? 1)
+        await waitForPageReady(token, pageToRestore ?? 1)
         if (token !== loadToken) return
         setupObserver()
 
@@ -164,18 +204,74 @@ async function loadDocument() {
 
 async function renderPage(pageNum: number) {
     if (!pdfDoc || renderedPages.has(pageNum)) return
-    const canvas = canvasEls.get(pageNum)
-    if (!canvas) return
 
-    const page = await pdfDoc.getPage(pageNum)
-    const viewport = page.getViewport({ scale: scale.value })
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
+    const inflight = pageRenderTasks.get(pageNum)
+    if (inflight) return inflight
 
-    canvas.width = Math.floor(viewport.width)
-    canvas.height = Math.floor(viewport.height)
-    await page.render({ canvasContext: ctx, viewport, canvas }).promise
-    renderedPages.add(pageNum)
+    const token = loadToken
+    const task = (async () => {
+        try {
+            await waitForPageReady(token, pageNum)
+            if (token !== loadToken || !pdfDoc || renderedPages.has(pageNum)) return
+
+            const canvas = canvasEls.get(pageNum)
+            const textLayerEl = textLayerEls.get(pageNum)
+            if (!canvas || !textLayerEl) return
+
+            const page = await pdfDoc.getPage(pageNum)
+            if (token !== loadToken) return
+
+            const viewport = page.getViewport({ scale: scale.value, rotation: page.rotate })
+            const ctx = canvas.getContext('2d')
+            if (!ctx) return
+
+            canvas.width = Math.floor(viewport.width)
+            canvas.height = Math.floor(viewport.height)
+            textLayerEl.style.width = `${Math.floor(viewport.width)}px`
+            textLayerEl.style.height = `${Math.floor(viewport.height)}px`
+
+            textLayerInstances.get(pageNum)?.cancel()
+            textLayerEl.replaceChildren()
+
+            await page.render({ canvasContext: ctx, viewport, canvas }).promise
+            if (token !== loadToken) return
+
+            const textContent = await page.getTextContent()
+            if (token !== loadToken) return
+
+            const textLayer = new pdfjsLib.TextLayer({
+                textContentSource: textContent,
+                container: textLayerEl,
+                viewport,
+            })
+            textLayerInstances.set(pageNum, textLayer)
+            await textLayer.render()
+            if (token !== loadToken) return
+
+            const host = textLayerEl as HTMLElement & {
+                __pdfTextDivs?: HTMLElement[]
+                __pdfTextStrs?: string[]
+                __pdfTextItems?: { str: string; transform: number[]; width: number; height: number }[]
+                __pdfViewport?: { scale: number; width: number; height: number; convertToViewportRectangle: (rect: number[]) => number[] }
+            }
+            host.__pdfTextDivs = textLayer.textDivs
+            host.__pdfTextStrs = textLayer.textContentItemsStr
+            host.__pdfTextItems = textContent.items as { str: string; transform: number[]; width: number; height: number }[]
+            host.__pdfViewport = viewport
+
+            textLayerEl.querySelector('.endOfContent')?.remove()
+            const endOfContent = document.createElement('div')
+            endOfContent.className = 'endOfContent'
+            textLayerEl.append(endOfContent)
+
+            renderedPages.add(pageNum)
+        } finally {
+            pageRenderTasks.delete(pageNum)
+        }
+    })()
+
+    pageRenderTasks.set(pageNum, task)
+    return task
 }
 
 function setupObserver() {
@@ -233,6 +329,14 @@ function onScroll() {
     })
 }
 
+watch(selectedText, (text) => {
+    safeEmit('selection-change', text)
+})
+
+onMounted(() => {
+    attachSelectionListeners()
+})
+
 async function goToPage(page: number) {
     if (totalPages.value === 0) return
     const n = Math.min(Math.max(1, page), totalPages.value)
@@ -243,7 +347,6 @@ async function goToPage(page: number) {
     const el = pageEls.get(n)
     if (el) {
         el.scrollIntoView({ block: 'start', behavior: 'auto' })
-        // 确保工具栏页码与滚动位置一致
         detectCurrentPage()
     }
 }
@@ -253,6 +356,8 @@ async function changeScale(delta: number) {
     if (next === scale.value) return
     scale.value = next
     renderedPages.clear()
+    pageRenderTasks.clear()
+    cancelTextLayers()
     const keep = currentPage.value
     await nextTick()
     setupObserver()
@@ -274,13 +379,15 @@ watch(
 onUnmounted(() => {
     alive = false
     loadToken++
+    detachSelectionListeners()
     destroyObserver()
+    cancelTextLayers()
     void pdfDoc?.cleanup()
     pdfDoc = null
     if (scrollRaf) cancelAnimationFrame(scrollRaf)
 })
 
-defineExpose({ getCurrentPage, goToPage })
+defineExpose({ getCurrentPage, goToPage, scrollRef })
 </script>
 
 <style lang="scss" scoped>
@@ -346,8 +453,47 @@ defineExpose({ getCurrentPage, goToPage })
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
 }
 
+.pdf-page-inner {
+    position: relative;
+    line-height: 1;
+}
+
 .pdf-page-canvas {
     display: block;
     background: #fff;
+}
+
+:deep(.textLayer) {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    line-height: 1;
+    z-index: 2;
+    pointer-events: auto;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+:deep(.textLayer ::selection) {
+    background: rgba(24, 144, 255, 0.38) !important;
+}
+
+:deep(.textLayer ::-moz-selection) {
+    background: rgba(24, 144, 255, 0.38) !important;
+}
+
+.selection-highlight-layer {
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+    pointer-events: none;
+    overflow: hidden;
+}
+
+:deep(.pdf-selection-highlight-rect) {
+    position: absolute;
+    background: rgba(24, 144, 255, 0.38);
+    border-radius: 1px;
+    pointer-events: none;
 }
 </style>

@@ -469,3 +469,22 @@ export async function seedDocumentSummary(
     update: { payload },
   });
 }
+
+export async function seedPdfFile(
+  app: E2eApp,
+  userId: number,
+  content: Buffer | string = MINIMAL_PDF,
+  fileName = 'e2e-test.pdf',
+  parentId: number | null = null,
+) {
+  const buf =
+    typeof content === 'string' ? Buffer.from(content, 'utf-8') : content;
+  return seedBinaryFile(
+    app,
+    userId,
+    buf,
+    fileName,
+    'application/pdf',
+    parentId,
+  );
+}

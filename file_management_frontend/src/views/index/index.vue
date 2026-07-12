@@ -155,6 +155,13 @@
       :file-size-bytes="currentOfficeFile?.storage?.fileSize ?? currentOfficeFile?.fileSize ?? 0"
       @download="currentOfficeFile && downloadFile(currentOfficeFile)" />
 
+    <PdfDocumentPreviewDialog
+      v-model="pdfPreviewVisible"
+      :file-id="currentPdfFile?.id"
+      :file-name="currentPdfFile?.fileName"
+      @download="currentPdfFile && downloadFile(currentPdfFile)"
+    />
+
     <TextChunkPreviewDialog
       v-model="textChunkPreviewVisible"
       :file-id="textChunkFileId"
@@ -202,6 +209,7 @@ import VideoPlayerDialog from '@components/VideoPlayerDialog/index.vue'
 import MoveDialog from '@components/MoveDialog/index.vue'
 import FileHistoryDialog from '@components/FileHistoryDialog/index.vue'
 import OfficePreviewDialog from '@components/OfficePreviewDialog/index.vue'
+import PdfDocumentPreviewDialog from '@components/PdfDocumentPreviewDialog/index.vue'
 import TextChunkPreviewDialog from '@components/TextChunkPreviewDialog/index.vue'
 import ArchiveExtractDialog from '@components/ArchiveExtractDialog/index.vue'
 import FileTagDialog from '@components/FileTagDialog/index.vue'
@@ -314,6 +322,10 @@ const historyFile = ref<FileInfo | null>(null)
 // Office 文档预览相关
 const officePreviewVisible = ref(false)
 const currentOfficeFile = ref<FileInfo | null>(null)
+
+// PDF 文档预览（含 AI）
+const pdfPreviewVisible = ref(false)
+const currentPdfFile = ref<FileInfo | null>(null)
 
 // 视频播放相关
 const videoPlayerVisible = ref(false)
@@ -556,6 +568,12 @@ const isDocumentFile = (file: FileInfo) => {
     /\.(pdf|txt|md|json|xml|html|js|css|ts)$/i.test(name)
 }
 
+/** 是否为 PDF 文件（双击进应用内预览 + AI） */
+const isPdfFile = (file: FileInfo) => {
+  const mime = file.mimeType || ''
+  return mime === 'application/pdf' || /\.pdf$/i.test(file.fileName)
+}
+
 /** 与后端 getTextFileChunk 白名单一致，用于文本分块预览（排除 PDF） */
 const isTextLikeForChunk = (file: FileInfo) => {
   const mime = (file.mimeType || '').toLowerCase()
@@ -615,6 +633,9 @@ const handleFileDoubleClick = async (file: FileInfo) => {
       // Word/PPT 文件预览（使用后端 LibreOffice 转换为 PDF）
       currentOfficeFile.value = file
       officePreviewVisible.value = true
+    } else if (isPdfFile(file)) {
+      currentPdfFile.value = file
+      pdfPreviewVisible.value = true
     } else if (isDocumentFile(file)) {
       if (isTextLikeForChunk(file)) {
         textChunkFileId.value = file.id

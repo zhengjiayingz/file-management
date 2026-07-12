@@ -17,8 +17,10 @@ import { createE2eApp, E2eApp } from '../helpers/app-bootstrap';
 import { loginAndGetTokens } from '../helpers/auth.helper';
 import {
   getUserId,
+  seedBinaryFile,
   seedFolder,
   seedImageFile,
+  seedPdfFile,
   seedReadyDocumentIndex,
   seedTextFile,
 } from '../helpers/files.helper';
@@ -158,7 +160,7 @@ describe('Files AI Index (e2e)', () => {
     expect(msgBody.message).toMatch(/文件夹不支持索引/);
   });
 
-  it('POST /api/files/:id/ai/index 非 txt/md 应返回 400', async () => {
+  it('POST /api/files/:id/ai/index 非 txt/md/pdf 应返回 400', async () => {
     const { accessToken, username } = await loginAndGetTokens(app);
     const userId = await getUserId(app, username);
     const { userFile } = await seedImageFile(
@@ -174,7 +176,54 @@ describe('Files AI Index (e2e)', () => {
 
     expect(res.status).toBe(400);
     const msgBody = apiMessage(res.body);
-    expect(msgBody.message).toMatch(/仅支持 UTF-8 编码的 .txt \/ .md 文件/);
+    expect(msgBody.message).toMatch(/仅支持 UTF-8.*\.pdf/);
+  });
+
+  it('POST /api/files/:id/ai/index PDF 扩展名与 MIME 不匹配应返回 400', async () => {
+    const { accessToken, username } = await loginAndGetTokens(app);
+    const userId = await getUserId(app, username);
+    const { userFile } = await seedBinaryFile(
+      app,
+      userId,
+      '%PDF-1.4 mismatch',
+      `mismatch-${Date.now()}.pdf`,
+      'text/plain',
+    );
+
+    const res = await request(app.getHttpServer())
+      .post(`/api/files/${userFile.id}/ai/index`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send(INDEX_BODY);
+
+    expect(res.status).toBe(400);
+    const msgBody = apiMessage(res.body);
+    expect(msgBody.message).toMatch(/仅支持 UTF-8.*\.pdf/);
+  });
+
+  it('POST /api/files/:id/ai/index PDF 首次触发应返回 pending', async () => {
+    const { accessToken, username } = await loginAndGetTokens(app);
+    const userId = await getUserId(app, username);
+    const { userFile } = await seedPdfFile(
+      app,
+      userId,
+      undefined,
+      `index-pdf-${Date.now()}.pdf`,
+    );
+
+    const res = await request(app.getHttpServer())
+      .post(`/api/files/${userFile.id}/ai/index`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send(INDEX_BODY);
+
+    expect(res.status).toBe(201);
+    expect(apiBody(res.body)).toMatchObject({
+      success: true,
+      data: {
+        status: 'pending',
+        progress: 0,
+        summaryGenre: 'novel',
+      },
+    });
   });
 
   it('POST /api/files/:id/ai/index 首次触发应返回 pending', async () => {

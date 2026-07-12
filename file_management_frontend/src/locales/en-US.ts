@@ -530,6 +530,7 @@ export default {
   },
   preview: {
     title: 'Document Preview',
+    pdfTitle: 'PDF Preview',
     downloading: 'Loading document...',
     converting: 'Converting document, please wait...',
     convertingHint: 'First preview requires PDF conversion, cache will be used afterwards',

@@ -301,11 +301,20 @@ Run: `pnpm test:e2e -- test/e2e/files-ai-summary.e2e-spec.ts`
 
 ---
 
-### Task 3.x F-05 PDF 文本索引（+2～3 天）
+### Task 3.x F-05 PDF 文本索引（+2～3 天）✅
 
-**Modify:** `text-extractor.ts` — `application/pdf` + pdf-parse 或预览链路
+**Modify:** `text-extractor.ts` — `application/pdf` + `pdf-parse`
 
 **验收：** 小文字 PDF index → summary + rag-ask 可用；扫描 PDF → 明确错误
+
+**交付（2026-07-12）：**
+
+- [x] `text-extractor.ts`：`isIndexableTextDocument` 支持 `.pdf`；`ScannedPdfError` 扫描件友好错误
+- [x] `files-ai-index.service.ts`：PDF 可触发索引
+- [x] 前端 `PdfDocumentPreviewDialog` + `DocumentAiPanel`：建立索引、摘要 Tab、全文/划词问答
+- [x] 前端 `PdfJsViewer` + `usePdfTextSelection`：PDF 划词（基于 pdf.js 原始坐标）
+- [x] e2e：`files-ai-index`（PDF pending）、`files-ai-rag`（PDF rag-ask）、`files-ai-summary`（PDF summary）
+- [x] 单测：`text-extractor.spec.ts`、`document-index.processor.spec.ts`（无文字层 PDF → failed）
 
 ---
 
@@ -349,7 +358,7 @@ Run: `pnpm test:e2e -- test/e2e/files-ai-summary.e2e-spec.ts`
 ## 完成后
 
 - 进入 **S14**（F-06 学术知识卡片，`DocumentKnowledge` + section 抽取）  
-- 或并行 **F-05 PDF** 若 S13 未做  
+- ~~或并行 **F-05 PDF** 若 S13 未做~~ → **F-05 已于 2026-07-12 在 S14a 交付**  
 - 视频摘要见 PRD **F-25（S17b）**，复用本文 Map-Reduce + `generateObject` 模式
 
 ---
@@ -360,3 +369,4 @@ Run: `pnpm test:e2e -- test/e2e/files-ai-summary.e2e-spec.ts`
 |------|------|------|
 | v1.0 | 2026-07-09 | 初版：6 体裁结构化摘要、Map-Reduce、Task 1.1～1.8 |
 | v1.1 | 2026-07-10 | F-03 交付：前后端联调通过；DeepSeek json_object 兼容；force reindex；MIGRATION 同步；e2e spec 待补 |
+| v1.2 | 2026-07-12 | F-05 PDF 文本索引（S14a）标记完成；Task 3.x 验收清单补齐 |

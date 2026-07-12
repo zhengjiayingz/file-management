@@ -23,6 +23,7 @@ import { createE2eApp, E2eApp } from '../helpers/app-bootstrap';
 import { loginAndGetTokens } from '../helpers/auth.helper';
 import {
   getUserId,
+  seedPdfFile,
   seedReadyDocumentIndex,
   seedTextFile,
 } from '../helpers/files.helper';
@@ -124,6 +125,31 @@ describe('Files AI RAG (e2e)', () => {
       .post(`/api/files/${userFile.id}/ai/rag-ask`)
       .set('Authorization', `Bearer ${accessToken}`)
       .send({ question: '总结这篇文档' });
+
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toMatch(/text\/plain/);
+    expect(res.text).toContain(MOCK_AI_STREAM_TEXT);
+  });
+
+  it('POST /api/files/:id/ai/rag-ask PDF 索引 ready 后应返回 text/plain 流式响应', async () => {
+    const { accessToken, username } = await loginAndGetTokens(app);
+    const userId = await getUserId(app, username);
+    const content = `pdf rag stream ${Date.now()}`;
+    const { userFile } = await seedPdfFile(
+      app,
+      userId,
+      undefined,
+      `rag-pdf-${Date.now()}.pdf`,
+    );
+    await seedReadyDocumentIndex(app, userFile.id, [
+      { content, embedding: [1, 0] },
+      { content: '无关 PDF 片段', embedding: [0, 1] },
+    ]);
+
+    const res = await request(app.getHttpServer())
+      .post(`/api/files/${userFile.id}/ai/rag-ask`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ question: '总结这篇 PDF' });
 
     expect(res.status).toBe(200);
     expect(res.headers['content-type']).toMatch(/text\/plain/);

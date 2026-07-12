@@ -527,6 +527,7 @@ export default {
   },
   preview: {
     title: '文档预览',
+    pdfTitle: 'PDF 预览',
     downloading: '正在加载文档...',
     converting: '正在转换文档，请稍候...',
     convertingHint: '首次预览需要转换为 PDF，后续将使用缓存',

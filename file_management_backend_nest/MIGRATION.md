@@ -24,6 +24,7 @@
 | **S11** | **Swagger + 定时清理 + Preview Worker + Express 下线** | **✅** |
 | **S12** | **AI 文档索引 + RAG 全文问答（F-01 / F-02）** | **✅** |
 | **S13** | **分层摘要 + 体裁化输出 + 前端摘要 Tab（F-03）** | **✅** |
+| **S14a** | **PDF 文本索引 + PDF 预览 AI 面板（F-05）** | **✅** |
 
 ## 启动
 
@@ -123,7 +124,7 @@ VITE_API_BASE_URL=http://localhost:3000
 | `GET /api/files/:id/ai/index/status` | 同（含 `summarizing`、`summaryGenre`） | ✅ |
 | `POST /api/files/:id/ai/rag-ask` | 同 | ✅ |
 
-- 索引：异步 BullMQ 队列 `document-index`（`pnpm start:worker:dev` 消费）；仅 `.txt` / `.md`。
+- 索引：异步 BullMQ 队列 `document-index`（`pnpm start:worker:dev` 消费）；支持 `.txt` / `.md` / **文字层 `.pdf`**（S14a）。
 - RAG：需 `status=ready`；`embed(question)` → Top-K chunk → `streamText` 流式 `text/plain`。
 - **Embedding 与对话可分离配置**：`AI_EMBEDDING_BASE_URL`、`AI_EMBEDDING_API_KEY`、`AI_EMBEDDING_MODEL`（DeepSeek 无 `/embeddings`，需硅基流动等兼容服务）；对话仍用 `AI_BASE_URL` / `AI_MODEL`。
 - Prisma：`DocumentIndexJob`、`DocumentChunk`（embedding 存 JSON）。
@@ -149,8 +150,33 @@ VITE_API_BASE_URL=http://localhost:3000
 - `src/files/ai/summary/` — Map-Reduce、Zod schema、体裁 Prompt
 - `src/files/ai/utils/structured-object.util.ts` — DeepSeek 等网关不支持 `json_schema` 时降级 `json_object`，Prompt 注入 Schema + 重试
 - 前端 `TextChunkPreviewDialog`：体裁下拉 +「问答 / 摘要」Tab + `SummaryPanel`；ready 时显示「重新建立索引」
+- 前端 `PdfDocumentPreviewDialog`（S14a）：同上 AI 面板 + `PdfJsViewer` 划词
 
 **不变**：`POST .../ai/ask`（划词）、`POST .../ai/rag-ask`（全文问答）
+
+## S14a 验收（F-05 PDF 文本索引）
+
+验证（需 **Worker 运行** + DeepSeek + Embedding 配置正确）：
+
+1. 上传文字层 PDF → 预览 → 选体裁 →「建立索引」
+2. 状态经 `extracting` → `chunking` → `embedding` → `summarizing` → `ready`
+3.「摘要」Tab 展示结构化字段；「全文问答」RAG 流式输出
+4. PDF 划词后右侧「划词问答」可用
+5. 扫描件/无文字层 PDF：Worker 标记 `failed`，`errorMessage` 含扫描件提示
+
+```bash
+pnpm test:e2e -- files-ai-index.e2e-spec.ts   # 含 PDF pending / MIME 校验
+pnpm test:e2e -- files-ai-rag.e2e-spec.ts     # 含 PDF rag-ask
+pnpm test:e2e -- files-ai-summary.e2e-spec.ts # 含 PDF summary
+pnpm test -- document-index.processor.spec.ts # 扫描件 failed
+pnpm test -- text-extractor.spec.ts           # PDF 提取 / ScannedPdfError
+```
+
+**实现要点**：
+
+- `src/files/ai/chunk/text-extractor.ts` — `pdf-parse` 提取；`ScannedPdfError`
+- `src/files/ai/document-index.processor.spec.ts` — Worker 扫描件失败路径
+- 前端 `src/composables/usePdfTextSelection.ts` — 基于 pdf.js `getTextContent` 原始坐标划词
 
 ## S12 验收
 
@@ -291,8 +317,9 @@ pnpm test:e2e    # Auth + Health + Files + User + UserPreference e2e
 
 S2 e2e 覆盖：列表、详情、下载、text-chunk、回收站、重命名、移动、批量删除/恢复。
 S3 e2e 覆盖：AI 401/400/404、text/plain 流式 mock 响应。
-S12 e2e 覆盖：`files-ai-index`（index/status 401/404/400、pending/ready/reindex）、`files-ai-rag`（rag-ask 401/404/409/400、流式 mock）；mock embedding + BullMQ 入队。
-S13 单测：`summary.schemas.spec.ts`、`summary-map-reduce.service.spec.ts`。S13 e2e：`files-ai-summary`（401/404/409、GET book、读库幂等）；`files-ai-index` 已对齐 `summaryGenre` + `force`。
+S12 e2e 覆盖：`files-ai-index`（index/status 401/404/400、pending/ready/reindex、**PDF pending/MIME**）、`files-ai-rag`（rag-ask 401/404/409/400、流式 mock、**PDF rag-ask**）；mock embedding + BullMQ 入队。
+S13 单测：`summary.schemas.spec.ts`、`summary-map-reduce.service.spec.ts`。S13 e2e：`files-ai-summary`（401/404/409、GET book、读库幂等、**PDF summary**）；`files-ai-index` 已对齐 `summaryGenre` + `force`。
+S14a 单测：`text-extractor.spec.ts`（PDF 提取/扫描件）、`document-index.processor.spec.ts`（Worker 扫描件 failed）。
 S4 e2e 覆盖：预览 401/404/400、preview-state/status JSON、有缓存时 PDF 流。
 S5 e2e 覆盖：profile GET/PUT、avatar 上传、user search、user-preferences GET/PUT。
 S6 e2e 覆盖：check-exists、check-name、分片上传+合并、instant-upload 404、传统 upload、folder 创建与重名。

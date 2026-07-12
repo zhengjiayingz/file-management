@@ -1,12 +1,26 @@
 import { Readable } from 'node:stream';
 import type { StorageProvider } from '@/storage/types';
+
+jest.mock('pdf-parse', () => ({
+  PDFParse: jest.fn().mockImplementation(() => ({
+    getText: jest.fn().mockResolvedValue({ text: '' }),
+    destroy: jest.fn().mockResolvedValue(undefined),
+  })),
+}));
+
 import {
+  ScannedPdfError,
   UnsupportedDocumentFormatError,
   extractTextFromBuffer,
   extractTextFromStorage,
   extractTextFromStream,
   isIndexableTextDocument,
 } from './text-extractor';
+
+const MINIMAL_PDF = Buffer.from(
+  '%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Count 1/Kids[3 0 R]>>endobj\n3 0 obj<</Type/Page/MediaBox[0 0 3 3]>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF',
+  'utf-8',
+);
 
 /** 构造最小 mock，只实现 text-extractor 用到的 3 个方法 */
 function createMockStorage(
@@ -84,33 +98,54 @@ describe('text-extractor', () => {
         }),
       ).toBe(false);
     });
+
+    it('允许 .pdf + application/pdf', () => {
+      expect(
+        isIndexableTextDocument({
+          fileName: 'paper.pdf',
+          mimeType: 'application/pdf',
+        }),
+      ).toBe(true);
+    });
   });
 
   describe('extractTextFromBuffer', () => {
-    it('应解码 UTF-8 文本', () => {
-      const text = extractTextFromBuffer(Buffer.from('你好\nworld', 'utf8'), {
-        fileName: 'a.txt',
-        mimeType: 'text/plain',
-      });
+    it('应解码 UTF-8 文本', async () => {
+      const text = await extractTextFromBuffer(
+        Buffer.from('你好\nworld', 'utf8'),
+        {
+          fileName: 'a.txt',
+          mimeType: 'text/plain',
+        },
+      );
       expect(text).toBe('你好\nworld');
     });
 
-    it('格式不支持时应抛 UnsupportedDocumentFormatError', () => {
-      expect(() =>
+    it('格式不支持时应抛 UnsupportedDocumentFormatError', async () => {
+      await expect(
         extractTextFromBuffer(Buffer.from('x'), {
-          fileName: 'a.pdf',
-          mimeType: 'application/pdf',
+          fileName: 'a.png',
+          mimeType: 'image/png',
         }),
-      ).toThrow(UnsupportedDocumentFormatError);
+      ).rejects.toThrow(UnsupportedDocumentFormatError);
     });
 
-    it('非法 UTF-8 应抛 UnsupportedDocumentFormatError', () => {
-      expect(() =>
+    it('非法 UTF-8 应抛 UnsupportedDocumentFormatError', async () => {
+      await expect(
         extractTextFromBuffer(Buffer.from([0xff, 0xfe, 0xfd]), {
           fileName: 'a.txt',
           mimeType: 'text/plain',
         }),
-      ).toThrow(UnsupportedDocumentFormatError);
+      ).rejects.toThrow(UnsupportedDocumentFormatError);
+    });
+
+    it('无文字层 PDF 应抛 ScannedPdfError', async () => {
+      await expect(
+        extractTextFromBuffer(MINIMAL_PDF, {
+          fileName: 'scan.pdf',
+          mimeType: 'application/pdf',
+        }),
+      ).rejects.toThrow(ScannedPdfError);
     });
   });
 
@@ -165,13 +200,32 @@ describe('text-extractor', () => {
 
       await expect(
         extractTextFromStorage(storage, {
-          storedPath: 'uploads/a.pdf',
-          fileName: 'a.pdf',
-          mimeType: 'application/pdf',
+          storedPath: 'uploads/a.png',
+          fileName: 'a.png',
+          mimeType: 'image/png',
         }),
       ).rejects.toThrow(UnsupportedDocumentFormatError);
 
       expect(existsMock).not.toHaveBeenCalled();
+    });
+
+    it('PDF 应通过 StorageProvider 读取并解析', async () => {
+      const { storage, existsMock, getReadStreamMock } = createMockStorage({
+        getReadStream: jest
+          .fn()
+          .mockResolvedValue(Readable.from([MINIMAL_PDF])),
+      });
+
+      await expect(
+        extractTextFromStorage(storage, {
+          storedPath: 'uploads/scan.pdf',
+          fileName: 'scan.pdf',
+          mimeType: 'application/pdf',
+        }),
+      ).rejects.toThrow(ScannedPdfError);
+
+      expect(existsMock).toHaveBeenCalledWith('uploads/scan.pdf');
+      expect(getReadStreamMock).toHaveBeenCalledWith('uploads/scan.pdf');
     });
   });
 });
