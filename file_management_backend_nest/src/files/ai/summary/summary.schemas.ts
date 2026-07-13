@@ -1,27 +1,10 @@
 /**所有 Zod 结构定义。chunk 层通用；book 层 4 族。 */
 import { z } from 'zod';
-
-function llmString(fallback = '') {
-  return z.preprocess((value) => {
-    if (typeof value === 'string') return value.trim();
-    if (value == null) return fallback;
-    return String(value);
-  }, z.string());
-}
-
-function llmStringArray() {
-  return z.preprocess((value) => {
-    if (Array.isArray(value)) {
-      return value.filter((item): item is string => typeof item === 'string');
-    }
-    if (typeof value === 'string' && value.trim()) return [value.trim()];
-    return [];
-  }, z.array(z.string()));
-}
-
-function llmObjectArray<T extends z.ZodTypeAny>(itemSchema: T) {
-  return z.preprocess((value) => (Array.isArray(value) ? value : []), z.array(itemSchema));
-}
+import {
+  llmObjectArray,
+  llmString,
+  llmStringArray,
+} from '@/files/ai/utils/llm-schema.util';
 
 /** Map 阶段 + chapter Reduce 中间层（通用） */
 export const chunkSummarySchema = z.object({

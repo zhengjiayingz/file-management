@@ -154,17 +154,24 @@ model UserFile {
   updatedAt  DateTime @updatedAt @map("updated_at")
 
   // Relations
+  // fields: [本表的外键列],      // 存关联 ID 的列
+  // references: [对方表的主键],  // 通常就是 id
+  // onDelete: Cascade            // 删对方时怎么处理（可选）
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   storage    FileStorage? @relation(fields: [storageId], references: [id], onDelete: SetNull)
+  // 同一个 model 和自己（或和别人）有多条关系时，必须起名字区。"UserFileHierarchy" 只是关系名，不是表名，用来配对两条边。
+  // parent：我是谁的子节点（用 parentId）
   parent     UserFile? @relation("UserFileHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
-  children   UserFile[] @relation("UserFileHierarchy")
-  fileShares FileShare[]
+  children   UserFile[] @relation("UserFileHierarchy") // children：谁是我的子节点（反向）
+
+  fileShares FileShare[] // 外键在 file_shares.user_file_id → 不用写
   userFileTags UserFileTag[]
   fileHistories FileHistory[]
   messages   Message[]
   documentIndexJob DocumentIndexJob?
   documentChunks   DocumentChunk[]
   documentSummaries DocumentSummary[]
+  documentKnowledge DocumentKnowledge?
 
   @@index([userId, parentId, isDeleted])
   @@index([storageId])
@@ -381,6 +388,18 @@ model FileHistory {
 
   @@index([userFileId, version])
   @@map("file_histories")
+}
+
+model DocumentKnowledge {
+  id         Int      @id @default(autoincrement())
+  userFileId Int      @unique @map("user_file_id")
+  payload    Json
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  userFile UserFile @relation(fields: [userFileId], references: [id], onDelete: Cascade)
+
+  @@map("document_knowledge")
 }
 
 // Enums

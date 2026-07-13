@@ -17,6 +17,8 @@ import { FilesAiService } from '@/files/ai/files-ai.service';
 import { FilesAiRagService } from '@/files/ai/files-ai-rag.service';
 import { FilesAiSummaryService } from '@/files/ai/files-ai-summary.service';
 import type { DocumentSummaryResponse } from '@/files/ai/files-ai-summary.service';
+import { FilesAiKnowledgeService } from '@/files/ai/files-ai-knowledge.service';
+import type { DocumentKnowledgeResponse } from '@/files/ai/files-ai-knowledge.service';
 
 @Controller('files')
 export class FilesAiController {
@@ -25,6 +27,7 @@ export class FilesAiController {
     private readonly filesAiIndexService: FilesAiIndexService,
     private readonly filesAiRagService: FilesAiRagService,
     private readonly filesAiSummaryService: FilesAiSummaryService,
+    private readonly filesAiKnowledgeService: FilesAiKnowledgeService,
   ) {}
 
   @Post(':id/ai/ask')
@@ -91,5 +94,14 @@ export class FilesAiController {
       type: type as 'book' | 'chapter' | 'chunk' | undefined,
       chapterNo: parsedChapterNo,
     });
+  }
+
+  /** 读取已入库的学术知识卡片（academic + ready 后） */
+  @Get(':id/ai/knowledge')
+  getKnowledge(
+    @CurrentUser() user: RequestUser,
+    @Param('id', ParseIntPipe) fileId: number,
+  ): Promise<DocumentKnowledgeResponse> {
+    return this.filesAiKnowledgeService.getKnowledge(user.id, fileId);
   }
 }

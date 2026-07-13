@@ -112,6 +112,15 @@
           :ready="indexStatus?.status === 'ready'"
         />
       </el-tab-pane>
+      <el-tab-pane v-if="showKnowledgeTab" :label="t('preview.aiTabKnowledge')" name="knowledge">
+        <KnowledgePanel
+          :summary-genre="knowledgeData?.summaryGenre ?? indexStatus?.summaryGenre ?? null"
+          :payload="knowledgeData?.payload ?? null"
+          :loading="knowledgeLoading"
+          :error="knowledgeError"
+          :ready="indexStatus?.status === 'ready'"
+        />
+      </el-tab-pane>
     </el-tabs>
   </div>
 </template>
@@ -122,6 +131,7 @@ import { useI18n } from 'vue-i18n'
 import {
   getDocumentIndexStatus,
   getDocumentSummary,
+  getDocumentKnowledge,
   streamAskAboutSelection,
   streamRagAsk,
   triggerDocumentIndex,
@@ -129,11 +139,13 @@ import {
   type AiChatMessage,
   type DocumentIndexStatus,
   type DocumentIndexStatusData,
+  type DocumentKnowledgeData,
   type DocumentSummaryData,
   type SummaryGenre,
 } from '@api/ai'
 import { renderMarkdown } from '@utils/renderMarkdown'
 import SummaryPanel from '@components/SummaryPanel/index.vue'
+import KnowledgePanel from '@components/KnowledgePanel/index.vue'
 
 const SELECTED_PREVIEW_MAX = 200
 const INDEX_POLL_INTERVAL_MS = 2500
@@ -190,11 +202,19 @@ const indexPolling = ref(false)
 let indexPollTimer: ReturnType<typeof setInterval> | null = null
 
 const summaryGenre = ref<SummaryGenre>('novel')
-const rightPanelTab = ref<'chat' | 'summary'>('chat')
+const rightPanelTab = ref<'chat' | 'summary' | 'knowledge'>('chat')
 const summaryData = ref<DocumentSummaryData | null>(null)
 const summaryLoading = ref(false)
 const summaryError = ref('')
+const knowledgeData = ref<DocumentKnowledgeData | null>(null)
+const knowledgeLoading = ref(false)
+const knowledgeError = ref('')
 const chatScrollRef = ref<HTMLElement | null>(null)
+
+const showKnowledgeTab = computed(() => {
+  const genre = indexStatus.value?.summaryGenre ?? summaryGenre.value
+  return genre === 'paper' || genre === 'lab_report'
+})
 
 const selectedPreview = computed(() => {
   const s = selectedText.value
@@ -234,6 +254,15 @@ watch(rightPanelTab, (tab) => {
   if (tab === 'summary' && indexStatus.value?.status === 'ready' && !summaryData.value && !summaryLoading.value) {
     void loadSummary()
   }
+  if (tab === 'knowledge' && indexStatus.value?.status === 'ready' && !knowledgeData.value && !knowledgeLoading.value) {
+    void loadKnowledge()
+  }
+})
+
+watch(showKnowledgeTab, (visible) => {
+  if (!visible && rightPanelTab.value === 'knowledge') {
+    rightPanelTab.value = 'chat'
+  }
 })
 
 onUnmounted(() => {
@@ -263,6 +292,9 @@ async function refreshIndexStatus() {
     }
     if (data.status === 'ready' && prevStatus !== 'ready') {
       void loadSummary()
+      if (rightPanelTab.value === 'knowledge') {
+        void loadKnowledge()
+      }
     }
     if (shouldPollIndex(data.status)) {
       if (!indexPollTimer) {
@@ -299,11 +331,37 @@ async function loadSummary() {
   }
 }
 
+async function loadKnowledge() {
+  if (indexStatus.value?.status !== 'ready') {
+    knowledgeData.value = null
+    return
+  }
+  if (!showKnowledgeTab.value) {
+    knowledgeData.value = null
+    return
+  }
+  knowledgeLoading.value = true
+  knowledgeError.value = ''
+  try {
+    knowledgeData.value = await getDocumentKnowledge(props.fileId)
+  } catch (e: unknown) {
+    knowledgeData.value = null
+    const msg =
+      (e as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+      t('preview.aiKnowledgeLoadError')
+    knowledgeError.value = msg
+  } finally {
+    knowledgeLoading.value = false
+  }
+}
+
 async function triggerIndex() {
   if (indexTriggering.value) return
   indexTriggering.value = true
   summaryData.value = null
   summaryError.value = ''
+  knowledgeData.value = null
+  knowledgeError.value = ''
   const force =
     indexStatus.value?.status === 'ready' || indexStatus.value?.status === 'failed'
   try {
@@ -439,6 +497,9 @@ function reset() {
   summaryData.value = null
   summaryLoading.value = false
   summaryError.value = ''
+  knowledgeData.value = null
+  knowledgeLoading.value = false
+  knowledgeError.value = ''
 }
 
 function activate() {

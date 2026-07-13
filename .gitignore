@@ -16,6 +16,9 @@ file_management_backend/uploads/
 file_management_backend/chunks/
 file_management_backend/thumbnails/
 
+# 本地论文测试页/PDF（可能含第三方页面敏感字段，勿提交）
+test-fixtures/
+
 # 面试准备文档（仅本地保留，不提交远程）
 docs/REDIS_INTERVIEW_QA.md
 docs/WEBSOCKET_SOCKET_INTERVIEW_QA.md

@@ -26,6 +26,7 @@ import { FilesTagController } from './tag/files-tag.controller';
 import { FilesTagService } from './tag/files-tag.service';
 import { FilesAiRagService } from '@/files/ai/files-ai-rag.service';
 import { FilesAiSummaryService } from '@/files/ai/files-ai-summary.service';
+import { FilesAiKnowledgeService } from '@/files/ai/files-ai-knowledge.service';
 
 @Module({
   imports: [StorageModule, ShareModule, OperationLogModule],
@@ -51,6 +52,7 @@ import { FilesAiSummaryService } from '@/files/ai/files-ai-summary.service';
     FilesAiIndexService,
     FilesAiRagService,
     FilesAiSummaryService,
+    FilesAiKnowledgeService,
     DocumentIndexQueueService,
     FilesPreviewService,
     PreviewQueueService,

@@ -4,9 +4,13 @@ jest.mock('./summary/summary-map-reduce.service', () => ({
   },
 }));
 
-jest.mock('pdf-parse', () =>
-  jest.fn().mockResolvedValue({ text: '   ' }),
-);
+jest.mock('./knowledge/knowledge-extract.service', () => ({
+  KnowledgeExtractService: class MockKnowledgeExtractService {
+    extractKnowledge = jest.fn().mockResolvedValue(undefined);
+  },
+}));
+
+jest.mock('pdf-parse', () => jest.fn().mockResolvedValue({ text: '   ' }));
 
 jest.mock('./embedding/embedding.provider', () => ({
   embedMany: jest.fn(),
@@ -24,12 +28,26 @@ import {
   type DocumentIndexJobData,
 } from './document-index-queue.types';
 
+type DocumentIndexJobUpdateArgs = {
+  where: { userFileId: number };
+  data: {
+    status?: string;
+    progressMsg?: string;
+    errorMessage?: string | null;
+    progress?: number;
+    chunkCount?: number;
+    indexedFileHash?: string | null;
+  };
+};
+
 const MINIMAL_PDF = Buffer.from(
   '%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Count 1/Kids[3 0 R]>>endobj\n3 0 obj<</Type/Page/MediaBox[0 0 3 3]>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF',
 );
 
 function createProcessor() {
-  const jobUpdate = jest.fn().mockResolvedValue(undefined);
+  const jobUpdate = jest
+    .fn<Promise<void>, [DocumentIndexJobUpdateArgs]>()
+    .mockResolvedValue(undefined);
   const findFirst = jest.fn();
   const deleteMany = jest.fn().mockResolvedValue({ count: 0 });
   const createMany = jest.fn().mockResolvedValue({ count: 0 });
@@ -59,10 +77,15 @@ function createProcessor() {
     runMapReduce: jest.fn().mockResolvedValue(undefined),
   };
 
+  const knowledgeExtract = {
+    extractKnowledge: jest.fn().mockResolvedValue(undefined),
+  };
+
   const processor = new DocumentIndexProcessor(
     prisma as never,
     storageService as never,
     summaryMapReduce as never,
+    knowledgeExtract as never,
   );
 
   return {
@@ -72,9 +95,7 @@ function createProcessor() {
   };
 }
 
-function createJob(
-  data: DocumentIndexJobData,
-): Job<DocumentIndexJobData> {
+function createJob(data: DocumentIndexJobData): Job<DocumentIndexJobData> {
   return {
     name: DOCUMENT_INDEX_JOB_NAME,
     data,
@@ -106,15 +127,14 @@ describe('DocumentIndexProcessor', () => {
       /未检测到可选中文字|扫描件/,
     );
 
-    expect(prisma.jobUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { userFileId: jobData.userFileId },
-        data: expect.objectContaining({
-          status: 'failed',
-          progressMsg: '索引失败',
-          errorMessage: expect.stringMatching(/未检测到可选中文字|扫描件/),
-        }),
-      }),
-    );
+    expect(prisma.jobUpdate).toHaveBeenCalled();
+    const lastCall = prisma.jobUpdate.mock.calls.at(-1);
+    expect(lastCall).toBeDefined();
+    const updateCall = lastCall![0];
+
+    expect(updateCall.where).toEqual({ userFileId: jobData.userFileId });
+    expect(updateCall.data.status).toBe('failed');
+    expect(updateCall.data.progressMsg).toBe('索引失败');
+    expect(updateCall.data.errorMessage).toMatch(/未检测到可选中文字|扫描件/);
   });
 });

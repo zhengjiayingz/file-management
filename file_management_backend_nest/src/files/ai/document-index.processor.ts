@@ -13,6 +13,7 @@ import {
 } from './document-index-queue.types';
 import { embedMany } from './embedding/embedding.provider';
 import { SummaryMapReduceService } from './summary/summary-map-reduce.service';
+import { KnowledgeExtractService } from '@/files/ai/knowledge/knowledge-extract.service';
 
 //  BullMQ 异步 Worker，负责消费 document-index 队列里的索引任务。用户在前端对某个文件点「建立索引」后，API 只负责入队；真正耗时的活都在这里做
 // @Processor 装饰器，第一个参数表示监听DOCUMENT_INDEX_QUEUE_NAME这个队列，约定了队列只要有任务就调用process方法处理
@@ -25,6 +26,7 @@ export class DocumentIndexProcessor extends WorkerHost {
     private readonly prisma: PrismaService, // 注入 Prisma
     private readonly storageService: StorageService, // 注入 Storage
     private readonly summaryMapReduce: SummaryMapReduceService,
+    private readonly knowledgeExtract: KnowledgeExtractService,
   ) {
     super();
   }
@@ -164,6 +166,15 @@ export class DocumentIndexProcessor extends WorkerHost {
         summaryGenre,
         chunkInputs,
       );
+      // 5. 学术体裁：抽取知识卡片（F-06）
+      if (summaryGenre === 'paper') {
+        await this.patchJob(userFileId, {
+          status: 'extracting_knowledge',
+          progress: 98,
+          progressMsg: '正在抽取知识卡片',
+        });
+        await this.knowledgeExtract.extractKnowledge(userFileId, summaryGenre);
+      }
 
       // 成功收尾：状态 → ready，进度 100%
       await this.patchJob(userFileId, {

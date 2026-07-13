@@ -5,7 +5,6 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import type { DocumentIndexMode, DocumentIndexStatus } from '@prisma/client';
-import type { PrismaClient as GeneratedPrismaClient } from '.prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
 import { isIndexableTextDocument } from './chunk/text-extractor';
 import { DocumentIndexQueueService } from '@/files/ai/document-index-queue.service';
@@ -23,7 +22,7 @@ const ACTIVE_STATUSES: DocumentIndexStatus[] = [
   'summarizing',
   'extracting_knowledge',
 ];
-
+// 校验 summaryGenre
 function validateIndexBody(body: unknown): {
   summaryGenre: SummaryGenreValue;
   force: boolean;
@@ -126,11 +125,9 @@ export class FilesAiIndexService {
 
     // ready（内容已变）/ failed / 无记录 → 允许（重新）索引
     await this.prisma.$transaction(async (tx) => {
-      const prismaTx = tx as unknown as GeneratedPrismaClient;
       await tx.documentChunk.deleteMany({ where: { userFileId: fileId } });
-      await prismaTx.documentSummary.deleteMany({
-        where: { userFileId: fileId },
-      });
+      await tx.documentSummary.deleteMany({ where: { userFileId: fileId } });
+      await tx.documentKnowledge.deleteMany({ where: { userFileId: fileId } });
       await tx.documentIndexJob.upsert({
         where: { userFileId: fileId },
         create: {

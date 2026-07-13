@@ -46,6 +46,11 @@ export type DocumentSummaryData = {
   payload: Record<string, unknown>
 }
 
+export type DocumentKnowledgeData = {
+  summaryGenre: SummaryGenre
+  payload: Record<string, unknown>
+}
+
 export type GetDocumentSummaryParams = {
   type?: DocumentSummaryType
   chapterNo?: number
@@ -149,6 +154,17 @@ export async function getDocumentSummary(
     success: boolean
     data: DocumentSummaryData
   }>(`/files/${fileId}/ai/summary`, { params })
+  return res.data.data
+}
+
+/** 读取已入库的学术知识卡片（F-06） */
+export async function getDocumentKnowledge(
+  fileId: number,
+): Promise<DocumentKnowledgeData> {
+  const res = await request.get<{
+    success: boolean
+    data: DocumentKnowledgeData
+  }>(`/files/${fileId}/ai/knowledge`)
   return res.data.data
 }
 

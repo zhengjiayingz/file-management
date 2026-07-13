@@ -11,6 +11,7 @@ import { OperationLogService } from '@/operation-log/operation-log.service';
 import { PrismaModule } from '@/prisma/prisma.module';
 import { StorageModule } from '@/storage/storage.module';
 import { SummaryMapReduceService } from '@/files/ai/summary/summary-map-reduce.service';
+import { KnowledgeExtractService } from '@/files/ai/knowledge/knowledge-extract.service';
 
 /** 独立 Worker 进程（docker worker / pnpm start:worker） */
 @Module({
@@ -38,6 +39,7 @@ import { SummaryMapReduceService } from '@/files/ai/summary/summary-map-reduce.s
     PreviewProcessor,
     SummaryMapReduceService,
     DocumentIndexProcessor,
+    KnowledgeExtractService,
   ],
 })
 export class PreviewWorkerModule {}
