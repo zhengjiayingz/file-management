@@ -25,6 +25,7 @@
 | **S12** | **AI 文档索引 + RAG 全文问答（F-01 / F-02）** | **✅** |
 | **S13** | **分层摘要 + 体裁化输出 + 前端摘要 Tab（F-03）** | **✅** |
 | **S14a** | **PDF 文本索引 + PDF 预览 AI 面板（F-05）** | **✅** |
+| **S14** | **学术知识卡片（F-06）** | **✅** |
 
 ## 启动
 
@@ -154,6 +155,25 @@ VITE_API_BASE_URL=http://localhost:3000
 
 **不变**：`POST .../ai/ask`（划词）、`POST .../ai/rag-ask`（全文问答）
 
+## API 对照（S14 学术知识卡片）
+
+| 端点 | 说明 | 状态 |
+|------|------|------|
+| `POST /api/files/:id/ai/index` | `summaryGenre=paper` 时 Worker 多跑 `extracting_knowledge` | ✅ |
+| `GET /api/files/:id/ai/index/status` | 含 `extracting_knowledge` 阶段 | ✅ |
+| `GET /api/files/:id/ai/knowledge` | 学术索引 `ready` 后读 `DocumentKnowledge.payload`；非 academic → 409 | ✅ |
+
+**索引流程（Worker，paper）**：extracting → chunking → embedding → summarizing → **extracting_knowledge** → ready
+
+**Prisma**：`DocumentKnowledge`（`userFileId` 唯一 + `payload` Json）
+
+**实现要点**：
+
+- `src/files/ai/knowledge/` — Zod schema、分字段 RAG 抽取、Prompt  
+- `KnowledgeExtractService` — 六组字段 `embedOne` + Top-K + `generateStructuredObject` → `mergePaperKnowledge`  
+- 前端 `KnowledgePanel` + `DocumentAiPanel` 知识点 Tab（**仅 `paper` 显示**；`lab_report` 抽取延后）  
+- 环境变量可选：`AI_PAPER_KNOWLEDGE_TOP_K`（默认 12）
+
 ## S14a 验收（F-05 PDF 文本索引）
 
 验证（需 **Worker 运行** + DeepSeek + Embedding 配置正确）：
@@ -177,6 +197,29 @@ pnpm test -- text-extractor.spec.ts           # PDF 提取 / ScannedPdfError
 - `src/files/ai/chunk/text-extractor.ts` — `pdf-parse` 提取；`ScannedPdfError`
 - `src/files/ai/document-index.processor.spec.ts` — Worker 扫描件失败路径
 - 前端 `src/composables/usePdfTextSelection.ts` — 基于 pdf.js `getTextContent` 原始坐标划词
+
+## S14 验收（F-06 学术知识卡片）
+
+验证（需 **Worker 运行** + DeepSeek + Embedding 配置正确）：
+
+1. 上传文字层论文 PDF / MD → 体裁选 **期刊论文（paper）** →「建立索引」
+2. 状态经 `summarizing` → `extracting_knowledge` → `ready`
+3.「知识点」Tab 展示 title / contributions / methodology / keyFindings 等；`dataset` 可为空
+4. `GET /api/files/:id/ai/knowledge` 读库一致
+5. 体裁切到「实验报告」：知识点 Tab 隐藏并切回「问答」（MVP 不抽 lab_report）
+
+```bash
+pnpm test -- knowledge-extract.service.spec.ts
+pnpm test -- document-index.processor.spec.ts
+pnpm test -- knowledge.schemas.spec.ts
+pnpm test:e2e -- files-ai-knowledge.e2e-spec.ts
+```
+
+**实现要点**：
+
+- `src/files/ai/knowledge/knowledge-extract.service.ts` — 分字段 RAG 抽取  
+- `src/files/ai/files-ai-knowledge.service.ts` — 读 API  
+- 前端 `KnowledgePanel`、`DocumentAiPanel.showKnowledgeTab`（仅 paper）
 
 ## S12 验收
 
@@ -320,6 +363,7 @@ S3 e2e 覆盖：AI 401/400/404、text/plain 流式 mock 响应。
 S12 e2e 覆盖：`files-ai-index`（index/status 401/404/400、pending/ready/reindex、**PDF pending/MIME**）、`files-ai-rag`（rag-ask 401/404/409/400、流式 mock、**PDF rag-ask**）；mock embedding + BullMQ 入队。
 S13 单测：`summary.schemas.spec.ts`、`summary-map-reduce.service.spec.ts`。S13 e2e：`files-ai-summary`（401/404/409、GET book、读库幂等、**PDF summary**）；`files-ai-index` 已对齐 `summaryGenre` + `force`。
 S14a 单测：`text-extractor.spec.ts`（PDF 提取/扫描件）、`document-index.processor.spec.ts`（Worker 扫描件 failed）。
+S14 单测：`knowledge.schemas.spec.ts`、`knowledge-extract.service.spec.ts`、`document-index.processor.spec.ts`（paper 调抽取）。S14 e2e：`files-ai-knowledge`（401/404/409、paper payload）。
 S4 e2e 覆盖：预览 401/404/400、preview-state/status JSON、有缓存时 PDF 流。
 S5 e2e 覆盖：profile GET/PUT、avatar 上传、user search、user-preferences GET/PUT。
 S6 e2e 覆盖：check-exists、check-name、分片上传+合并、instant-upload 404、传统 upload、folder 创建与重名。

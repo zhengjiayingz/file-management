@@ -13,33 +13,15 @@
     </header>
 
     <div class="ai-index-bar">
-      <el-select
-        v-model="summaryGenre"
-        size="small"
-        class="ai-index-genre"
-        :disabled="indexTriggering || indexPolling"
-      >
-        <el-option-group
-          v-for="group in SUMMARY_GENRE_GROUPS"
-          :key="group.groupKey"
-          :label="t(`preview.aiSummaryGenreGroup.${group.groupKey}`)"
-        >
-          <el-option
-            v-for="genre in group.genres"
-            :key="genre"
-            :label="t(`preview.aiSummaryGenre.${genre}`)"
-            :value="genre"
-          />
+      <el-select v-model="summaryGenre" size="small" class="ai-index-genre" :disabled="indexTriggering || indexPolling">
+        <el-option-group v-for="group in SUMMARY_GENRE_GROUPS" :key="group.groupKey"
+          :label="t(`preview.aiSummaryGenreGroup.${group.groupKey}`)">
+          <el-option v-for="genre in group.genres" :key="genre" :label="t(`preview.aiSummaryGenre.${genre}`)"
+            :value="genre" />
         </el-option-group>
       </el-select>
-      <el-button
-        size="small"
-        type="primary"
-        plain
-        :loading="indexTriggering"
-        :disabled="indexTriggering || indexPolling"
-        @click="triggerIndex"
-      >
+      <el-button size="small" type="primary" plain :loading="indexTriggering"
+        :disabled="indexTriggering || indexPolling" @click="triggerIndex">
         {{ indexTriggerLabel }}
       </el-button>
       <span class="ai-index-status">{{ indexStatusLabel }}</span>
@@ -63,20 +45,13 @@
 
           <div ref="chatScrollRef" class="ai-chat-messages">
             <p v-if="chatMessages.length === 0" class="ai-chat-empty">{{ t('preview.aiChatEmpty') }}</p>
-            <div
-              v-for="msg in chatMessages"
-              :key="msg.id"
-              class="ai-chat-bubble"
-              :class="msg.role === 'user' ? 'ai-chat-bubble--user' : 'ai-chat-bubble--assistant'"
-            >
+            <div v-for="msg in chatMessages" :key="msg.id" class="ai-chat-bubble"
+              :class="msg.role === 'user' ? 'ai-chat-bubble--user' : 'ai-chat-bubble--assistant'">
               <span class="ai-chat-bubble-role">
                 {{ msg.role === 'user' ? t('preview.aiChatYou') : t('preview.aiChatAssistant') }}
               </span>
-              <div
-                v-if="msg.role === 'assistant' && msg.content"
-                class="ai-chat-bubble-content ai-chat-bubble-content--md"
-                v-html="renderMarkdown(msg.content)"
-              />
+              <div v-if="msg.role === 'assistant' && msg.content"
+                class="ai-chat-bubble-content ai-chat-bubble-content--md" v-html="renderMarkdown(msg.content)" />
               <p v-else-if="msg.content" class="ai-chat-bubble-content">{{ msg.content }}</p>
               <p v-else-if="msg.streaming" class="ai-chat-bubble-content">{{ t('preview.aiAskThinking') }}</p>
             </div>
@@ -85,15 +60,8 @@
           <div v-if="askError" class="err-line">{{ askError }}</div>
 
           <div class="ai-chat-input">
-            <el-input
-              v-model="question"
-              type="textarea"
-              :rows="3"
-              :placeholder="t('preview.aiAskQuestionPlaceholder')"
-              :disabled="asking"
-              resize="none"
-              @keydown.enter.exact.prevent="submitChat"
-            />
+            <el-input v-model="question" type="textarea" :rows="3" :placeholder="t('preview.aiAskQuestionPlaceholder')"
+              :disabled="asking" resize="none" @keydown.enter.exact.prevent="submitChat" />
             <div class="ai-chat-input-actions">
               <el-button type="primary" :loading="asking" :disabled="asking" @click="submitChat">
                 {{ t('preview.aiAskSubmit') }}
@@ -104,22 +72,14 @@
         </div>
       </el-tab-pane>
       <el-tab-pane :label="t('preview.aiTabSummary')" name="summary">
-        <SummaryPanel
-          :summary-genre="summaryData?.summaryGenre ?? indexStatus?.summaryGenre ?? null"
-          :payload="summaryData?.payload ?? null"
-          :loading="summaryLoading"
-          :error="summaryError"
-          :ready="indexStatus?.status === 'ready'"
-        />
+        <SummaryPanel :summary-genre="summaryData?.summaryGenre ?? indexStatus?.summaryGenre ?? null"
+          :payload="summaryData?.payload ?? null" :loading="summaryLoading" :error="summaryError"
+          :ready="indexStatus?.status === 'ready'" />
       </el-tab-pane>
       <el-tab-pane v-if="showKnowledgeTab" :label="t('preview.aiTabKnowledge')" name="knowledge">
-        <KnowledgePanel
-          :summary-genre="knowledgeData?.summaryGenre ?? indexStatus?.summaryGenre ?? null"
-          :payload="knowledgeData?.payload ?? null"
-          :loading="knowledgeLoading"
-          :error="knowledgeError"
-          :ready="indexStatus?.status === 'ready'"
-        />
+        <KnowledgePanel :summary-genre="knowledgeData?.summaryGenre ?? indexStatus?.summaryGenre ?? null"
+          :payload="knowledgeData?.payload ?? null" :loading="knowledgeLoading" :error="knowledgeError"
+          :ready="indexStatus?.status === 'ready'" />
       </el-tab-pane>
     </el-tabs>
   </div>
@@ -211,10 +171,8 @@ const knowledgeLoading = ref(false)
 const knowledgeError = ref('')
 const chatScrollRef = ref<HTMLElement | null>(null)
 
-const showKnowledgeTab = computed(() => {
-  const genre = indexStatus.value?.summaryGenre ?? summaryGenre.value
-  return genre === 'paper' || genre === 'lab_report'
-})
+// 跟下拉体裁走，不要优先用 indexStatus（否则已用 paper 索引后，切到 lab_report 仍会显示知识点 Tab）
+const showKnowledgeTab = computed(() => summaryGenre.value === 'paper')
 
 const selectedPreview = computed(() => {
   const s = selectedText.value

@@ -22,6 +22,8 @@ jest.mock('./chunk/text-chunker', () => ({
 
 import { Readable } from 'node:stream';
 import { Job } from 'bullmq';
+import { embedMany } from './embedding/embedding.provider';
+import { chunkText } from './chunk/text-chunker';
 import { DocumentIndexProcessor } from './document-index.processor';
 import {
   DOCUMENT_INDEX_JOB_NAME,
@@ -43,6 +45,9 @@ type DocumentIndexJobUpdateArgs = {
 const MINIMAL_PDF = Buffer.from(
   '%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Count 1/Kids[3 0 R]>>endobj\n3 0 obj<</Type/Page/MediaBox[0 0 3 3]>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF',
 );
+
+const embedManyMock = embedMany as jest.MockedFunction<typeof embedMany>;
+const chunkTextMock = chunkText as jest.MockedFunction<typeof chunkText>;
 
 function createProcessor() {
   const jobUpdate = jest
@@ -90,8 +95,16 @@ function createProcessor() {
 
   return {
     processor,
-    prisma: { findFirst, jobUpdate, deleteMany, createMany, chunkFindMany },
+    prisma: {
+      findFirst,
+      jobUpdate,
+      deleteMany,
+      createMany,
+      chunkFindMany,
+      getReadStream,
+    },
     summaryMapReduce,
+    knowledgeExtract,
   };
 }
 
@@ -103,7 +116,11 @@ function createJob(data: DocumentIndexJobData): Job<DocumentIndexJobData> {
 }
 
 describe('DocumentIndexProcessor', () => {
-  const jobData: DocumentIndexJobData = {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  const scanJobData: DocumentIndexJobData = {
     userFileId: 2218,
     userId: 42,
     mode: 'general',
@@ -121,7 +138,7 @@ describe('DocumentIndexProcessor', () => {
       },
     });
 
-    const job = createJob(jobData);
+    const job = createJob(scanJobData);
 
     await expect(processor.process(job)).rejects.toThrow(
       /未检测到可选中文字|扫描件/,
@@ -132,9 +149,68 @@ describe('DocumentIndexProcessor', () => {
     expect(lastCall).toBeDefined();
     const updateCall = lastCall![0];
 
-    expect(updateCall.where).toEqual({ userFileId: jobData.userFileId });
+    expect(updateCall.where).toEqual({ userFileId: scanJobData.userFileId });
     expect(updateCall.data.status).toBe('failed');
     expect(updateCall.data.progressMsg).toBe('索引失败');
     expect(updateCall.data.errorMessage).toMatch(/未检测到可选中文字|扫描件/);
+  });
+
+  async function runTxtIndex(
+    summaryGenre: DocumentIndexJobData['summaryGenre'],
+    mode: DocumentIndexJobData['mode'],
+  ) {
+    const ctx = createProcessor();
+    const text =
+      'This is a long enough document body for indexing and knowledge extraction.';
+    ctx.prisma.findFirst.mockResolvedValue({
+      fileName: 'doc.txt',
+      storage: {
+        filePath: 'uploads/doc.txt',
+        mimeType: 'text/plain',
+        fileHash: 'txt-hash',
+      },
+    });
+    ctx.prisma.getReadStream.mockResolvedValue(Readable.from([Buffer.from(text)]));
+    chunkTextMock.mockReturnValue([{ index: 0, content: text }]);
+    embedManyMock.mockResolvedValue([[1, 0, 0]]);
+    ctx.prisma.chunkFindMany.mockResolvedValue([
+      { chunkIndex: 0, chapterNo: null, content: text },
+    ]);
+
+    await ctx.processor.process(
+      createJob({
+        userFileId: 3001,
+        userId: 7,
+        mode,
+        summaryGenre,
+      }),
+    );
+
+    return ctx;
+  }
+
+  it('summaryGenre=paper 应调用 knowledgeExtract', async () => {
+    const { knowledgeExtract, summaryMapReduce, prisma } = await runTxtIndex(
+      'paper',
+      'academic',
+    );
+
+    expect(summaryMapReduce.runMapReduce).toHaveBeenCalled();
+    expect(knowledgeExtract.extractKnowledge).toHaveBeenCalledWith(
+      3001,
+      'paper',
+    );
+
+    const statuses = prisma.jobUpdate.mock.calls.map(
+      (c) => c[0].data.status,
+    );
+    expect(statuses).toContain('extracting_knowledge');
+    expect(statuses.at(-1)).toBe('ready');
+  });
+
+  it('summaryGenre=novel 不应调用 knowledgeExtract', async () => {
+    const { knowledgeExtract } = await runTxtIndex('novel', 'general');
+
+    expect(knowledgeExtract.extractKnowledge).not.toHaveBeenCalled();
   });
 });

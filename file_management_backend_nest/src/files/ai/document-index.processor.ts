@@ -160,13 +160,13 @@ export class DocumentIndexProcessor extends WorkerHost {
         chapterNo: c.chapterNo,
         content: c.content,
       }));
-      // 4. 跑 Map-Reduce
+      // 4. 跑 Map-Reduce 生成摘要，按照块->章->书逐级合并，并且每生成一层摘要都会把摘要入库。
       await this.summaryMapReduce.runMapReduce(
         userFileId,
         summaryGenre,
         chunkInputs,
       );
-      // 5. 学术体裁：抽取知识卡片（F-06）
+      // 5. 学术体裁（用户选了学术论文）：抽取知识卡片（F-06）
       if (summaryGenre === 'paper') {
         await this.patchJob(userFileId, {
           status: 'extracting_knowledge',

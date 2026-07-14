@@ -394,7 +394,8 @@ export async function seedReadyDocumentIndex(
   chunks: Array<{ content: string; embedding: number[] }>,
   options?: {
     indexedFileHash?: string | null;
-    summaryGenre?: 'novel' | 'technical' | 'paper';
+    summaryGenre?: 'novel' | 'technical' | 'paper' | 'lab_report';
+    mode?: 'general' | 'academic';
   },
 ) {
   const prisma = app.get(PrismaService);
@@ -409,13 +410,18 @@ export async function seedReadyDocumentIndex(
   }
 
   const summaryGenre = options?.summaryGenre ?? 'novel';
+  const mode =
+    options?.mode ??
+    (summaryGenre === 'paper' || summaryGenre === 'lab_report'
+      ? 'academic'
+      : 'general');
 
   await prisma.documentChunk.deleteMany({ where: { userFileId } });
   await prisma.documentIndexJob.upsert({
     where: { userFileId },
     create: {
       userFileId,
-      mode: 'general',
+      mode,
       summaryGenre,
       status: 'ready',
       progress: 100,
@@ -425,7 +431,7 @@ export async function seedReadyDocumentIndex(
       indexedFileHash,
     },
     update: {
-      mode: 'general',
+      mode,
       summaryGenre,
       status: 'ready',
       progress: 100,
@@ -468,6 +474,22 @@ export async function seedDocumentSummary(
       userFileId_type_refKey: { userFileId, type, refKey },
     },
     create: { userFileId, type, refKey, payload: jsonPayload },
+    update: { payload: jsonPayload },
+  });
+}
+
+/** 为 Knowledge e2e 写入学术知识卡片（需配合 academic + ready 的 seedReadyDocumentIndex） */
+export async function seedDocumentKnowledge(
+  app: E2eApp,
+  userFileId: number,
+  payload: Record<string, unknown>,
+) {
+  const prisma = app.get(PrismaService);
+  const jsonPayload = payload as Prisma.InputJsonValue;
+
+  await prisma.documentKnowledge.upsert({
+    where: { userFileId },
+    create: { userFileId, payload: jsonPayload },
     update: { payload: jsonPayload },
   });
 }
