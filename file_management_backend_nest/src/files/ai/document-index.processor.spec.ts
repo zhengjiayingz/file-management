@@ -170,7 +170,9 @@ describe('DocumentIndexProcessor', () => {
         fileHash: 'txt-hash',
       },
     });
-    ctx.prisma.getReadStream.mockResolvedValue(Readable.from([Buffer.from(text)]));
+    ctx.prisma.getReadStream.mockResolvedValue(
+      Readable.from([Buffer.from(text)]),
+    );
     chunkTextMock.mockReturnValue([{ index: 0, content: text }]);
     embedManyMock.mockResolvedValue([[1, 0, 0]]);
     ctx.prisma.chunkFindMany.mockResolvedValue([
@@ -201,9 +203,7 @@ describe('DocumentIndexProcessor', () => {
       'paper',
     );
 
-    const statuses = prisma.jobUpdate.mock.calls.map(
-      (c) => c[0].data.status,
-    );
+    const statuses = prisma.jobUpdate.mock.calls.map((c) => c[0].data.status);
     expect(statuses).toContain('extracting_knowledge');
     expect(statuses.at(-1)).toBe('ready');
   });
