@@ -221,6 +221,19 @@ pnpm test:e2e -- files-ai-knowledge.e2e-spec.ts
 - `src/files/ai/files-ai-knowledge.service.ts` — 读 API  
 - 前端 `KnowledgePanel`、`DocumentAiPanel.showKnowledgeTab`（仅 paper）
 
+## API 对照（S16c 划词翻译 / F-11）
+
+**实施文档**：`docs/plans/2026-07-16-F11-划词翻译-实现方案.md`
+
+| 端点 | 说明 | 状态 |
+|------|------|------|
+| `POST /api/files/:id/ai/translate` | Body：`{ text, targetLang: 'default'\|'zh'\|'en'\|'ja', fileName? }`；流式 `text/plain` | ✅ |
+
+- `targetLang=default`：汉字占比判定 → 主要中文译英，否则译中；显式 zh/en/ja 以下拉为准。
+- 前端：`DocumentAiPanel` Header 翻译入口，**仅划词问答模式**显示；译文写入同一套 `chatMessages`。
+- 单测：`detect-chinese.util.spec.ts`、`files-ai-translate.service.spec.ts`。
+- **运维**：新增路由后若仍 `Cannot POST`，多为旧 `dist`；`pnpm build` 后重启，或用 `pnpm start:dev`。
+
 ## S12 验收
 
 验证：`TextChunkPreviewDialog` 建立索引 → 状态轮询至 ready →「全文问答」流式输出；划词 `ai/ask` 仍正常。
