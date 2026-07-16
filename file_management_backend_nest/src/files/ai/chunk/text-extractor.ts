@@ -1,14 +1,7 @@
 import type { Readable } from 'node:stream';
-import pdfParseImport from 'pdf-parse';
 import type { StorageProvider } from '@/storage/types';
 import { EmptyDocxError, extractDocxText } from './docx-text.util';
-
-type PdfParseResult = { text: string };
-type PdfParseFn = (dataBuffer: Buffer) => Promise<PdfParseResult>;
-
-async function parsePdfBuffer(buffer: Buffer): Promise<PdfParseResult> {
-  return (pdfParseImport as unknown as PdfParseFn)(buffer);
-}
+import { extractPdfTextWithPdfJs } from './pdf-text.util';
 
 /** 格式不支持（扩展名/MIME 不匹配） */
 export class UnsupportedDocumentFormatError extends Error {
@@ -142,15 +135,29 @@ function normalizeExtractedText(text: string): string {
   return text.replace(/\r\n/g, '\n').replace(/\s+\n/g, '\n').trim();
 }
 
+/**
+ * 兜底：坐标抽取已尽量保留空格；仍对驼峰/标点做轻量修补。
+ */
+export function softInsertEnglishSpaces(text: string): string {
+  return text
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/([a-zA-Z])(\d)/g, '$1 $2')
+    .replace(/(\d)([A-Za-z])/g, '$1 $2')
+    .replace(/([.!?,:;])([A-Za-z])/g, '$1 $2')
+    .replace(/(["'”)\]}])([A-Za-z])/g, '$1 $2')
+    .replace(/([a-zA-Z])([\u4e00-\u9fff])/g, '$1 $2')
+    .replace(/([\u4e00-\u9fff])([A-Za-z])/g, '$1 $2');
+}
+
 export async function extractPdfText(buffer: Buffer): Promise<string> {
-  let result: PdfParseResult;
+  let raw: string;
   try {
-    result = await parsePdfBuffer(buffer);
+    raw = await extractPdfTextWithPdfJs(buffer);
   } catch {
     throw new ScannedPdfError();
   }
 
-  const text = normalizeExtractedText(result.text);
+  const text = softInsertEnglishSpaces(normalizeExtractedText(raw));
 
   if (text.length < MIN_PDF_TEXT_CHARS) {
     throw new ScannedPdfError();

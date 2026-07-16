@@ -1,13 +1,14 @@
 # 网盘 AI 功能需求文档（PRD）
 
-> 版本：v1.7  
-> 日期：2026-07-08（S13 更新：2026-07-10；S14a F-05 完成：2026-07-12；**S14 F-06 完成：2026-07-14**；S18 视觉线排期：2026-07-14）  
+> 版本：v1.8  
+> 日期：2026-07-08（S13 更新：2026-07-10；S14a F-05 完成：2026-07-12；**S14 F-06 完成：2026-07-14**；S18 视觉线排期：2026-07-14；**F-07 目录/重构约定：2026-07-14**）  
 > 状态：执行中（S12 ✅、S13 F-03 ✅、**S14a F-05 ✅**、**S14 F-06 ✅**；**下一批：F-18 / F-07 / F-11**；**视觉线（S18）：F-26 → F-30 → F-27 → F-29…**）  
 > 关联：`file_management_backend_nest` + `file_management_frontend`  
 > 技术路线详案：[2026-07-08-ai-capability-roadmap-design.md](./2026-07-08-ai-capability-roadmap-design.md)  
 > 首期实施：[2026-07-09-s12-ai-index-rag-implementation.md](./2026-07-09-s12-ai-index-rag-implementation.md)  
 > S13 实施：[2026-07-09-s13-ai-summary-implementation.md](./2026-07-09-s13-ai-summary-implementation.md)  
-> F-06 笔记：[2026-07-12-F06-学术知识卡片-学习笔记与架构讨论.md](./2026-07-12-F06-学术知识卡片-学习笔记与架构讨论.md)
+> F-06 笔记：[2026-07-12-F06-学术知识卡片-学习笔记与架构讨论.md](./2026-07-12-F06-学术知识卡片-学习笔记与架构讨论.md)  
+> F-07 笔记：[2026-07-14-F07-知识库-学习笔记.md](./2026-07-14-F07-知识库-学习笔记.md)
 
 ---
 
@@ -442,6 +443,14 @@ AI_DAILY_ASK_LIMIT=100
 - **杀手级功能**：从「单文件 AI」升级为「个人知识管理」  
 - 面试完整 story：「单文件 index 一次，KB 是多文件检索视图」  
 - 最接近 Dify/飞书知识库的产品叙事  
+
+**目录与后续重构约定（2026-07-14 确认）**
+
+| 项 | 约定 |
+|----|------|
+| **模块目录** | F-07 产品代码放独立顶层模块 `src/knowledge-bases/`（与 `share/`、`friendship/` 同级），**不**塞进 `src/files/ai/`。理由：核心聚合根是知识库（多文件 + 会话），路由为 `/api/knowledge-bases/*`，与单文件 `/api/files/:id/ai/*` 边界不同；`files/ai/knowledge/` 已是 F-06 学术卡片，名称易混。 |
+| **落地期依赖** | F-07 实现时 **直接复用** 现有 `files/ai` 基建（`embedOne`、`topKByEmbedding`、`streamText`、chunk 查询等），允许 knowledge-bases → files/ai 的引用；**本期不做**跨目录大搬家。 |
+| **F-07 完成后必做（延后）** | 将 **embedding、单文件检索/RAG 共用工具** 抽到公共层（候选：`src/ai/` 或 `src/files/ai/shared/`，具体命名落地时再定），供 `files/ai`（单文件）与 `knowledge-bases`（多文件）共同依赖，消除交叉引用与重复。顺序：**先交付 F-07 → 再抽公共层**，避免与功能开发并行增加风险。 |
 
 ---
 
@@ -1420,3 +1429,4 @@ flowchart TB
 | v1.5 | 2026-07-12 | S14a F-05 标记完成：pdf-parse 文本提取、PDF 预览 AI 面板、rag/summary e2e、扫描件 processor 单测；下一批调整为 F-06 起 |
 | v1.6 | 2026-07-14 | 新增视觉线 §1.4、§3.5：F-26/F-30/F-27（P1 地基+解题）→ F-29/F-31/F-32/F-33（P2）→ F-35/F-36/F-37（P3）；F-22 合并；更新总表/排期/依赖图/环境变量 |
 | v1.7 | 2026-07-14 | S14 F-06 标记完成：分字段 RAG 知识抽取、GET knowledge、知识点 Tab（仅 paper）、单测+e2e；下一批调整为 F-18 起；F-06.1 记录 lab_report/section-aware |
+| v1.8 | 2026-07-14 | F-07：确认模块目录 `src/knowledge-bases/`；约定 embedding/单文件 RAG 工具在 **F-07 落地后再抽公共层**（本期只复用 `files/ai`） |

@@ -66,7 +66,8 @@ export default {
     documents: '文件',
     categories: '分類',
     contactsAndMessages: '通訊錄與訊息',
-    myShares: '我的分享'
+    myShares: '我的分享',
+    knowledgeBases: '知識庫',
   },
   header: {
     memberCenter: '會員中心',

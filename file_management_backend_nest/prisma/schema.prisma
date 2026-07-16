@@ -3,7 +3,6 @@
 
 generator client {
   provider = "prisma-client-js"
-  output   = "../node_modules/.prisma/client"
 }
 
 datasource db {
@@ -54,6 +53,7 @@ model User {
   userPreference UserPreference?
   vipUpgradeRequestsAsApplicant VipUpgradeRequest[] @relation("VipApplicant")
   vipUpgradeRequestsProcessed   VipUpgradeRequest[] @relation("VipProcessedBy")
+  knowledgeBases KnowledgeBase[]
 
   @@map("users")
 }
@@ -172,6 +172,7 @@ model UserFile {
   documentChunks   DocumentChunk[]
   documentSummaries DocumentSummary[]
   documentKnowledge DocumentKnowledge?
+  knowledgeBaseItems KnowledgeBaseItem[]
 
   @@index([userId, parentId, isDeleted])
   @@index([storageId])
@@ -402,7 +403,60 @@ model DocumentKnowledge {
   @@map("document_knowledge")
 }
 
+model KnowledgeBase {
+  id          Int      @id @default(autoincrement())
+  userId      Int      @map("user_id")
+  name        String   @db.VarChar(100)
+  description String?  @db.VarChar(500)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  user     User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items    KnowledgeBaseItem[]
+  sessions KnowledgeBaseSession[]
+  @@index([userId, updatedAt])
+  @@map("knowledge_bases")
+}
+model KnowledgeBaseItem {
+  id              Int      @id @default(autoincrement())
+  knowledgeBaseId Int      @map("knowledge_base_id")
+  userFileId      Int      @map("user_file_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+  knowledgeBase KnowledgeBase @relation(fields: [knowledgeBaseId], references: [id], onDelete: Cascade)
+  userFile      UserFile      @relation(fields: [userFileId], references: [id], onDelete: Cascade)
+  @@unique([knowledgeBaseId, userFileId])
+  @@index([userFileId])
+  @@map("knowledge_base_items")
+}
+model KnowledgeBaseSession {
+  id              Int      @id @default(autoincrement())
+  knowledgeBaseId Int      @map("knowledge_base_id")
+  title           String?  @db.VarChar(200)
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  knowledgeBase KnowledgeBase          @relation(fields: [knowledgeBaseId], references: [id], onDelete: Cascade)
+  messages      KnowledgeBaseMessage[]
+  @@index([knowledgeBaseId, updatedAt])
+  @@map("knowledge_base_sessions")
+}
+model KnowledgeBaseMessage {
+  id        Int                      @id @default(autoincrement())
+  sessionId Int                      @map("session_id")
+  role      KnowledgeBaseMessageRole
+  content   String                   @db.Text
+  /// assistant 消息：RAG citations JSON；user 消息一般为 null
+  citations Json?
+  createdAt DateTime                 @default(now()) @map("created_at")
+  session KnowledgeBaseSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  @@index([sessionId, createdAt])
+  @@map("knowledge_base_messages")
+}
+
 // Enums
+enum KnowledgeBaseMessageRole {
+  user
+  assistant
+}
+
 enum Role {
   user
   vip

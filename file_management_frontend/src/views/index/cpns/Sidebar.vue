@@ -61,6 +61,12 @@
                 </el-icon>
                 <span>{{ t('sidebar.transferRecords') }}</span>
             </el-menu-item>
+            <el-menu-item index="knowledge-bases" @click="router.push('/knowledge-bases')">
+                <el-icon>
+                    <Collection />
+                </el-icon>
+                <span>{{ t('sidebar.knowledgeBases') }}</span>
+            </el-menu-item>
             <el-menu-item index="my-shares" @click="openMyShares">
                 <el-icon>
                     <Share />
@@ -77,12 +83,8 @@
                 <el-icon>
                     <ChatDotRound />
                 </el-icon>
-                <el-badge
-                    :value="messageUnreadStore.totalUnread"
-                    :max="99"
-                    :hidden="messageUnreadStore.totalUnread === 0"
-                    class="chat-menu-badge"
-                >
+                <el-badge :value="messageUnreadStore.totalUnread" :max="99"
+                    :hidden="messageUnreadStore.totalUnread === 0" class="chat-menu-badge">
                     <span class="chat-menu-label">{{ t('sidebar.contactsAndMessages') }}</span>
                 </el-badge>
             </el-menu-item>
@@ -121,6 +123,7 @@ const activeMenu = computed(() => {
     if (path.startsWith('/recycle-bin')) return '4'
     if (path.startsWith('/logs')) return '5'
     if (path.startsWith('/transfer-records')) return 'transfer-records'
+    if (path.startsWith('/knowledge-bases')) return 'knowledge-bases'
     if (path === '/' && query.type) {
         return `file-type-${query.type}`
     }

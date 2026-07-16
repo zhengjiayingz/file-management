@@ -66,7 +66,8 @@ export default {
     documents: '文档',
     categories: '分类',
     contactsAndMessages: '通讯录与消息',
-    myShares: '我的分享'
+    myShares: '我的分享',
+    knowledgeBases: '知识库',
   },
   header: {
     memberCenter: '会员中心',

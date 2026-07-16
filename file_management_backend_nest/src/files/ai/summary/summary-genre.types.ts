@@ -1,6 +1,6 @@
 /**体裁常量、UI 标签、校验、toIndexMode、pickBookSchema。 */
 import type { DocumentIndexMode } from '@prisma/client';
-import { $Enums } from '.prisma/client';
+import { $Enums } from '@prisma/client';
 import type { z } from 'zod';
 import {
   academicBookSchema,

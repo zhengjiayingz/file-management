@@ -66,7 +66,8 @@ export default {
     documents: 'Documents',
     categories: 'Categories',
     contactsAndMessages: 'Contacts & Messages',
-    myShares: 'My shares'
+    myShares: 'My shares',
+    knowledgeBases: 'Knowledge Bases',
   },
   header: {
     memberCenter: 'Member Center',

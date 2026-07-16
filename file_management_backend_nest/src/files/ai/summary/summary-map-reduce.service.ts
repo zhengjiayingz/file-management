@@ -1,6 +1,5 @@
 import { Injectable } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
-import type { PrismaClient as GeneratedPrismaClient } from '.prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
 import { generateStructuredObject } from '@/files/ai/utils/structured-object.util';
 import type { SummaryGenreValue } from './summary-genre.types';
@@ -39,8 +38,7 @@ export class SummaryMapReduceService {
     refKey: string,
     payload: SummaryPayload,
   ): Promise<void> {
-    const prisma = this.prisma as unknown as GeneratedPrismaClient;
-    await prisma.documentSummary.upsert({
+    await this.prisma.documentSummary.upsert({
       where: {
         userFileId_type_refKey: { userFileId, type, refKey },
       },

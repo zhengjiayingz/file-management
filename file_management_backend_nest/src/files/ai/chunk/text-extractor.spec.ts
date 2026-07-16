@@ -2,9 +2,8 @@ import { Readable } from 'node:stream';
 import archiver from 'archiver';
 import type { StorageProvider } from '@/storage/types';
 
-jest.mock('pdf-parse', () => ({
-  __esModule: true,
-  default: jest.fn().mockResolvedValue({ text: '' }),
+jest.mock('./pdf-text.util', () => ({
+  extractPdfTextWithPdfJs: jest.fn().mockResolvedValue(''),
 }));
 
 import {
@@ -15,7 +14,12 @@ import {
   extractTextFromStorage,
   extractTextFromStream,
   isIndexableTextDocument,
+  softInsertEnglishSpaces,
 } from './text-extractor';
+import { extractPdfTextWithPdfJs } from './pdf-text.util';
+
+const mockedExtractPdfTextWithPdfJs =
+  extractPdfTextWithPdfJs as jest.MockedFunction<typeof extractPdfTextWithPdfJs>;
 
 const MINIMAL_PDF = Buffer.from(
   '%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Count 1/Kids[3 0 R]>>endobj\n3 0 obj<</Type/Page/MediaBox[0 0 3 3]>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF',
@@ -62,6 +66,22 @@ function createMockStorage(
 }
 
 describe('text-extractor', () => {
+  beforeEach(() => {
+    mockedExtractPdfTextWithPdfJs.mockReset();
+    mockedExtractPdfTextWithPdfJs.mockResolvedValue('');
+  });
+
+  describe('softInsertEnglishSpaces', () => {
+    it('应在驼峰与标点后补空格', () => {
+      const out = softInsertEnglishSpaces('saidHarry."Nearly,"saidRon');
+      expect(out).toContain('said Harry');
+      expect(out).toContain('said Ron');
+      expect(out).toMatch(/Nearly/);
+      expect(out).not.toContain('saidHarry');
+      expect(out).not.toContain('saidRon');
+    });
+  });
+
   describe('isIndexableTextDocument', () => {
     it('允许 .txt + text/plain', () => {
       expect(
@@ -169,6 +189,29 @@ describe('text-extractor', () => {
       await expect(
         extractTextFromBuffer(MINIMAL_PDF, {
           fileName: 'scan.pdf',
+          mimeType: 'application/pdf',
+        }),
+      ).rejects.toThrow(ScannedPdfError);
+    });
+
+    it('PDF 坐标抽取有字时应返回带空格文本', async () => {
+      mockedExtractPdfTextWithPdfJs.mockResolvedValue(
+        'Harry Potter and the Philosophers Stone',
+      );
+      const text = await extractTextFromBuffer(MINIMAL_PDF, {
+        fileName: 'lecture.pdf',
+        mimeType: 'application/pdf',
+      });
+      expect(text).toContain('Harry Potter');
+      expect(text).toContain(' ');
+      expect(mockedExtractPdfTextWithPdfJs).toHaveBeenCalled();
+    });
+
+    it('PDF 抽取抛错时应转为 ScannedPdfError', async () => {
+      mockedExtractPdfTextWithPdfJs.mockRejectedValue(new Error('broken'));
+      await expect(
+        extractTextFromBuffer(MINIMAL_PDF, {
+          fileName: 'bad.pdf',
           mimeType: 'application/pdf',
         }),
       ).rejects.toThrow(ScannedPdfError);

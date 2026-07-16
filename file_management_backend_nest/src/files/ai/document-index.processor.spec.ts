@@ -10,7 +10,9 @@ jest.mock('./knowledge/knowledge-extract.service', () => ({
   },
 }));
 
-jest.mock('pdf-parse', () => jest.fn().mockResolvedValue({ text: '   ' }));
+jest.mock('./chunk/pdf-text.util', () => ({
+  extractPdfTextWithPdfJs: jest.fn().mockResolvedValue(''),
+}));
 
 jest.mock('./embedding/embedding.provider', () => ({
   embedMany: jest.fn(),

@@ -23,6 +23,7 @@ import { AdminModule } from './admin/admin.module';
 import { VipModule } from './vip/vip.module';
 import { OperationLogModule } from './operation-log/operation-log.module';
 import { JobsModule } from './jobs/jobs.module';
+import { KnowledgeBasesModule } from './knowledge-bases/knowledge-bases.module';
 
 @Module({
   imports: [
@@ -60,6 +61,7 @@ import { JobsModule } from './jobs/jobs.module';
     FriendshipModule,
     MessageModule,
     ShareModule,
+    KnowledgeBasesModule,
     RealtimeModule,
     OperationLogModule,
     AdminModule,
