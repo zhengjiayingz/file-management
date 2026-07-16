@@ -47,3 +47,13 @@ jest.mock('ai', () => ({
     },
   })),
 }));
+
+// pdfjs-dist legacy build 为 ESM（含 import.meta），Jest 默认不转译 node_modules
+jest.mock('pdfjs-dist/legacy/build/pdf.mjs', () => ({
+  getDocument: jest.fn(() => ({
+    promise: Promise.resolve({
+      numPages: 0,
+      destroy: jest.fn().mockResolvedValue(undefined),
+    }),
+  })),
+}));
