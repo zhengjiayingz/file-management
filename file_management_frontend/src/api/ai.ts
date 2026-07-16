@@ -74,6 +74,17 @@ export type StreamRagAskParams = {
   onChunk: (text: string) => void
 }
 
+export type TranslateTargetLang = 'default' | 'zh' | 'en' | 'ja'
+
+export type StreamTranslateParams = {
+  fileId: number
+  text: string
+  targetLang: TranslateTargetLang
+  fileName?: string
+  signal?: AbortSignal
+  onChunk: (text: string) => void
+}
+
 /** 建索引体裁分组（与后端 summary-genre.types 一致） */
 export const SUMMARY_GENRE_GROUPS: ReadonlyArray<{
   groupKey: 'reading' | 'learning' | 'research'
@@ -220,6 +231,38 @@ export async function streamRagAsk(params: StreamRagAskParams): Promise<void> {
       body: JSON.stringify({
         question: params.question,
         messages: params.messages,
+      }),
+      signal: params.signal,
+    },
+  )
+
+  if (!res.ok) {
+    throw new Error(await parseErrorResponse(res))
+  }
+
+  await readTextStream(res, params.onChunk)
+}
+
+/**
+ * 划词翻译（text/plain 流式，F-11）
+ */
+export async function streamTranslate(params: StreamTranslateParams): Promise<void> {
+  const token = localStorage.getItem('token')
+  if (!token) {
+    throw new Error('未登录')
+  }
+  const res = await fetch(
+    `${API_BASE_URL}/api/files/${params.fileId}/ai/translate`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        text: params.text,
+        targetLang: params.targetLang,
+        fileName: params.fileName,
       }),
       signal: params.signal,
     },

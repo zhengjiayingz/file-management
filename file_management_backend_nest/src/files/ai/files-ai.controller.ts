@@ -19,6 +19,7 @@ import { FilesAiSummaryService } from '@/files/ai/files-ai-summary.service';
 import type { DocumentSummaryResponse } from '@/files/ai/files-ai-summary.service';
 import { FilesAiKnowledgeService } from '@/files/ai/files-ai-knowledge.service';
 import type { DocumentKnowledgeResponse } from '@/files/ai/files-ai-knowledge.service';
+import { FilesAiTranslateService } from '@/files/ai/files-ai-translate.service';
 
 @Controller('files')
 export class FilesAiController {
@@ -28,6 +29,7 @@ export class FilesAiController {
     private readonly filesAiRagService: FilesAiRagService,
     private readonly filesAiSummaryService: FilesAiSummaryService,
     private readonly filesAiKnowledgeService: FilesAiKnowledgeService,
+    private readonly filesAiTranslateService: FilesAiTranslateService,
   ) {}
 
   @Post(':id/ai/ask')
@@ -39,6 +41,24 @@ export class FilesAiController {
     @Res({ passthrough: false }) res: Response,
   ): Promise<void> {
     await this.filesAiService.askAboutSelection(
+      req,
+      res,
+      user.id,
+      fileId,
+      body,
+    );
+  }
+
+  /** 划词翻译（流式，F-11） */
+  @Post(':id/ai/translate')
+  async translateSelection(
+    @CurrentUser() user: RequestUser,
+    @Param('id', ParseIntPipe) fileId: number,
+    @Body() body: unknown,
+    @Req() req: Request,
+    @Res({ passthrough: false }) res: Response,
+  ): Promise<void> {
+    await this.filesAiTranslateService.translate(
       req,
       res,
       user.id,

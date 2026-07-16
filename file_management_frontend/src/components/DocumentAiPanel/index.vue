@@ -1,15 +1,41 @@
 <template>
   <div class="ai-chat-panel">
     <header class="ai-chat-header">
-      <div>
+      <div class="ai-chat-header-main">
         <h4 class="ai-chat-title">{{ t('preview.aiAskTitle') }}</h4>
         <p class="ai-chat-hint">
           {{ chatMode === 'selection' ? t('preview.aiAskHint') : t('preview.aiRagHint') }}
         </p>
       </div>
-      <el-button v-if="chatMessages.length > 0" size="small" text type="danger" @click="clearChat">
-        {{ t('preview.aiChatClear') }}
-      </el-button>
+      <div class="ai-chat-header-actions">
+        <template v-if="chatMode === 'selection'">
+          <el-select
+            v-model="translateTargetLang"
+            size="small"
+            class="ai-translate-lang"
+            :disabled="asking"
+            :title="t('preview.aiTranslateTarget')"
+          >
+            <el-option :label="t('preview.aiTranslateDefault')" value="default" />
+            <el-option :label="t('preview.aiTranslateZh')" value="zh" />
+            <el-option :label="t('preview.aiTranslateEn')" value="en" />
+            <el-option :label="t('preview.aiTranslateJa')" value="ja" />
+          </el-select>
+          <el-button
+            size="small"
+            type="primary"
+            plain
+            :loading="asking"
+            :disabled="asking"
+            @click="submitTranslate"
+          >
+            {{ t('preview.aiTranslate') }}
+          </el-button>
+        </template>
+        <el-button v-if="chatMessages.length > 0" size="small" text type="danger" @click="clearChat">
+          {{ t('preview.aiChatClear') }}
+        </el-button>
+      </div>
     </header>
 
     <div class="ai-index-bar">
@@ -94,6 +120,7 @@ import {
   getDocumentKnowledge,
   streamAskAboutSelection,
   streamRagAsk,
+  streamTranslate,
   triggerDocumentIndex,
   SUMMARY_GENRE_GROUPS,
   type AiChatMessage,
@@ -102,6 +129,7 @@ import {
   type DocumentKnowledgeData,
   type DocumentSummaryData,
   type SummaryGenre,
+  type TranslateTargetLang,
 } from '@api/ai'
 import { renderMarkdown } from '@utils/renderMarkdown'
 import SummaryPanel from '@components/SummaryPanel/index.vue'
@@ -154,6 +182,7 @@ const chatMode = ref<'selection' | 'rag'>('selection')
 const chatMessages = ref<UiChatMessage[]>([])
 const asking = ref(false)
 const askError = ref('')
+const translateTargetLang = ref<TranslateTargetLang>('default')
 let askAbort: AbortController | null = null
 
 const indexStatus = ref<DocumentIndexStatusData | null>(null)
@@ -440,6 +469,70 @@ async function submitChat() {
   }
 }
 
+function translateLangLabel(lang: TranslateTargetLang): string {
+  if (lang === 'default') return t('preview.aiTranslateDefault')
+  if (lang === 'zh') return t('preview.aiTranslateZh')
+  if (lang === 'en') return t('preview.aiTranslateEn')
+  return t('preview.aiTranslateJa')
+}
+
+async function submitTranslate() {
+  if (asking.value) return
+  if (chatMode.value !== 'selection') return
+  askError.value = ''
+
+  if (!selectedText.value.trim()) {
+    askError.value = t('preview.aiTranslateNoSelection')
+    return
+  }
+
+  rightPanelTab.value = 'chat'
+  const userContent = t('preview.aiTranslateUserMsg', {
+    lang: translateLangLabel(translateTargetLang.value),
+  })
+  const userId = genChatId()
+  const assistantId = genChatId()
+  chatMessages.value.push({ id: userId, role: 'user', content: userContent })
+  chatMessages.value.push({ id: assistantId, role: 'assistant', content: '', streaming: true })
+  scrollChatToBottom()
+
+  asking.value = true
+  askAbort = new AbortController()
+
+  try {
+    await streamTranslate({
+      fileId: props.fileId,
+      text: selectedText.value,
+      targetLang: translateTargetLang.value,
+      fileName: props.fileName,
+      signal: askAbort.signal,
+      onChunk: (chunk: string) => {
+        const msg = chatMessages.value.find((m) => m.id === assistantId)
+        if (msg) {
+          msg.content += chunk
+          scrollChatToBottom()
+        }
+      },
+    })
+  } catch (e: unknown) {
+    if (e instanceof DOMException && e.name === 'AbortError') {
+      return
+    }
+    const idx = chatMessages.value.findIndex((m) => m.id === assistantId)
+    if (idx >= 0 && !chatMessages.value[idx]?.content) {
+      chatMessages.value.splice(idx, 1)
+    }
+    const msg = e instanceof Error ? e.message : t('preview.aiTranslateError')
+    askError.value = msg || t('preview.aiTranslateError')
+  } finally {
+    const msg = chatMessages.value.find((m) => m.id === assistantId)
+    if (msg) msg.streaming = false
+    asking.value = false
+    askAbort = null
+    scrollChatToBottom()
+  }
+}
+
 function reset() {
   stopAsk()
   stopIndexPolling()
@@ -447,6 +540,7 @@ function reset() {
   question.value = ''
   chatMessages.value = []
   askError.value = ''
+  translateTargetLang.value = 'default'
   indexStatus.value = null
   indexTriggering.value = false
   chatMode.value = 'selection'
@@ -486,6 +580,24 @@ defineExpose({ reset, activate })
   gap: 8px;
   padding: 12px 14px 8px;
   border-bottom: 1px solid var(--el-border-color-lighter);
+}
+
+.ai-chat-header-main {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.ai-chat-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.ai-translate-lang {
+  width: 100px;
 }
 
 .ai-chat-title {
