@@ -221,6 +221,20 @@ pnpm test:e2e -- files-ai-knowledge.e2e-spec.ts
 - `src/files/ai/files-ai-knowledge.service.ts` — 读 API  
 - 前端 `KnowledgePanel`、`DocumentAiPanel.showKnowledgeTab`（仅 paper）
 
+## API 对照（S16b 语义搜索 / F-08）
+
+**实施文档**：`docs/plans/2026-07-17-F08-语义搜索-实现方案.md`
+
+| 端点 | 说明 | 状态 |
+|------|------|------|
+| `GET /api/files/search` | Query：`q`（必填）、`limit?`（默认 20，最大 50）；鉴权 JWT | ✅ |
+
+- 仅检索当前用户 `DocumentIndexJob.status=ready` 的文件；按 chunk cosine 聚合为文件级 `max(score)`，`MIN_SCORE=0.35`。
+- 响应：`{ success, data: { items, indexedFileCount, q } }`；`items` 含 `score` / `excerpt` / `chunkIndex` 与文件元数据。
+- 前端：文件页顶栏「智能搜索」→ `SemanticSearchDialog`；与 `GET /files?q=` 文件名筛选解耦。
+- 单测：`files-search.service.spec.ts`。
+- **运维**：需 Worker 建索引后才有语义结果；Embedding 配置同 S12。
+
 ## API 对照（S16c 划词翻译 / F-11）
 
 **实施文档**：`docs/plans/2026-07-16-F11-划词翻译-实现方案.md`

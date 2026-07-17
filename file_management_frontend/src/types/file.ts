@@ -74,5 +74,24 @@ export interface MoveFileParams {
   targetParentId: number | null;
 }
 
+/** 语义搜索单条结果（GET /files/search） */
+export interface SemanticSearchItem {
+  id: number
+  fileName: string
+  fileType: string
+  mimeType: string | null
+  fileSize: number | null
+  parentId: number | null
+  score: number
+  excerpt: string
+  chunkIndex: number
+}
+// 语义搜索结果
+export interface SemanticSearchResult {
+  items: SemanticSearchItem[]
+  indexedFileCount: number
+  q: string
+}
+
 // 上传进度回调类型
 export type OnUploadProgress = (progressEvent: any) => void;

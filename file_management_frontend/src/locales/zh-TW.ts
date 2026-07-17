@@ -76,7 +76,16 @@ export default {
     quotaUsedUnlimited: '已用 {used} / 無限制',
     langZhCN: '简体中文',
     langZhTW: '繁體中文',
-    langEn: 'English'
+    langEn: 'English',
+    smartSearch: '智慧搜尋',
+  },
+  semanticSearch: {
+    title: '智慧搜尋',
+    placeholder: '用自然語言描述要找的內容…',
+    search: '搜尋',
+    needQuery: '請輸入搜尋內容',
+    emptyNoIndex: '暫無已索引檔案。請先在檔案預覽中建立索引，檔名搜尋仍可用。',
+    emptyNoMatch: '未找到內容相關的已索引檔案',
   },
   sessionManage: {
     title: '工作階段管理',

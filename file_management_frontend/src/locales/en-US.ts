@@ -76,7 +76,17 @@ export default {
     quotaUsedUnlimited: 'Used {used} / Unlimited',
     langZhCN: '简体中文',
     langZhTW: '繁體中文',
-    langEn: 'English'
+    langEn: 'English',
+    smartSearch: 'Smart search',
+  },
+  semanticSearch: {
+    title: 'Smart search',
+    placeholder: 'Describe what you are looking for in natural language…',
+    search: 'Search',
+    needQuery: 'Please enter a search query',
+    emptyNoIndex:
+      'No indexed files yet. Build an index in file preview first; filename search still works.',
+    emptyNoMatch: 'No content-related indexed files found',
   },
   sessionManage: {
     title: 'Session management',

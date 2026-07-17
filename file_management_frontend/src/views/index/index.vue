@@ -13,7 +13,11 @@
             @select-image="handleSelectImage" />
           <el-button :icon="FolderAdd" @click="showCreateFolderDialog">{{ t('index.createFolder') }}</el-button>
         </template>
-        <template #right />
+        <template #right>
+          <el-button @click="semanticSearchVisible = true">
+            {{ t('semanticSearch.title') }}
+          </el-button>
+        </template>
       </GlobalHeader>
 
       <!-- 文件操作工具栏 -->
@@ -40,13 +44,8 @@
         </div>
       </div>
 
-      <FileFilterBar
-        :model-value="fileFilters"
-        :features="driveFilterBarFeatures"
-        :tag-options="tagOptions"
-        @update:model-value="onFileFiltersUpdate"
-        @apply="loadFiles"
-      />
+      <FileFilterBar :model-value="fileFilters" :features="driveFilterBarFeatures" :tag-options="tagOptions"
+        @update:model-value="onFileFiltersUpdate" @apply="loadFiles" />
 
       <!-- 批量操作工具栏 (当有选中文件时显示) -->
       <div class="batch-toolbar" v-if="selectedFiles.size > 0">
@@ -66,13 +65,8 @@
 
 
       <!-- 文件列表区域：在此区域监听拖拽，避免未 preventDefault 时浏览器默认打开文件 -->
-      <el-main
-        class="file-content"
-        @dragover.prevent
-        @drop.prevent="handleDrop"
-        @dragenter="handleDragEnter"
-        @dragleave="handleDragLeave"
-      >
+      <el-main class="file-content" @dragover.prevent @drop.prevent="handleDrop" @dragenter="handleDragEnter"
+        @dragleave="handleDragLeave">
         <!-- 拖拽提示层（仅展示；事件由父级 el-main 统一处理） -->
         <div class="drop-zone-overlay" :class="{ show: isDragOver }">
           <div class="drop-zone-content">
@@ -90,7 +84,7 @@
           @context-menu="handleRightClick" @rename="showRenameDialog" @delete="deleteFile" @move="handleMoveFile"
           @download="downloadFile" @history="showHistory" @file-drop="handleFileItemDrop"
           @sort-change="handleSortChange" @toggle-selection="toggleSelection" @select-all="selectAll"
-          @tag="handleTagFile"         />
+          @tag="handleTagFile" />
       </el-main>
     </el-container>
 
@@ -132,15 +126,9 @@
     <CustomImageViewer v-model="previewVisible" :url-list="previewUrlList" :initial-index="previewInitialIndex" />
 
     <!-- 视频播放弹窗 -->
-    <video-player-dialog
-      v-model="videoPlayerVisible"
-      :title="currentVideoTitle"
-      :video-url="currentVideoUrl"
-      :file-name="currentVideoTitle"
-      :file-id="currentVideoFile?.id"
-      :media-kind="currentMediaKind"
-      @download="currentVideoFile && downloadFile(currentVideoFile)"
-    />
+    <video-player-dialog v-model="videoPlayerVisible" :title="currentVideoTitle" :video-url="currentVideoUrl"
+      :file-name="currentVideoTitle" :file-id="currentVideoFile?.id" :media-kind="currentMediaKind"
+      @download="currentVideoFile && downloadFile(currentVideoFile)" />
 
     <!-- 移动文件弹窗 -->
     <MoveDialog v-model="moveDialogVisible" :files-to-move="filesToMove" @success="handleMoveSuccess" />
@@ -153,39 +141,26 @@
     <OfficePreviewDialog v-model="officePreviewVisible" :file-id="currentOfficeFile?.id"
       :file-name="currentOfficeFile?.fileName"
       :file-size-bytes="currentOfficeFile?.storage?.fileSize ?? currentOfficeFile?.fileSize ?? 0"
-      :enable-ai-panel="officePreviewEnableAi"
-      @download="currentOfficeFile && downloadFile(currentOfficeFile)" />
+      :enable-ai-panel="officePreviewEnableAi" @download="currentOfficeFile && downloadFile(currentOfficeFile)" />
 
-    <PdfDocumentPreviewDialog
-      v-model="pdfPreviewVisible"
-      :file-id="currentPdfFile?.id"
-      :file-name="currentPdfFile?.fileName"
-      @download="currentPdfFile && downloadFile(currentPdfFile)"
-    />
+    <PdfDocumentPreviewDialog v-model="pdfPreviewVisible" :file-id="currentPdfFile?.id"
+      :file-name="currentPdfFile?.fileName" @download="currentPdfFile && downloadFile(currentPdfFile)" />
 
-    <TextChunkPreviewDialog
-      v-model="textChunkPreviewVisible"
-      :file-id="textChunkFileId"
-      :file-name="textChunkFileName"
-    />
+    <TextChunkPreviewDialog v-model="textChunkPreviewVisible" :file-id="textChunkFileId"
+      :file-name="textChunkFileName" />
 
     <!-- 压缩包在线解压到当前网盘目录 -->
-    <ArchiveExtractDialog
-      v-if="archiveExtractTarget"
-      v-model="archiveExtractVisible"
-      :file-id="archiveExtractTarget.id"
-      :parent-id="currentFolderId"
-      :current-dir-name="archiveExtractCurrentDirLabel"
-      @success="loadFiles"
-    />
+    <ArchiveExtractDialog v-if="archiveExtractTarget" v-model="archiveExtractVisible" :file-id="archiveExtractTarget.id"
+      :parent-id="currentFolderId" :current-dir-name="archiveExtractCurrentDirLabel" @success="loadFiles" />
 
-    <FileTagDialog
-      v-model="tagDialogVisible"
-      :files="filesForTagDialog"
-      @success="onTagDialogSuccess"
-    />
+    <FileTagDialog v-model="tagDialogVisible" :files="filesForTagDialog" @success="onTagDialogSuccess" />
 
     <ShareLinkDialog v-model="shareDialogVisible" :files="shareDialogFiles" />
+
+    <SemanticSearchDialog
+      v-model="semanticSearchVisible"
+      @select="onSemanticSearchSelect"
+    />
   </div>
 </template>
 
@@ -201,7 +176,13 @@ import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@stores/auth'
 import { authApi } from '@api/auth'
 import fileApiService from '@api/file'
-import type { FileItem as FileInfo, FileTagItem, FileQueryParams, FileTypeCategory } from '@typing/file'
+import type {
+  FileItem as FileInfo,
+  FileTagItem,
+  FileQueryParams,
+  FileTypeCategory,
+  SemanticSearchItem,
+} from '@typing/file'
 import type { FileFilterState, FileFilterFeatures } from '@typing/fileFilter'
 import { defaultFileFilterState, defaultFileFilterFeatures } from '@typing/fileFilter'
 import FileUpload from '@components/FileUpload/index.vue'
@@ -219,6 +200,7 @@ import CustomImageViewer from '@components/CustomImageViewer/index.vue'
 import Sidebar from './cpns/Sidebar.vue'
 import FileList from './cpns/FileList.vue'
 import GlobalHeader from '@components/GlobalHeader/index.vue'
+import SemanticSearchDialog from '@components/SemanticSearchDialog/index.vue'
 import FileFilterBar from '@components/FileFilterBar/index.vue'
 import { formatFileSize } from '@utils/fileUpload'
 import {
@@ -537,6 +519,25 @@ const handleDrop = (event: DragEvent) => {
 const handleFileClick = (file: FileInfo) => {
   // 单击选中文件
   console.log('选中文件:', file)
+}
+
+const semanticSearchVisible = ref(false)
+
+const onSemanticSearchSelect = async (item: SemanticSearchItem) => {
+  semanticSearchVisible.value = false
+  const file: FileInfo = {
+    id: item.id,
+    userId: 0,
+    parentId: item.parentId,
+    fileName: item.fileName,
+    fileType: 'file',
+    mimeType: item.mimeType ?? undefined,
+    fileSize: item.fileSize ?? undefined,
+    isDeleted: false,
+    createdAt: '',
+    updatedAt: '',
+  }
+  await handleFileDoubleClick(file)
 }
 
 // 图片预览相关
@@ -1045,8 +1046,6 @@ const formatStorage = (bytes: number) => {
   background-color: #f5f7fa;
 }
 
-
-
 .logo {
   color: #303133;
   margin: 0;
@@ -1199,8 +1198,6 @@ const formatStorage = (bytes: number) => {
     }
   }
 }
-
-
 
 // 响应式设计
 @media (max-width: 768px) {

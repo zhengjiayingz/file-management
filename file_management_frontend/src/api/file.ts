@@ -6,7 +6,8 @@ import type {
   CreateFolderParams,
   RenameFileParams,
   MoveFileParams,
-  FileQueryParams
+  FileQueryParams,
+  SemanticSearchResult
 } from '@typing/file'
 
 // 上传进度回调类型
@@ -144,6 +145,15 @@ export const fileApiService = {
     const res = await request.get<any>('/files', { params })
     return res.data.data
   },
+
+/** 语义搜索：按内容相关度找文件（仅已索引） */
+async searchFilesSemantic(params: {
+  q: string
+  limit?: number
+}): Promise<SemanticSearchResult> {
+  const res = await request.get<any>('/files/search', { params })
+  return res.data.data
+},
 
   /** 用户标签列表 */
   async listFileTags(): Promise<FileTagItem[]> {

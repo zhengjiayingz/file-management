@@ -15,10 +15,14 @@ import type { Request, Response } from 'express';
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
 import type { RequestUser } from '@/auth/types/jwt-payload.type';
 import { FilesQueryService } from './files-query.service';
+import { FilesSearchService } from './files-search.service';
 
 @Controller('files')
 export class FilesQueryController {
-  constructor(private readonly filesQueryService: FilesQueryService) {}
+  constructor(
+    private readonly filesQueryService: FilesQueryService,
+    private readonly filesSearchService: FilesSearchService,
+  ) {}
 
   @Get()
   getFiles(
@@ -26,6 +30,15 @@ export class FilesQueryController {
     @Query() query: Record<string, unknown>,
   ) {
     return this.filesQueryService.getFiles(user.id, query);
+  }
+
+  @Get('search')
+  async semanticSearch(
+    @CurrentUser() user: RequestUser,
+    @Query() query: Record<string, unknown>,
+  ) {
+    const data = await this.filesSearchService.semanticSearch(user.id, query);
+    return { success: true, data };
   }
 
   @Post('batch/download-zip')
