@@ -97,5 +97,5 @@ description: >-
 
 ## 项目上下文提示（F-07 等）
 
-- 大功能进度以 PRD / `docs/plans/*学习笔记*` / `MIGRATION.md` 为准，回答「下一步」前先对照这些文档与仓库现状，避免重复已完成步。
+- 大功能进度以 PRD / `docs/knowledge/*学习笔记*` / `docs/plans/*实现方案*` / `MIGRATION.md` 为准，回答「下一步」前先对照这些文档与仓库现状，避免重复已完成步。
 - F-07：产品代码在 `src/knowledge-bases/`；embedding / 单文件 RAG 工具 **F-07 落地后再抽公共层**（见 PRD F-07「目录与后续重构约定」）。
