@@ -1,9 +1,14 @@
 import { Readable } from 'node:stream';
 import archiver from 'archiver';
 import type { StorageProvider } from '@/storage/types';
+import { extractTextFromImage } from '@/files/ai/vision/vision.provider';
 
 jest.mock('./pdf-text.util', () => ({
   extractPdfTextWithPdfJs: jest.fn().mockResolvedValue(''),
+}));
+
+jest.mock('@/files/ai/vision/vision.provider', () => ({
+  extractTextFromImage: jest.fn().mockResolvedValue('OCR hello world'),
 }));
 
 import {
@@ -19,12 +24,18 @@ import {
 import { extractPdfTextWithPdfJs } from './pdf-text.util';
 
 const mockedExtractPdfTextWithPdfJs =
-  extractPdfTextWithPdfJs as jest.MockedFunction<typeof extractPdfTextWithPdfJs>;
+  extractPdfTextWithPdfJs as jest.MockedFunction<
+    typeof extractPdfTextWithPdfJs
+  >;
 
 const MINIMAL_PDF = Buffer.from(
   '%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Count 1/Kids[3 0 R]>>endobj\n3 0 obj<</Type/Page/MediaBox[0 0 3 3]>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF',
   'utf-8',
 );
+
+const mockedExtractTextFromImage = extractTextFromImage as jest.MockedFunction<
+  typeof extractTextFromImage
+>;
 
 function buildMinimalDocx(text: string): Promise<Buffer> {
   return new Promise((resolve, reject) => {
@@ -69,6 +80,8 @@ describe('text-extractor', () => {
   beforeEach(() => {
     mockedExtractPdfTextWithPdfJs.mockReset();
     mockedExtractPdfTextWithPdfJs.mockResolvedValue('');
+    mockedExtractTextFromImage.mockReset();
+    mockedExtractTextFromImage.mockResolvedValue('OCR hello world');
   });
 
   describe('softInsertEnglishSpaces', () => {
@@ -153,6 +166,42 @@ describe('text-extractor', () => {
         }),
       ).toBe(true);
     });
+
+    it('允许 .png / .jpg / .webp / .gif + 对应 image MIME', () => {
+      expect(
+        isIndexableTextDocument({
+          fileName: 'slide.png',
+          mimeType: 'image/png',
+        }),
+      ).toBe(true);
+      expect(
+        isIndexableTextDocument({
+          fileName: 'photo.jpg',
+          mimeType: 'image/jpeg',
+        }),
+      ).toBe(true);
+      expect(
+        isIndexableTextDocument({
+          fileName: 'shot.webp',
+          mimeType: 'image/webp',
+        }),
+      ).toBe(true);
+      expect(
+        isIndexableTextDocument({
+          fileName: 'anim.gif',
+          mimeType: 'image/gif',
+        }),
+      ).toBe(true);
+    });
+
+    it('图片扩展名与 MIME 不匹配时应拒绝', () => {
+      expect(
+        isIndexableTextDocument({
+          fileName: 'a.png',
+          mimeType: 'text/plain',
+        }),
+      ).toBe(false);
+    });
   });
 
   describe('extractTextFromBuffer', () => {
@@ -170,10 +219,32 @@ describe('text-extractor', () => {
     it('格式不支持时应抛 UnsupportedDocumentFormatError', async () => {
       await expect(
         extractTextFromBuffer(Buffer.from('x'), {
-          fileName: 'a.png',
-          mimeType: 'image/png',
+          fileName: 'a.mp4',
+          mimeType: 'video/mp4',
         }),
       ).rejects.toThrow(UnsupportedDocumentFormatError);
+    });
+
+    it('图片应走 OCR 并返回文本', async () => {
+      const text = await extractTextFromBuffer(Buffer.from('fake-png'), {
+        fileName: 'a.png',
+        mimeType: 'image/png',
+      });
+      expect(text).toBe('OCR hello world');
+      expect(mockedExtractTextFromImage).toHaveBeenCalledWith(
+        Buffer.from('fake-png'),
+        'image/png',
+      );
+    });
+
+    it('OCR 空白结果应抛错', async () => {
+      mockedExtractTextFromImage.mockResolvedValue('   ');
+      await expect(
+        extractTextFromBuffer(Buffer.from('x'), {
+          fileName: 'blank.png',
+          mimeType: 'image/png',
+        }),
+      ).rejects.toThrow(/未识别到可用文字/);
     });
 
     it('非法 UTF-8 应抛 UnsupportedDocumentFormatError', async () => {
@@ -292,13 +363,32 @@ describe('text-extractor', () => {
 
       await expect(
         extractTextFromStorage(storage, {
-          storedPath: 'uploads/a.png',
-          fileName: 'a.png',
-          mimeType: 'image/png',
+          storedPath: 'uploads/a.mp4',
+          fileName: 'a.mp4',
+          mimeType: 'video/mp4',
         }),
       ).rejects.toThrow(UnsupportedDocumentFormatError);
 
       expect(existsMock).not.toHaveBeenCalled();
+    });
+
+    it('图片应通过 StorageProvider 读取并 OCR', async () => {
+      const { storage, existsMock, getReadStreamMock } = createMockStorage({
+        getReadStream: jest
+          .fn()
+          .mockResolvedValue(Readable.from([Buffer.from('img')])),
+      });
+
+      const text = await extractTextFromStorage(storage, {
+        storedPath: 'uploads/a.png',
+        fileName: 'a.png',
+        mimeType: 'image/png',
+      });
+
+      expect(text).toBe('OCR hello world');
+      expect(existsMock).toHaveBeenCalledWith('uploads/a.png');
+      expect(getReadStreamMock).toHaveBeenCalledWith('uploads/a.png');
+      expect(mockedExtractTextFromImage).toHaveBeenCalled();
     });
 
     it('PDF 应通过 StorageProvider 读取并解析', async () => {

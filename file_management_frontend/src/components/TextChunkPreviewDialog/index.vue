@@ -50,12 +50,8 @@
       </section>
 
       <section class="preview-split__right">
-        <DocumentAiPanel
-          ref="aiPanelRef"
-          :file-id="fileId"
-          :file-name="fileName"
-          v-model:selected-text="selectedText"
-        />
+        <DocumentAiPanel ref="aiPanelRef" :file-id="fileId" :file-name="fileName"
+          v-model:selected-text="selectedText" />
       </section>
     </div>
   </el-dialog>
@@ -496,4 +492,3 @@ function onScroll() {
   gap: 8px;
 }
 </style>
-

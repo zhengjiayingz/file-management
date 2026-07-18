@@ -14,6 +14,8 @@ import {
   type SummaryGenreValue,
 } from '@/files/ai/summary/summary-genre.types';
 
+import { joinOverlappingChunkContents } from './chunk/text-chunker';
+
 const ACTIVE_STATUSES: DocumentIndexStatus[] = [
   'pending',
   'extracting',
@@ -103,7 +105,7 @@ export class FilesAiIndexService {
       })
     ) {
       throw new BadRequestException(
-        '仅支持 UTF-8 编码的 .txt / .md、含文字层的 .pdf 及 .docx 文件',
+        '仅支持 UTF-8 编码的 .txt / .md、含文字层的 .pdf、.docx 及可 OCR 的图片（png/jpg/webp/gif）',
       );
     }
     // 是否已有进行中的任务，每个文件在 document_index_jobs 里最多一行（userFileId 唯一）。
@@ -204,6 +206,35 @@ export class FilesAiIndexService {
     return {
       success: true,
       data: toStatusDto(job),
+    };
+  }
+
+  /** GET /api/files/:id/ai/extracted-text */
+  // 索引 ready 后返回近似全文（由 chunks 去 overlap 拼接），供图片 OCR 划词面板使用。
+  async getExtractedText(userId: number, fileId: number) {
+    const userFile = await this.prisma.userFile.findFirst({
+      where: { id: fileId, userId, isDeleted: false },
+      select: { id: true },
+    });
+    if (!userFile) {
+      throw new NotFoundException('文件不存在');
+    }
+    const job = await this.prisma.documentIndexJob.findUnique({
+      where: { userFileId: fileId },
+      select: { status: true },
+    });
+    if (!job || job.status !== 'ready') {
+      throw new BadRequestException('请先完成文档索引后再查看提取文本');
+    }
+    const rows = await this.prisma.documentChunk.findMany({
+      where: { userFileId: fileId },
+      orderBy: { chunkIndex: 'asc' },
+      select: { content: true },
+    });
+    const text = joinOverlappingChunkContents(rows.map((r) => r.content));
+    return {
+      success: true,
+      data: { text, chunkCount: rows.length },
     };
   }
 }

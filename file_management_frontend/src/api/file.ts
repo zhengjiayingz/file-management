@@ -216,11 +216,16 @@ async searchFilesSemantic(params: {
   },
 
   /** 批量移入回收站（软删），服务端展开子孙并一次 updateMany */
-  async deleteFilesBatch(ids: number[]): Promise<{ deletedCount: number } | void> {
-    const res = ids.length > 1 ?
-      await request.post<any>('/files/batch/delete', { ids }) :
-      await request.delete(`/files/${ids[0]}`)
-    return res.data.data
+  async deleteFilesBatch(ids: number[]): Promise<{ deletedCount: number }> {
+    if (ids.length > 1) {
+      const res = await request.post<{
+        success: boolean
+        data: { deletedCount: number }
+      }>('/files/batch/delete', { ids })
+      return res.data.data
+    }
+    await request.delete(`/files/${ids[0]}`)
+    return { deletedCount: 1 }
   },
 
   /** 批量移动（事务内更新；选中项会去重为顶层根） */

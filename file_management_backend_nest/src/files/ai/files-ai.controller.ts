@@ -100,6 +100,15 @@ export class FilesAiController {
     return this.filesAiIndexService.getIndexStatus(user.id, fileId);
   }
 
+  /** 获取索引提取的近似全文（由 chunks 去 overlap 拼接），供图片 OCR 划词面板使用。 */
+  @Get(':id/ai/extracted-text')
+  getExtractedText(
+    @CurrentUser() user: RequestUser,
+    @Param('id', ParseIntPipe) fileId: number,
+  ) {
+    return this.filesAiIndexService.getExtractedText(user.id, fileId);
+  }
+
   /** 读取已入库的结构化摘要（索引 ready 后） */
   @Get(':id/ai/summary')
   getSummary(

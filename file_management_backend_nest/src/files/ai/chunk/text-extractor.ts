@@ -2,6 +2,7 @@ import type { Readable } from 'node:stream';
 import type { StorageProvider } from '@/storage/types';
 import { EmptyDocxError, extractDocxText } from './docx-text.util';
 import { extractPdfTextWithPdfJs } from './pdf-text.util';
+import { extractTextFromImage } from '@/files/ai/vision/vision.provider';
 
 /** 格式不支持（扩展名/MIME 不匹配） */
 export class UnsupportedDocumentFormatError extends Error {
@@ -80,7 +81,24 @@ function isDocxMime(mimeType: string): boolean {
   );
 }
 
-/** 扩展名 + MIME 双判断：txt / md / 文字层 pdf / docx */
+// 图片白名单
+const INDEXABLE_IMAGE_EXTS = new Set([
+  '.png',
+  '.jpg',
+  '.jpeg',
+  '.webp',
+  '.gif',
+]);
+
+const INDEXABLE_IMAGE_MIMES = new Set([
+  'image/png',
+  'image/jpeg',
+  'image/jpg',
+  'image/webp',
+  'image/gif',
+]);
+
+/** 扩展名 + MIME 双判断：txt / md / 文字层 pdf / docx / 图片 */
 export function isIndexableTextDocument(input: {
   fileName: string;
   mimeType?: string | null;
@@ -92,6 +110,7 @@ export function isIndexableTextDocument(input: {
   if (isMdExtension(input.fileName)) return isMdMime(mimeType);
   if (isPdfExtension(input.fileName)) return isPdfMime(mimeType);
   if (isDocxExtension(input.fileName)) return isDocxMime(mimeType);
+  if (isImageExtension(input.fileName)) return isImageMime(mimeType);
   return false;
 }
 
@@ -111,6 +130,26 @@ function isDocxDocument(input: {
   return (
     isDocxExtension(input.fileName) && isDocxMime(normalizeMime(input.mimeType))
   );
+}
+
+function isImageDocument(input: {
+  fileName: string;
+  mimeType?: string | null;
+}) {
+  return (
+    isImageExtension(input.fileName) &&
+    isImageMime(normalizeMime(input.mimeType))
+  );
+}
+
+function isImageExtension(fileName: string): boolean {
+  const lower = fileName.toLowerCase();
+  const dot = lower.lastIndexOf('.');
+  if (dot < 0) return false;
+  return INDEXABLE_IMAGE_EXTS.has(lower.slice(dot));
+}
+function isImageMime(mimeType: string): boolean {
+  return INDEXABLE_IMAGE_MIMES.has(mimeType);
 }
 
 export { EmptyDocxError };
@@ -180,6 +219,17 @@ async function extractTextFromBufferInternal(
 
   if (isDocxDocument(input)) {
     return extractDocxText(buffer);
+  }
+  // 从图片抽取文字
+  if (isImageDocument(input)) {
+    const mime = normalizeMime(input.mimeType) || 'image/png';
+    const text = normalizeExtractedText(
+      await extractTextFromImage(buffer, mime),
+    );
+    if (!text) {
+      throw new Error('OCR 未识别到可用文字');
+    }
+    return text;
   }
 
   return decodeUtf8(buffer);

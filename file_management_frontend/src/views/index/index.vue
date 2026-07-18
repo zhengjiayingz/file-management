@@ -122,8 +122,14 @@
         </el-button>
       </template>
     </el-dialog>
-    <!-- 图片大图预览 -->
-    <CustomImageViewer v-model="previewVisible" :url-list="previewUrlList" :initial-index="previewInitialIndex" />
+    <ImageDocumentPreviewDialog
+      v-model="imagePreviewVisible"
+      :file-id="currentImageFile?.id"
+      :file-name="currentImageFile?.fileName"
+      :gallery-url-list="imageGalleryUrlList"
+      :gallery-initial-index="imageGalleryInitialIndex"
+      @download="currentImageFile && downloadFile(currentImageFile)"
+    />
 
     <!-- 视频播放弹窗 -->
     <video-player-dialog v-model="videoPlayerVisible" :title="currentVideoTitle" :video-url="currentVideoUrl"
@@ -157,10 +163,7 @@
 
     <ShareLinkDialog v-model="shareDialogVisible" :files="shareDialogFiles" />
 
-    <SemanticSearchDialog
-      v-model="semanticSearchVisible"
-      @select="onSemanticSearchSelect"
-    />
+    <SemanticSearchDialog v-model="semanticSearchVisible" @select="onSemanticSearchSelect" />
   </div>
 </template>
 
@@ -196,7 +199,8 @@ import TextChunkPreviewDialog from '@components/TextChunkPreviewDialog/index.vue
 import ArchiveExtractDialog from '@components/ArchiveExtractDialog/index.vue'
 import FileTagDialog from '@components/FileTagDialog/index.vue'
 import ShareLinkDialog from '@components/ShareLinkDialog/index.vue'
-import CustomImageViewer from '@components/CustomImageViewer/index.vue'
+// import CustomImageViewer from '@components/CustomImageViewer/index.vue'
+import ImageDocumentPreviewDialog from '@components/ImageDocumentPreviewDialog/index.vue'
 import Sidebar from './cpns/Sidebar.vue'
 import FileList from './cpns/FileList.vue'
 import GlobalHeader from '@components/GlobalHeader/index.vue'
@@ -540,10 +544,11 @@ const onSemanticSearchSelect = async (item: SemanticSearchItem) => {
   await handleFileDoubleClick(file)
 }
 
-// 图片预览相关
-const previewVisible = ref(false)
-const previewUrlList = ref<string[]>([])
-const previewInitialIndex = ref(0)
+// 图片预览（三栏 AI）+ 双击大图轮播用的画廊
+const imagePreviewVisible = ref(false)
+const currentImageFile = ref<FileInfo | null>(null)
+const imageGalleryUrlList = ref<string[]>([])
+const imageGalleryInitialIndex = ref(0)
 
 // 获取文件下载链接（用于预览原图或播放视频）
 const getFileViewUrl = (file: FileInfo) => {
@@ -604,17 +609,13 @@ const handleFileDoubleClick = async (file: FileInfo) => {
   if (file.fileType === 'folder') {
     navigateToFolder(file.id, file.fileName)
   } else {
-    // 如果是图片，则打开大图预览
     if (isImageFile(file)) {
-      // 获取当前列表中的所有图片
-      const imageFiles = filteredFiles.value.filter(f => isImageFile(f))
-      // 生成 URL 列表
-      previewUrlList.value = imageFiles.map(f => getFileViewUrl(f))
-      // 找到当前点击图片的索引
-      previewInitialIndex.value = imageFiles.findIndex(f => f.id === file.id)
-      if (previewInitialIndex.value === -1) previewInitialIndex.value = 0
-
-      previewVisible.value = true
+      currentImageFile.value = file
+      const imageFiles = filteredFiles.value.filter((f) => isImageFile(f))
+      imageGalleryUrlList.value = imageFiles.map((f) => getFileViewUrl(f))
+      const idx = imageFiles.findIndex((f) => f.id === file.id)
+      imageGalleryInitialIndex.value = idx >= 0 ? idx : 0
+      imagePreviewVisible.value = true
     } else if (isAudioFile(file)) {
       currentMediaKind.value = 'audio'
       currentVideoUrl.value = getFileViewUrl(file)

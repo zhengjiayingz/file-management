@@ -129,6 +129,16 @@ async function parseErrorResponse(res: Response): Promise<string> {
   return message
 }
 
+export async function getDocumentExtractedText(
+  fileId: number,
+): Promise<{ text: string; chunkCount: number }> {
+  const res = await request.get<{
+    success: boolean
+    data: { text: string; chunkCount: number }
+  }>(`/files/${fileId}/ai/extracted-text`)
+  return res.data.data
+}
+
 /** 触发文档索引（异步，需 Worker 消费队列） */
 export async function triggerDocumentIndex(
   fileId: number,

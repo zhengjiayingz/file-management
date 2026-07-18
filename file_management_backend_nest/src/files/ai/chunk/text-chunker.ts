@@ -66,3 +66,22 @@ export function chunkText(
 
   return chunks;
 }
+
+/**
+ * 按 chunkIndex 还原近似全文（去掉滑动窗口 overlap 的重复前缀）。
+ */
+export function joinOverlappingChunkContents(
+  contents: string[],
+  overlap: number = DEFAULT_CHUNK_OVERLAP,
+): string {
+  if (contents.length === 0) return '';
+  if (contents.length === 1) return contents[0] ?? '';
+  if (overlap <= 0) return contents.join('');
+
+  let text = contents[0] ?? '';
+  for (let i = 1; i < contents.length; i++) {
+    const part = contents[i] ?? '';
+    text += part.slice(Math.min(overlap, part.length));
+  }
+  return text;
+}
