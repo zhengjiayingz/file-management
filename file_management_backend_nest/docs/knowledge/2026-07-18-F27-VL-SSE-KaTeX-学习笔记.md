@@ -5,7 +5,7 @@
 > 关联：  
 > - PRD：[2026-07-08-ai-features-prd.md](../plans/2026-07-08-ai-features-prd.md) § F-27  
 > - 产品约定：[2026-07-18-F27-截图数学解题-产品约定.md](../plans/2026-07-18-F27-截图数学解题-产品约定.md)  
-> - 实现方案：[2026-07-18-F27-截图数学解题-实现方案.md](../plans/2026-07-18-F27-截图数学解题-实现方案.md)（若已落盘）  
+> - 实现方案：[2026-07-18-F27-截图数学解题-实现方案.md](../plans/2026-07-18-F27-截图数学解题-实现方案.md)（S18c ✅）  
 > - 前置概念：[2026-07-17-视觉-OCR-VL-CLIP-学习笔记.md](./2026-07-17-视觉-OCR-VL-CLIP-学习笔记.md)（OCR vs VL vs CLIP）  
 > 说明：把「F-27 新不新、公式怎么显示、VL 怎么接到 Nest、SSE 是什么」写清楚，方便回滚后带写与面试口述。
 
@@ -375,7 +375,7 @@ data: [DONE]
 | 只要图上的字进检索 | OCR（F-26），不要上 VL |
 | 要看图解题 / 看图问答 | VL（F-27），不要用纯文本模型冒充 |
 | 公式显示乱 / 露出 `$$` | 查 KaTeX 是否生效、定界符是否完整、流是否已结束再全量渲 |
-| 请求 200 但气泡空 | 优先查 `AI_MATH_VISION_MODEL` 是否为 **VL**；看 Network 的 `solve-math` 而非索引 `status` |
+| 请求 200 但气泡空 | 优先查模型是否为 **VL**、Network `solve-math` 体是否有字；硅基勿用 AI SDK `{ type: 'image' }`（须 `image_url` + data URL，见落地 Provider） |
 | 流式卡死 / 取消 | 前端 AbortController；后端 `req.on('close')` abort 上游 |
 | 以后「临时截图不进网盘」 | `tempImageId` 中间态（产品约定已记，非本期） |
 
@@ -386,3 +386,5 @@ data: [DONE]
 | 日期 | 说明 |
 |------|------|
 | 2026-07-18 | 初版：汇总 F-27 新技术点 / LaTeX·KaTeX / VL·后端交互 / SSE 四轮问答 |
+
+| 2026-07-19 | F-27 交付：补充硅基多模态须手写 `image_url` SSE（非 AI SDK image part） |
