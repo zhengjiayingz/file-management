@@ -25,6 +25,7 @@ import { OperationLogModule } from './operation-log/operation-log.module';
 import { JobsModule } from './jobs/jobs.module';
 import { KnowledgeBasesModule } from './knowledge-bases/knowledge-bases.module';
 import { WrongQuestionsModule } from './wrong-questions/wrong-questions.module';
+import { MathTempModule } from './math-temp/math-temp.module';
 
 @Module({
   imports: [
@@ -63,6 +64,7 @@ import { WrongQuestionsModule } from './wrong-questions/wrong-questions.module';
     MessageModule,
     ShareModule,
     KnowledgeBasesModule,
+    MathTempModule,
     WrongQuestionsModule,
     RealtimeModule,
     OperationLogModule,

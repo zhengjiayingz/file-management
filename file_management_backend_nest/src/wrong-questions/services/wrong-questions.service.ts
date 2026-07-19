@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -8,8 +9,10 @@ import { PrismaService } from '@/prisma/prisma.service';
 import { StorageService } from '@/storage/storage.service';
 import { extractTextFromImage } from '@/files/ai/vision/vision.provider';
 import { assertSolveMathImageFile } from '@/files/ai/files-ai-math.service';
+import { MathTempPromoteService } from '@/math-temp/services/math-temp-promote.service';
 import type {
   CreateWrongQuestionDto,
+  CreateWrongQuestionFromTempDto,
   ListWrongQuestionsQueryDto,
   UpdateWrongQuestionDto,
 } from '../dto/wrong-questions.dto';
@@ -72,6 +75,7 @@ export class WrongQuestionsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly storageService: StorageService,
+    private readonly mathTempPromote: MathTempPromoteService,
   ) {}
 
   /** 创建错题：校验本人网盘图片；题干无效时对原图 OCR */
@@ -116,6 +120,54 @@ export class WrongQuestionsService {
     return this.toDto(row, {
       fileName: userFile.fileName,
       imageAvailable: true,
+    });
+  }
+
+  /**
+   * 路径②：临时图转正 + 写错题本
+   * 同一 tempImageId 二次提交：若已有条目则返回已有；否则 409
+   */
+  async createFromTemp(userId: number, dto: CreateWrongQuestionFromTempDto) {
+    const { userFileId, alreadyPromoted } =
+      await this.mathTempPromote.promoteImageOnly(
+        userId,
+        dto.tempImageId,
+        dto.fileName,
+      );
+
+    if (alreadyPromoted) {
+      const existing = await this.prisma.wrongQuestionBookItem.findFirst({
+        where: { userId, userFileId },
+        orderBy: { id: 'desc' },
+        include: {
+          userFile: {
+            select: {
+              fileName: true,
+              isDeleted: true,
+              storageId: true,
+            },
+          },
+        },
+      });
+      if (existing) {
+        return this.toDto(existing, {
+          fileName: existing.userFile?.fileName ?? null,
+          imageAvailable: Boolean(
+            existing.userFile &&
+              !existing.userFile.isDeleted &&
+              existing.userFile.storageId != null,
+          ),
+        });
+      }
+      throw new ConflictException('临时图已使用');
+    }
+
+    return this.create(userId, {
+      userFileId,
+      questionText: dto.questionText,
+      answerText: dto.answerText,
+      tags: dto.tags,
+      difficulty: dto.difficulty,
     });
   }
 

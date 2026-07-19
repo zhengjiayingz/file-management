@@ -69,6 +69,7 @@ export default {
     myShares: '我的分享',
     knowledgeBases: '知識庫',
     wrongBook: '錯題本',
+    mathTempLab: '臨時截圖調試',
   },
   header: {
     memberCenter: '會員中心',

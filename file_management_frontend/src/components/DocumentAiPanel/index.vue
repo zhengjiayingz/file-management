@@ -172,11 +172,15 @@ import {
   triggerDocumentIndex,
   SUMMARY_GENRE_GROUPS,
   streamSolveMath,
+  getFileAiChatSession,
+  clearFileAiChatSession,
+  appendFileAiChatMessage,
   type AiChatMessage,
   type DocumentIndexStatus,
   type DocumentIndexStatusData,
   type DocumentKnowledgeData,
   type DocumentSummaryData,
+  type FileAiChatMode,
   type SummaryGenre,
   type TranslateTargetLang,
 } from '@api/ai'
@@ -239,14 +243,22 @@ const selectedText = computed({
 })
 
 const question = ref('')
-const chatMode = ref<'selection' | 'rag' | 'solve'>('selection')
-const chatMessages = ref<UiChatMessage[]>([])
-/** 解题独立会话；切回划词/RAG 时不清空 */
+const chatMode = ref<FileAiChatMode>('selection')
+/** 划词 / RAG / 解题 三套独立会话（与落盘 mode 对齐） */
+const selectionMessages = ref<UiChatMessage[]>([])
+const ragMessages = ref<UiChatMessage[]>([])
 const solveMessages = ref<UiChatMessage[]>([])
+const historyLoading = ref(false)
+/** startSolve 等场景自行拉历史时，跳过 chatMode watch 的二次加载 */
+let suppressHistoryLoad = false
 /** 当前模式展示的消息列表 */
-const activeChatMessages = computed(() =>
-  chatMode.value === 'solve' ? solveMessages.value : chatMessages.value,
-)
+const activeChatMessages = computed(() => messagesRefFor(chatMode.value).value)
+
+function messagesRefFor(mode: FileAiChatMode) {
+  if (mode === 'solve') return solveMessages
+  if (mode === 'rag') return ragMessages
+  return selectionMessages
+}
 const asking = ref(false)
 const askError = ref('')
 const translateTargetLang = ref<TranslateTargetLang>('default')
@@ -358,12 +370,67 @@ watch(chatMode, (mode) => {
   if (mode === 'solve') {
     void refreshTagOptions()
   }
+  if (suppressHistoryLoad) return
+  void loadChatHistory(mode)
 })
+
+watch(
+  () => props.fileId,
+  () => {
+    selectionMessages.value = []
+    ragMessages.value = []
+    solveMessages.value = []
+    void loadChatHistory(chatMode.value)
+  },
+)
 
 onUnmounted(() => {
   stopAsk()
   stopIndexPolling()
 })
+
+/** 从服务端加载当前文件某模式历史 */
+async function loadChatHistory(mode: FileAiChatMode) {
+  if (!props.fileId) return
+  historyLoading.value = true
+  try {
+    const data = await getFileAiChatSession(props.fileId, mode)
+    const list = messagesRefFor(mode)
+    list.value = data.messages.map((m) => ({
+      id: `stored-${m.id}`,
+      role: m.role,
+      content: m.content,
+    }))
+    scrollChatToBottom()
+  } catch {
+    /* 拉历史失败不阻断对话 */
+  } finally {
+    historyLoading.value = false
+  }
+}
+
+/** 流式成功后落盘一轮问答 */
+async function persistChatRound(
+  mode: FileAiChatMode,
+  userContent: string,
+  assistantContent: string,
+  userMeta?: Record<string, unknown>,
+) {
+  if (!userContent.trim() || !assistantContent.trim()) return
+  try {
+    await appendFileAiChatMessage(props.fileId, mode, {
+      role: 'user',
+      content: userContent,
+      meta: userMeta,
+    })
+    await appendFileAiChatMessage(props.fileId, mode, {
+      role: 'assistant',
+      content: assistantContent,
+    })
+  } catch {
+    /* 落盘失败不打断 UI */
+  }
+}
 
 function stopIndexPolling() {
   if (indexPollTimer) {
@@ -486,22 +553,27 @@ function scrollChatToBottom() {
   })
 }
 
-function clearChat() {
+async function clearChat() {
   stopAsk()
-  if (chatMode.value === 'solve') {
-    solveMessages.value = []
-  } else {
-    chatMessages.value = []
-  }
+  const mode = chatMode.value
+  messagesRefFor(mode).value = []
   question.value = ''
   askError.value = ''
+  try {
+    await clearFileAiChatSession(props.fileId, mode)
+  } catch {
+    /* 忽略清空失败 */
+  }
 }
 
 function stopAsk() {
   askAbort?.abort()
   askAbort = null
   asking.value = false
-  for (const msg of chatMessages.value) {
+  for (const msg of selectionMessages.value) {
+    if (msg.streaming) msg.streaming = false
+  }
+  for (const msg of ragMessages.value) {
     if (msg.streaming) msg.streaming = false
   }
   for (const msg of solveMessages.value) {
@@ -531,7 +603,7 @@ async function submitChat() {
   }
   // solve：不要求选中 / 索引
 
-  const list = chatMode.value === 'solve' ? solveMessages : chatMessages
+  const list = messagesRefFor(chatMode.value)
   const history: AiChatMessage[] = list.value
     .filter((m) => !m.streaming && m.content.trim())
     .map(({ role, content }) => ({ role, content }))
@@ -545,6 +617,8 @@ async function submitChat() {
 
   asking.value = true
   askAbort = new AbortController()
+  const modeSnapshot = chatMode.value
+  const selectionSnapshot = selectedText.value
 
   try {
     const onChunk = (chunk: string) => {
@@ -555,7 +629,7 @@ async function submitChat() {
       }
     }
 
-    if (chatMode.value === 'solve') {
+    if (modeSnapshot === 'solve') {
       await streamSolveMath({
         fileId: props.fileId,
         question: userContent,
@@ -564,11 +638,11 @@ async function submitChat() {
         signal: askAbort.signal,
         onChunk,
       })
-    } else if (chatMode.value === 'selection') {
+    } else if (modeSnapshot === 'selection') {
       await streamAskAboutSelection({
         fileId: props.fileId,
         question: userContent,
-        selectedText: selectedText.value,
+        selectedText: selectionSnapshot,
         messages: history,
         fileName: props.fileName,
         signal: askAbort.signal,
@@ -583,6 +657,18 @@ async function submitChat() {
         onChunk,
       })
     }
+
+    const assistantMsg = list.value.find((m) => m.id === assistantId)
+    if (assistantMsg?.content.trim()) {
+      await persistChatRound(
+        modeSnapshot,
+        userContent,
+        assistantMsg.content,
+        modeSnapshot === 'selection'
+          ? { selectedText: selectionSnapshot }
+          : undefined,
+      )
+    }
   } catch (e: unknown) {
     if (e instanceof DOMException && e.name === 'AbortError') {
       return
@@ -592,7 +678,7 @@ async function submitChat() {
       list.value.splice(idx, 1)
     }
     const fallback =
-      chatMode.value === 'solve'
+      modeSnapshot === 'solve'
         ? t('preview.solveMathError')
         : t('preview.aiAskError')
     const msg = e instanceof Error ? e.message : fallback
@@ -624,13 +710,19 @@ async function submitTranslate() {
   }
 
   rightPanelTab.value = 'chat'
+  const selectionSnapshot = selectedText.value
   const userContent = t('preview.aiTranslateUserMsg', {
     lang: translateLangLabel(translateTargetLang.value),
   })
   const userId = genChatId()
   const assistantId = genChatId()
-  chatMessages.value.push({ id: userId, role: 'user', content: userContent })
-  chatMessages.value.push({ id: assistantId, role: 'assistant', content: '', streaming: true })
+  selectionMessages.value.push({ id: userId, role: 'user', content: userContent })
+  selectionMessages.value.push({
+    id: assistantId,
+    role: 'assistant',
+    content: '',
+    streaming: true,
+  })
   scrollChatToBottom()
 
   asking.value = true
@@ -639,30 +731,38 @@ async function submitTranslate() {
   try {
     await streamTranslate({
       fileId: props.fileId,
-      text: selectedText.value,
+      text: selectionSnapshot,
       targetLang: translateTargetLang.value,
       fileName: props.fileName,
       signal: askAbort.signal,
       onChunk: (chunk: string) => {
-        const msg = chatMessages.value.find((m) => m.id === assistantId)
+        const msg = selectionMessages.value.find((m) => m.id === assistantId)
         if (msg) {
           msg.content += chunk
           scrollChatToBottom()
         }
       },
     })
+    const assistantMsg = selectionMessages.value.find((m) => m.id === assistantId)
+    if (assistantMsg?.content.trim()) {
+      await persistChatRound('selection', userContent, assistantMsg.content, {
+        selectedText: selectionSnapshot,
+        kind: 'translate',
+        targetLang: translateTargetLang.value,
+      })
+    }
   } catch (e: unknown) {
     if (e instanceof DOMException && e.name === 'AbortError') {
       return
     }
-    const idx = chatMessages.value.findIndex((m) => m.id === assistantId)
-    if (idx >= 0 && !chatMessages.value[idx]?.content) {
-      chatMessages.value.splice(idx, 1)
+    const idx = selectionMessages.value.findIndex((m) => m.id === assistantId)
+    if (idx >= 0 && !selectionMessages.value[idx]?.content) {
+      selectionMessages.value.splice(idx, 1)
     }
     const msg = e instanceof Error ? e.message : t('preview.aiTranslateError')
     askError.value = msg || t('preview.aiTranslateError')
   } finally {
-    const msg = chatMessages.value.find((m) => m.id === assistantId)
+    const msg = selectionMessages.value.find((m) => m.id === assistantId)
     if (msg) msg.streaming = false
     asking.value = false
     askAbort = null
@@ -675,7 +775,8 @@ function reset() {
   stopIndexPolling()
   selectedText.value = ''
   question.value = ''
-  chatMessages.value = []
+  selectionMessages.value = []
+  ragMessages.value = []
   solveMessages.value = []
   askError.value = ''
   translateTargetLang.value = 'default'
@@ -694,18 +795,27 @@ function reset() {
 
 function activate() {
   void refreshIndexStatus()
+  void loadChatHistory(chatMode.value)
 }
 
-/** 切入解题：清空划词/RAG 历史，重开解题会话并发起首轮流式 */
+/**
+ * 切入解题：切到 solve 并加载落盘历史；
+ * 若尚无历史则发起默认首轮解题
+ */
 async function startSolve() {
   if (!props.enableSolveMode) return
   stopAsk()
   askError.value = ''
-  chatMessages.value = []
-  solveMessages.value = []
   question.value = ''
+  suppressHistoryLoad = true
   chatMode.value = 'solve'
+  suppressHistoryLoad = false
   rightPanelTab.value = 'chat'
+  await loadChatHistory('solve')
+  if (solveMessages.value.length > 0) {
+    void refreshTagOptions()
+    return
+  }
 
   const userContent = t('preview.solveMathDefaultQuestion')
   const userId = genChatId()
@@ -728,8 +838,6 @@ async function startSolve() {
       messages: [],
       fileName: props.fileName,
       signal: askAbort.signal,
-      // 传入回调，当后端流逝返回结果的时候，
-      // 会调用这个函数，把结果拼接到solveMessages.value中，然后滚动到最底部
       onChunk: (chunk: string) => {
         const msg = solveMessages.value.find((m) => m.id === assistantId)
         if (msg) {
@@ -738,6 +846,10 @@ async function startSolve() {
         }
       },
     })
+    const assistantMsg = solveMessages.value.find((m) => m.id === assistantId)
+    if (assistantMsg?.content.trim()) {
+      await persistChatRound('solve', userContent, assistantMsg.content)
+    }
   } catch (e: unknown) {
     if (e instanceof DOMException && e.name === 'AbortError') return
     const idx = solveMessages.value.findIndex((m) => m.id === assistantId)
@@ -752,6 +864,7 @@ async function startSolve() {
     asking.value = false
     askAbort = null
     scrollChatToBottom()
+    void refreshTagOptions()
   }
 }
 

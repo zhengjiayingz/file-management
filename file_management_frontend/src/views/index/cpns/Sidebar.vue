@@ -73,6 +73,12 @@
                 </el-icon>
                 <span>{{ t('sidebar.wrongBook') }}</span>
             </el-menu-item>
+            <el-menu-item index="math-temp-lab" @click="router.push('/dev/math-temp')">
+                <el-icon>
+                    <Camera />
+                </el-icon>
+                <span>{{ t('sidebar.mathTempLab') }}</span>
+            </el-menu-item>
             <el-menu-item index="my-shares" @click="openMyShares">
                 <el-icon>
                     <Share />
@@ -101,7 +107,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { Folder, Delete, List, Upload, Picture, VideoPlay, Headset, Document, Collection, Setting, ChatDotRound, Share, Notebook } from '@element-plus/icons-vue'
+import { Folder, Delete, List, Upload, Picture, VideoPlay, Headset, Document, Collection, Setting, ChatDotRound, Share, Notebook, Camera } from '@element-plus/icons-vue'
 import { useI18n } from 'vue-i18n'
 import { useThemeStore } from '@stores/theme'
 import { useAuthStore } from '@stores/auth'
@@ -131,6 +137,7 @@ const activeMenu = computed(() => {
     if (path.startsWith('/transfer-records')) return 'transfer-records'
     if (path.startsWith('/knowledge-bases')) return 'knowledge-bases'
     if (path.startsWith('/wrong-questions')) return 'wrong-questions'
+    if (path.startsWith('/dev/math-temp')) return 'math-temp-lab'
     if (path === '/' && query.type) {
         return `file-type-${query.type}`
     }

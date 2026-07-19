@@ -64,6 +64,12 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
+      path: '/dev/math-temp',
+      name: 'math-temp-lab',
+      component: () => import('../views/math-temp-lab/index.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
       path: '/wrong-questions/:id',
       name: 'wrong-question-detail',
       component: () => import('../views/wrong-questions/detail.vue'),

@@ -55,6 +55,9 @@ model User {
   vipUpgradeRequestsProcessed   VipUpgradeRequest[] @relation("VipProcessedBy")
   knowledgeBases KnowledgeBase[]
   wrongQuestionBookItems WrongQuestionBookItem[]
+  fileAiChatSessions FileAiChatSession[]
+  mathTempImages MathTempImage[]
+  tempAiChatSessions TempAiChatSession[]
 
   @@map("users")
 }
@@ -175,6 +178,7 @@ model UserFile {
   documentKnowledge DocumentKnowledge?
   knowledgeBaseItems KnowledgeBaseItem[]
   wrongQuestionBookItems WrongQuestionBookItem[]
+  fileAiChatSessions FileAiChatSession[]
 
   @@index([userId, parentId, isDeleted])
   @@index([storageId])
@@ -459,6 +463,51 @@ enum KnowledgeBaseMessageRole {
   assistant
 }
 
+/// 网盘文件预览 AI 对话模式（划词 / RAG / 解题）
+enum FileAiChatMode {
+  selection
+  rag
+  solve
+}
+
+enum FileAiChatRole {
+  user
+  assistant
+}
+
+/// 单文件 × 模式 一条会话（预览对话落盘）
+model FileAiChatSession {
+  id         Int            @id @default(autoincrement())
+  userId     Int            @map("user_id")
+  userFileId Int            @map("user_file_id")
+  mode       FileAiChatMode
+  createdAt  DateTime       @default(now()) @map("created_at")
+  updatedAt  DateTime       @updatedAt @map("updated_at")
+
+  user     User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userFile UserFile            @relation(fields: [userFileId], references: [id], onDelete: Cascade)
+  messages FileAiChatMessage[]
+
+  @@unique([userId, userFileId, mode])
+  @@index([userFileId, mode])
+  @@map("file_ai_chat_sessions")
+}
+
+model FileAiChatMessage {
+  id        Int            @id @default(autoincrement())
+  sessionId Int            @map("session_id")
+  role      FileAiChatRole
+  content   String         @db.Text
+  /// selection：划词片段；rag：可选 citations
+  meta      Json?
+  createdAt DateTime       @default(now()) @map("created_at")
+
+  session FileAiChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, createdAt])
+  @@map("file_ai_chat_messages")
+}
+
 enum Role {
   user
   vip
@@ -643,4 +692,58 @@ enum WrongQuestionDifficulty {
   easy
   medium
   hard
+}
+
+/// F-29+ / 插件：临时解题图（不出现在网盘列表）
+model MathTempImage {
+  id           Int       @id @default(autoincrement())
+  tempImageId  String    @unique @map("temp_image_id") @db.VarChar(64)
+  userId       Int       @map("user_id")
+  storageKey   String    @map("storage_key") @db.VarChar(500)
+  mime         String    @db.VarChar(100)
+  originalName String?   @map("original_name") @db.VarChar(255)
+  fileSize     BigInt    @map("file_size")
+  expiresAt    DateTime  @map("expires_at")
+  consumedAt   DateTime? @map("consumed_at")
+  /// 转正后的网盘文件（存网盘 / 存错题本）
+  promotedUserFileId Int? @map("promoted_user_file_id")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  user     User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessions TempAiChatSession[]
+
+  @@index([userId, expiresAt])
+  @@map("math_temp_images")
+}
+
+/// 临时图上的对话（与 FileAiChatSession 对称；mode 实际用 selection / solve）
+model TempAiChatSession {
+  id          Int            @id @default(autoincrement())
+  userId      Int            @map("user_id")
+  tempImageId String         @map("temp_image_id") @db.VarChar(64)
+  mode        FileAiChatMode
+  createdAt   DateTime       @default(now()) @map("created_at")
+  updatedAt   DateTime       @updatedAt @map("updated_at")
+
+  user     User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tempImage MathTempImage     @relation(fields: [tempImageId], references: [tempImageId], onDelete: Cascade)
+  messages TempAiChatMessage[]
+
+  @@unique([userId, tempImageId, mode])
+  @@index([tempImageId, mode])
+  @@map("temp_ai_chat_sessions")
+}
+
+model TempAiChatMessage {
+  id        Int            @id @default(autoincrement())
+  sessionId Int            @map("session_id")
+  role      FileAiChatRole
+  content   String         @db.Text
+  meta      Json?
+  createdAt DateTime       @default(now()) @map("created_at")
+
+  session TempAiChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, createdAt])
+  @@map("temp_ai_chat_messages")
 }

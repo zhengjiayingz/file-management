@@ -17,6 +17,7 @@ import { CurrentUser } from '@/common/decorators/current-user.decorator';
 import type { RequestUser } from '@/auth/types/jwt-payload.type';
 import {
   CreateWrongQuestionDto,
+  CreateWrongQuestionFromTempDto,
   ListWrongQuestionsQueryDto,
   UpdateWrongQuestionDto,
 } from '../dto/wrong-questions.dto';
@@ -36,6 +37,15 @@ export class WrongQuestionsController {
     @Body() dto: CreateWrongQuestionDto,
   ) {
     return this.wrongQuestionsService.create(user.id, dto);
+  }
+
+  /** 临时图转正并写入错题本（插件路径） */
+  @Post('from-temp')
+  createFromTemp(
+    @CurrentUser() user: RequestUser,
+    @Body() dto: CreateWrongQuestionFromTempDto,
+  ) {
+    return this.wrongQuestionsService.createFromTemp(user.id, dto);
   }
 
   @Get()

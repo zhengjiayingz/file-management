@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseIntPipe,
@@ -21,6 +22,8 @@ import { FilesAiKnowledgeService } from '@/files/ai/files-ai-knowledge.service';
 import type { DocumentKnowledgeResponse } from '@/files/ai/files-ai-knowledge.service';
 import { FilesAiTranslateService } from '@/files/ai/files-ai-translate.service';
 import { FilesAiMathService } from '@/files/ai/files-ai-math.service';
+import { FilesAiChatSessionService } from '@/files/ai/files-ai-chat-session.service';
+import { AppendFileAiChatMessageDto } from '@/files/ai/dto/file-ai-chat.dto';
 
 @Controller('files')
 export class FilesAiController {
@@ -32,7 +35,48 @@ export class FilesAiController {
     private readonly filesAiKnowledgeService: FilesAiKnowledgeService,
     private readonly filesAiTranslateService: FilesAiTranslateService,
     private readonly filesAiMathService: FilesAiMathService,
+    private readonly filesAiChatSessionService: FilesAiChatSessionService,
   ) {}
+
+  /** 懒获取文件预览某模式的对话（落盘历史） */
+  @Get(':id/ai/chat-sessions/:mode')
+  getChatSession(
+    @CurrentUser() user: RequestUser,
+    @Param('id', ParseIntPipe) fileId: number,
+    @Param('mode') mode: string,
+  ) {
+    return this.filesAiChatSessionService.getOrCreateSession(
+      user.id,
+      fileId,
+      mode,
+    );
+  }
+
+  /** 清空该模式对话消息 */
+  @Delete(':id/ai/chat-sessions/:mode')
+  clearChatSession(
+    @CurrentUser() user: RequestUser,
+    @Param('id', ParseIntPipe) fileId: number,
+    @Param('mode') mode: string,
+  ) {
+    return this.filesAiChatSessionService.clearSession(user.id, fileId, mode);
+  }
+
+  /** 追加一条消息（流式成功后由前端落库） */
+  @Post(':id/ai/chat-sessions/:mode/messages')
+  appendChatMessage(
+    @CurrentUser() user: RequestUser,
+    @Param('id', ParseIntPipe) fileId: number,
+    @Param('mode') mode: string,
+    @Body() body: AppendFileAiChatMessageDto,
+  ) {
+    return this.filesAiChatSessionService.appendMessage(
+      user.id,
+      fileId,
+      mode,
+      body,
+    );
+  }
 
   @Post(':id/ai/ask')
   async askAboutSelection(

@@ -69,6 +69,7 @@ export default {
     myShares: 'My shares',
     knowledgeBases: 'Knowledge Bases',
     wrongBook: 'Wrong Book',
+    mathTempLab: 'Temp Capture Lab',
   },
   header: {
     memberCenter: 'Member Center',

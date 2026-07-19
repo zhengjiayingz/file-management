@@ -44,6 +44,40 @@ export class CreateWrongQuestionDto {
   difficulty?: WrongQuestionDifficulty;
 }
 
+/** 插件/临时图转正并写入错题本 */
+export class CreateWrongQuestionFromTempDto {
+  @IsString()
+  @MinLength(8)
+  @MaxLength(64)
+  tempImageId!: string;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(200_000)
+  answerText!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(20_000)
+  questionText?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @IsString({ each: true })
+  @MaxLength(40, { each: true })
+  tags?: string[];
+
+  @IsOptional()
+  @IsIn(WRONG_QUESTION_DIFFICULTIES)
+  difficulty?: WrongQuestionDifficulty;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  fileName?: string;
+}
+
 /** 更新错题本条目（题干 / 解答 / 标签 / 难度均可选） */
 export class UpdateWrongQuestionDto {
   @IsOptional()

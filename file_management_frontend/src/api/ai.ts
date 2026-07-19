@@ -298,6 +298,64 @@ export async function streamTranslate(params: StreamTranslateParams): Promise<vo
   await readTextStream(res, params.onChunk)
 }
 
+/** 文件预览 AI 对话模式（落盘） */
+export type FileAiChatMode = 'selection' | 'rag' | 'solve'
+
+export type FileAiChatStoredMessage = {
+  id: number
+  role: 'user' | 'assistant'
+  content: string
+  meta?: unknown
+  createdAt: string
+}
+
+export type FileAiChatSessionData = {
+  sessionId: number
+  mode: FileAiChatMode
+  messages: FileAiChatStoredMessage[]
+}
+
+/** 拉取某文件某模式的落盘对话（懒创建空会话） */
+export async function getFileAiChatSession(
+  fileId: number,
+  mode: FileAiChatMode,
+): Promise<FileAiChatSessionData> {
+  const res = await request.get<{
+    success: boolean
+    data: FileAiChatSessionData
+  }>(`/files/${fileId}/ai/chat-sessions/${mode}`)
+  return res.data.data
+}
+
+/** 清空某模式对话 */
+export async function clearFileAiChatSession(
+  fileId: number,
+  mode: FileAiChatMode,
+): Promise<{ cleared: number }> {
+  const res = await request.delete<{
+    success: boolean
+    data: { cleared: number }
+  }>(`/files/${fileId}/ai/chat-sessions/${mode}`)
+  return res.data.data
+}
+
+/** 追加一条落盘消息（流式成功后） */
+export async function appendFileAiChatMessage(
+  fileId: number,
+  mode: FileAiChatMode,
+  body: {
+    role: 'user' | 'assistant'
+    content: string
+    meta?: Record<string, unknown>
+  },
+): Promise<FileAiChatStoredMessage> {
+  const res = await request.post<{
+    success: boolean
+    data: FileAiChatStoredMessage
+  }>(`/files/${fileId}/ai/chat-sessions/${mode}/messages`, body)
+  return res.data.data
+}
+
 /**
  * 网盘图片 VL 解题（text/plain 流式，F-27）
  * 成功时无返回值；内容通过 onChunk 回调往外传

@@ -29,6 +29,7 @@ import { FilesAiSummaryService } from '@/files/ai/files-ai-summary.service';
 import { FilesAiKnowledgeService } from '@/files/ai/files-ai-knowledge.service';
 import { FilesAiTranslateService } from '@/files/ai/files-ai-translate.service';
 import { FilesAiMathService } from '@/files/ai/files-ai-math.service';
+import { FilesAiChatSessionService } from '@/files/ai/files-ai-chat-session.service';
 import { FilesSearchService } from './query/files-search.service';
 
 @Module({
@@ -59,6 +60,7 @@ import { FilesSearchService } from './query/files-search.service';
     FilesAiKnowledgeService,
     FilesAiTranslateService,
     FilesAiMathService,
+    FilesAiChatSessionService,
     DocumentIndexQueueService,
     FilesPreviewService,
     PreviewQueueService,
