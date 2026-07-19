@@ -665,7 +665,8 @@ defineExpose({ reset, activate, startSolve })
   display: flex;
   flex-direction: column;
   height: 100%;
-  min-height: min(78vh, 720px);
+  min-height: 0;
+  max-height: 100%;
   border: 1px solid var(--el-border-color);
   border-radius: 8px;
   background: var(--el-fill-color-blank, #fff);
@@ -679,6 +680,7 @@ defineExpose({ reset, activate, startSolve })
   gap: 8px;
   padding: 12px 14px 8px;
   border-bottom: 1px solid var(--el-border-color-lighter);
+  flex-shrink: 0;
 }
 
 .ai-chat-header-main {
@@ -727,6 +729,7 @@ defineExpose({ reset, activate, startSolve })
   padding: 8px 14px;
   border-bottom: 1px solid var(--el-border-color-lighter);
   background: var(--el-fill-color-blank, #fff);
+  flex-shrink: 0;
 }
 
 .ai-index-status {
@@ -743,12 +746,15 @@ defineExpose({ reset, activate, startSolve })
 .ai-right-tabs {
   flex: 1 1 auto;
   min-height: 0;
+  height: 100%;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 
   :deep(.el-tabs__header) {
     margin: 0;
     padding: 0 14px;
+    flex-shrink: 0;
   }
 
   :deep(.el-tabs__content) {
@@ -762,6 +768,7 @@ defineExpose({ reset, activate, startSolve })
     display: flex;
     flex-direction: column;
     min-height: 0;
+    overflow: hidden;
   }
 }
 
@@ -770,16 +777,19 @@ defineExpose({ reset, activate, startSolve })
   min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .ai-chat-mode {
   padding: 8px 14px 0;
+  flex-shrink: 0;
 }
 
 .ai-chat-context {
   padding: 8px 14px;
   border-bottom: 1px solid var(--el-border-color-lighter);
   background: var(--el-fill-color-lighter, #f5f7fa);
+  flex-shrink: 0;
 }
 
 .ai-chat-context-label {
@@ -806,8 +816,9 @@ defineExpose({ reset, activate, startSolve })
 
 .ai-chat-messages {
   flex: 1 1 auto;
-  min-height: 160px;
+  min-height: 0;
   overflow: auto;
+  overscroll-behavior: contain;
   padding: 12px 14px;
   display: flex;
   flex-direction: column;
@@ -919,6 +930,7 @@ defineExpose({ reset, activate, startSolve })
 .ai-chat-input {
   padding: 10px 14px 14px;
   border-top: 1px solid var(--el-border-color-lighter);
+  flex-shrink: 0;
 }
 
 .ai-chat-input-actions {

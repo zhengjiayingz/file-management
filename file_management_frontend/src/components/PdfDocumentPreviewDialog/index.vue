@@ -32,9 +32,9 @@
       </div>
     </template>
 
-    <DocumentPreviewLayout :show-ai-panel="true">
+    <DocumentPreviewLayout :show-ai-panel="true" :fullscreen="isFullscreen">
       <template #preview>
-        <div class="preview-body" :class="{ 'is-fullscreen': isFullscreen }">
+        <div class="preview-body">
           <PdfJsViewer
             v-if="previewUrl && dialogReady"
             ref="pdfViewerRef"
@@ -195,6 +195,7 @@ watch(
 .pdf-document-preview-dialog {
   :deep(.el-dialog__body) {
     padding-top: 8px;
+    overflow: hidden;
   }
 }
 
@@ -230,17 +231,12 @@ watch(
 
 .preview-body {
   position: relative;
-  min-height: min(72vh, 640px);
-  height: min(72vh, 640px);
+  height: 100%;
+  min-height: 0;
   border: 1px solid var(--el-border-color);
   border-radius: 8px;
   overflow: hidden;
   background: #525659;
-
-  &.is-fullscreen {
-    min-height: calc(100vh - 120px);
-    height: calc(100vh - 120px);
-  }
 }
 
 .preview-pdf {

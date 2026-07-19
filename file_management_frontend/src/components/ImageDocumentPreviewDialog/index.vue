@@ -26,9 +26,9 @@
             </div>
         </template>
 
-        <DocumentPreviewLayout :show-ai-panel="true">
+        <DocumentPreviewLayout :show-ai-panel="true" :fullscreen="isFullscreen">
             <template #preview>
-                <div class="preview-with-ocr" :class="{ 'is-fullscreen': isFullscreen }">
+                <div class="preview-with-ocr">
                     <div class="preview-body" :title="t('preview.imageDblclickLightbox')" @dblclick="openLightbox">
                         <el-image v-if="previewUrl" class="preview-image" :src="previewUrl" fit="contain"
                             @load="handleImageLoad" @error="handleImageError" />
@@ -311,6 +311,7 @@ onUnmounted(() => {
 .image-document-preview-dialog {
     :deep(.el-dialog__body) {
         padding-top: 8px;
+        overflow: hidden;
     }
 }
 
@@ -343,15 +344,10 @@ onUnmounted(() => {
 .preview-with-ocr {
     display: flex;
     gap: 12px;
-    min-height: min(72vh, 640px);
-    height: min(72vh, 640px);
+    height: 100%;
+    min-height: 0;
     width: 100%;
     align-items: stretch;
-
-    &.is-fullscreen {
-        min-height: calc(100vh - 120px);
-        height: calc(100vh - 120px);
-    }
 }
 
 .preview-body {
@@ -474,6 +470,7 @@ onUnmounted(() => {
 
     .preview-body {
         height: min(42vh, 360px);
+        flex: none;
     }
 
     .ocr-panel {

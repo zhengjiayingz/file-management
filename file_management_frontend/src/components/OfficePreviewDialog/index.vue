@@ -39,9 +39,9 @@
             {{ statusBarText }}
         </el-alert>
 
-        <DocumentPreviewLayout :show-ai-panel="enableAiPanel">
+        <DocumentPreviewLayout :show-ai-panel="enableAiPanel" :fullscreen="isFullscreen">
             <template #preview>
-                <div class="preview-body" :class="{ 'is-fullscreen': isFullscreen, 'preview-body--with-ai': enableAiPanel }">
+                <div class="preview-body" :class="{ 'preview-body--with-ai': enableAiPanel }">
                     <PdfJsViewer
                         v-if="previewUrl && dialogReady"
                         ref="pdfViewerRef"
@@ -626,20 +626,15 @@ function handleClose() {
     background: #525659;
 
     &.preview-body--with-ai {
-        min-height: min(72vh, 640px);
-        height: min(72vh, 640px);
+        height: 100%;
+        min-height: 0;
         border: 1px solid var(--el-border-color);
         border-radius: 8px;
         overflow: hidden;
     }
 
-    &.is-fullscreen {
+    &.is-fullscreen:not(.preview-body--with-ai) {
         height: calc(100vh - 60px);
-    }
-
-    &.preview-body--with-ai.is-fullscreen {
-        min-height: calc(100vh - 120px);
-        height: calc(100vh - 120px);
     }
 }
 

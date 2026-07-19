@@ -348,33 +348,46 @@ function onScroll() {
 .preview-split {
   display: flex;
   gap: 14px;
-  min-height: min(78vh, 720px);
+  height: min(78vh, 720px);
+  max-height: min(78vh, 720px);
+  min-height: 0;
   align-items: stretch;
+  overflow: hidden;
 }
 
 .preview-split__left {
   flex: 1 1 56%;
   min-width: 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .preview-split__right {
   flex: 1 1 44%;
   min-width: 300px;
+  min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 @media (max-width: 900px) {
   .preview-split {
     flex-direction: column;
-    min-height: auto;
+    height: auto;
+    max-height: none;
+    min-height: min(78vh, 720px);
+    overflow: visible;
   }
 
   .preview-split__right {
     min-width: 0;
     min-height: 420px;
+    height: min(52vh, 480px);
+    max-height: min(52vh, 480px);
+    overflow: hidden;
   }
 }
 
