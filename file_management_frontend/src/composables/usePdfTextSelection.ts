@@ -40,6 +40,21 @@ type SelectionPart = {
   rect: { left: number; top: number; right: number; bottom: number }
 }
 
+/** 阅读顺序中的一个字符光标（落在某个 text item 内） */
+type TextCaret = {
+  data: TextLayerData
+  itemIdx: number
+  /** 在 flatten 列表中的序号，用于比较先后 */
+  order: number
+  offset: number
+}
+
+type FlatItem = {
+  data: TextLayerData
+  itemIdx: number
+  order: number
+}
+
 function normalizeSelectedText(raw: string): string {
   return raw.replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim()
 }
@@ -52,21 +67,6 @@ function clearHighlightLayers(root: HTMLElement) {
 
 function dragDistance(a: ClientPoint, b: ClientPoint): number {
   return Math.hypot(b.x - a.x, b.y - a.y)
-}
-
-type DragRect = { left: number; top: number; right: number; bottom: number }
-
-function normalizeDragRect(a: ClientPoint, b: ClientPoint): DragRect {
-  return {
-    left: Math.min(a.x, b.x),
-    top: Math.min(a.y, b.y),
-    right: Math.max(a.x, b.x),
-    bottom: Math.max(a.y, b.y),
-  }
-} 
-
-function rectsIntersect(a: { left: number; right: number; top: number; bottom: number }, b: DragRect): boolean {
-  return a.right > b.left && a.left < b.right && a.bottom > b.top && a.top < b.bottom
 }
 
 /** 从 textLayer 元素上读取 pdf.js 原始数据，计算每个 text item 的 viewport 坐标 */
@@ -121,104 +121,163 @@ function sortTextLayerData(allData: TextLayerData[]): TextLayerData[] {
   })
 }
 
-/** 用 item 的 viewport 宽度做线性映射（PDF text item 内字符等宽近似） */
-function charIndexAtX(itemRect: DOMRect, clientX: number, text: string, edge: 'start' | 'end'): number {
-  if (!text.length) return 0
-  if (itemRect.width <= 0) return edge === 'end' ? text.length : 0
-  const ratio = (clientX - itemRect.left) / itemRect.width
-  const clamped = Math.max(0, Math.min(1, ratio))
-  const idx = edge === 'start' ? Math.floor(clamped * text.length) : Math.ceil(clamped * text.length)
-  return Math.max(0, Math.min(text.length, idx))
+function compareItemsOnPage(data: TextLayerData, a: number, b: number): number {
+  const ra = data.rects[a]!
+  const rb = data.rects[b]!
+  const dy = ra.top - rb.top
+  if (Math.abs(dy) > SAME_LINE_THRESHOLD_PX) return dy
+  return ra.left - rb.left
 }
 
-function buildSelectionParts(allData: TextLayerData[], dragRect: DragRect): SelectionPart[] {
-  const parts: SelectionPart[] = []
-
-  for (const data of allData) {
-    const pageRect = data.pageInner.getBoundingClientRect()
-
-    // 找到该页中与拖选矩形相交的 items
-    const hitIndices: number[] = []
+/** 按阅读顺序展平所有 text item（跨页） */
+function flattenReadingOrder(allData: TextLayerData[]): FlatItem[] {
+  const pages = sortTextLayerData(allData)
+  const flat: FlatItem[] = []
+  let order = 0
+  for (const data of pages) {
+    const indices: number[] = []
     for (let i = 0; i < data.items.length; i++) {
       const item = data.items[i]!
-      if (!item.str) continue
       const r = data.rects[i]!
-      if (r.width <= 0 || r.height <= 0) continue
-      // 转换到 viewport 坐标（rects 已经是 viewport 坐标了，不需要转换）
-      const screenRect = {
-        left: r.left + pageRect.left,
-        right: r.right + pageRect.left,
-        top: r.top + pageRect.top,
-        bottom: r.bottom + pageRect.top,
-      }
-      if (rectsIntersect(screenRect, dragRect)) {
-        hitIndices.push(i)
-      }
+      if (!item.str || r.width <= 0 || r.height <= 0) continue
+      indices.push(i)
     }
-    if (hitIndices.length === 0) continue
+    indices.sort((a, b) => compareItemsOnPage(data, a, b))
+    for (const itemIdx of indices) {
+      flat.push({ data, itemIdx, order: order++ })
+    }
+  }
+  return flat
+}
 
-    // 按阅读顺序排序
-    hitIndices.sort((a, b) => {
-      const ra = data.rects[a]!
-      const rb = data.rects[b]!
-      const dy = ra.top - rb.top
-      if (Math.abs(dy) > SAME_LINE_THRESHOLD_PX) return dy
-      return ra.left - rb.left
+function compareCarets(a: TextCaret, b: TextCaret): number {
+  if (a.order !== b.order) return a.order - b.order
+  return a.offset - b.offset
+}
+
+/** 用 item 的 viewport 宽度做线性映射（PDF text item 内字符等宽近似） */
+function charOffsetAtX(itemRect: DOMRect, clientXInPage: number, text: string): number {
+  if (!text.length) return 0
+  if (itemRect.width <= 0) return 0
+  if (clientXInPage <= itemRect.left) return 0
+  if (clientXInPage >= itemRect.right) return text.length
+  const ratio = (clientXInPage - itemRect.left) / itemRect.width
+  const clamped = Math.max(0, Math.min(1, ratio))
+  return Math.max(0, Math.min(text.length, Math.round(clamped * text.length)))
+}
+
+function screenRectForItem(data: TextLayerData, itemIdx: number) {
+  const pageRect = data.pageInner.getBoundingClientRect()
+  const r = data.rects[itemIdx]!
+  return {
+    left: r.left + pageRect.left,
+    right: r.right + pageRect.left,
+    top: r.top + pageRect.top,
+    bottom: r.bottom + pageRect.top,
+    pageLeft: pageRect.left,
+  }
+}
+
+/**
+ * 把指针映射到最近的阅读光标。
+ * 优先同一行（纵向距离小），再按水平位置取字符偏移。
+ */
+function caretFromPoint(flat: FlatItem[], point: ClientPoint): TextCaret | null {
+  if (flat.length === 0) return null
+
+  let best: FlatItem | null = null
+  let bestScore = Infinity
+
+  for (const entry of flat) {
+    const s = screenRectForItem(entry.data, entry.itemIdx)
+    let vDist = 0
+    if (point.y < s.top) vDist = s.top - point.y
+    else if (point.y > s.bottom) vDist = point.y - s.bottom
+
+    let hDist = 0
+    if (point.x < s.left) hDist = s.left - point.x
+    else if (point.x > s.right) hDist = point.x - s.right
+
+    // 纵向权重大：保证落在「当前行」，避免窜到上下行
+    const score = vDist * 10_000 + hDist
+    if (score < bestScore) {
+      bestScore = score
+      best = entry
+    }
+  }
+
+  if (!best) return null
+
+  const r = best.data.rects[best.itemIdx]!
+  const pageRect = best.data.pageInner.getBoundingClientRect()
+  const text = best.data.items[best.itemIdx]!.str
+  const offset = charOffsetAtX(r, point.x - pageRect.left, text)
+
+  return {
+    data: best.data,
+    itemIdx: best.itemIdx,
+    order: best.order,
+    offset,
+  }
+}
+
+function partialItemRect(
+  r: DOMRect,
+  text: string,
+  start: number,
+  end: number,
+): { left: number; top: number; right: number; bottom: number } {
+  const len = Math.max(text.length, 1)
+  const left = r.left + (start / len) * r.width
+  const right = r.left + (end / len) * r.width
+  return {
+    left: Math.min(left, right),
+    top: r.top,
+    right: Math.max(left, right),
+    bottom: r.bottom,
+  }
+}
+
+/**
+ * 原生划词语义：从起点光标到终点光标的阅读区间。
+ * 中间行整行选中；只有首尾 item 按字符裁剪。
+ * （旧实现用对角 AABB，回拖缩短右边界时会误伤前面行。）
+ */
+function buildSelectionPartsFromCarets(
+  flat: FlatItem[],
+  anchor: TextCaret,
+  focus: TextCaret,
+): SelectionPart[] {
+  let start = anchor
+  let end = focus
+  if (compareCarets(start, end) > 0) {
+    start = focus
+    end = anchor
+  }
+
+  const parts: SelectionPart[] = []
+  for (const entry of flat) {
+    if (entry.order < start.order || entry.order > end.order) continue
+
+    const item = entry.data.items[entry.itemIdx]!
+    const r = entry.data.rects[entry.itemIdx]!
+    let from = 0
+    let to = item.str.length
+
+    if (entry.order === start.order) from = start.offset
+    if (entry.order === end.order) to = end.offset
+
+    from = Math.max(0, Math.min(from, item.str.length))
+    to = Math.max(from, Math.min(to, item.str.length))
+    if (to <= from) continue
+
+    parts.push({
+      data: entry.data,
+      itemIdx: entry.itemIdx,
+      start: from,
+      end: to,
+      rect: partialItemRect(r, item.str, from, to),
     })
-
-    // 分行
-    const lines: number[][] = []
-    for (const idx of hitIndices) {
-      const r = data.rects[idx]!
-      const line = lines.find((group) => Math.abs(data.rects[group[0]!]!.top - r.top) <= SAME_LINE_THRESHOLD_PX)
-      if (line) line.push(idx)
-      else lines.push([idx])
-    }
-    lines.sort((a, b) => data.rects[a[0]!]!.top - data.rects[b[0]!]!.top)
-
-    for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
-      const line = lines[lineIdx]!
-      const lineLeft = Math.min(...line.map((i) => data.rects[i]!.left))
-      const lineRight = Math.max(...line.map((i) => data.rects[i]!.right))
-      const isFirstLine = lineIdx === 0
-      const isLastLine = lineIdx === lines.length - 1
-
-      // 在 viewport 坐标系下裁剪
-      const clipLeft = isFirstLine ? Math.max(dragRect.left - pageRect.left, lineLeft) : lineLeft
-      const clipRight = isLastLine ? Math.min(dragRect.right - pageRect.left, lineRight) : lineRight
-      if (clipRight - clipLeft < 0.5) continue
-
-      for (const itemIdx of line) {
-        const item = data.items[itemIdx]!
-        const r = data.rects[itemIdx]!
-        if (r.right <= clipLeft || r.left >= clipRight) continue
-
-        let start = 0
-        let end = item.str.length
-        if (r.left < clipLeft - 0.5) {
-          start = charIndexAtX(r, clipLeft, item.str, 'start')
-        }
-        if (r.right > clipRight + 0.5) {
-          end = charIndexAtX(r, clipRight, item.str, 'end')
-        }
-        start = Math.max(0, Math.min(start, item.str.length))
-        end = Math.max(start, Math.min(end, item.str.length))
-        if (end <= start) continue
-
-        parts.push({
-          data,
-          itemIdx,
-          start,
-          end,
-          rect: {
-            left: Math.max(r.left, clipLeft),
-            top: r.top,
-            right: Math.min(r.right, clipRight),
-            bottom: r.bottom,
-          },
-        })
-      }
-    }
   }
 
   return parts
@@ -227,7 +286,6 @@ function buildSelectionParts(allData: TextLayerData[], dragRect: DragRect): Sele
 function joinSelectionParts(parts: SelectionPart[]): string {
   if (parts.length === 0) return ''
 
-  // 按 page → line → item 顺序
   const sorted = [...parts].sort((a, b) => {
     const pa = a.data.pageInner.getBoundingClientRect()
     const pb = b.data.pageInner.getBoundingClientRect()
@@ -251,7 +309,6 @@ function joinSelectionParts(parts: SelectionPart[]): string {
     const slice = part.data.items[part.itemIdx]!.str.slice(part.start, part.end)
 
     if (Math.abs(r.top - currentTop) > SAME_LINE_THRESHOLD_PX) {
-      // 新行
       if (currentText) lineTexts.push(normalizeSelectedText(currentText))
       currentText = slice
       currentTop = r.top
@@ -259,7 +316,6 @@ function joinSelectionParts(parts: SelectionPart[]): string {
       prevHeight = r.height
       prevSliceEnd = slice
     } else {
-      // 同一行——检测 item 间水平间距，间距够大就补空格
       const gap = r.left - prevRight
       const heightRef = Math.max(prevHeight, r.height, 1)
       const alreadyHasSpace = prevSliceEnd.endsWith(' ') || slice.startsWith(' ')
@@ -280,7 +336,9 @@ function paintSelectionHighlights(root: HTMLElement, parts: SelectionPart[]) {
   if (parts.length === 0) return
 
   for (const part of parts) {
-    const highlightLayer = part.data.pageInner.querySelector<HTMLElement>('.selection-highlight-layer')
+    const highlightLayer = part.data.pageInner.querySelector<HTMLElement>(
+      '.selection-highlight-layer',
+    )
     if (!highlightLayer) continue
 
     const div = document.createElement('div')
@@ -350,12 +408,17 @@ export function usePdfTextSelection(scrollRef: Ref<HTMLElement | null | undefine
     }
 
     hasMeaningfulDrag = true
-    const dragRect = normalizeDragRect(anchorPoint, point)
-    const allData = sortTextLayerData(collectAllTextLayers(root))
-    const parts = buildSelectionParts(allData, dragRect)
+    const flat = flattenReadingOrder(collectAllTextLayers(root))
+    const anchorCaret = caretFromPoint(flat, anchorPoint)
+    const focusCaret = caretFromPoint(flat, point)
+    if (!anchorCaret || !focusCaret) {
+      applyParts([])
+      return
+    }
+    const parts = buildSelectionPartsFromCarets(flat, anchorCaret, focusCaret)
     applyParts(parts)
   }
-  // 拖动过程中持续更新选区
+
   function onDocumentPointerMove(ev: PointerEvent) {
     if (!isPointerDown) return
     updateDragSelection({ x: ev.clientX, y: ev.clientY })
@@ -368,7 +431,7 @@ export function usePdfTextSelection(scrollRef: Ref<HTMLElement | null | undefine
     anchorPoint = null
     hasMeaningfulDrag = false
   }
-  // 用户在 .textLayer 上按下，记录起点
+
   function onPointerDown(ev: PointerEvent) {
     if (ev.button !== 0) return
     const root = getRoot()
