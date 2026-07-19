@@ -20,6 +20,7 @@ import type { DocumentSummaryResponse } from '@/files/ai/files-ai-summary.servic
 import { FilesAiKnowledgeService } from '@/files/ai/files-ai-knowledge.service';
 import type { DocumentKnowledgeResponse } from '@/files/ai/files-ai-knowledge.service';
 import { FilesAiTranslateService } from '@/files/ai/files-ai-translate.service';
+import { FilesAiMathService } from '@/files/ai/files-ai-math.service';
 
 @Controller('files')
 export class FilesAiController {
@@ -30,6 +31,7 @@ export class FilesAiController {
     private readonly filesAiSummaryService: FilesAiSummaryService,
     private readonly filesAiKnowledgeService: FilesAiKnowledgeService,
     private readonly filesAiTranslateService: FilesAiTranslateService,
+    private readonly filesAiMathService: FilesAiMathService,
   ) {}
 
   @Post(':id/ai/ask')
@@ -132,5 +134,17 @@ export class FilesAiController {
     @Param('id', ParseIntPipe) fileId: number,
   ): Promise<DocumentKnowledgeResponse> {
     return this.filesAiKnowledgeService.getKnowledge(user.id, fileId);
+  }
+
+  /** 截图数学解题（流式，F-27；仅网盘图片） */
+  @Post(':id/ai/solve-math')
+  async solveMath(
+    @CurrentUser() user: RequestUser,
+    @Param('id', ParseIntPipe) fileId: number,
+    @Body() body: unknown,
+    @Req() req: Request,
+    @Res({ passthrough: false }) res: Response,
+  ): Promise<void> {
+    await this.filesAiMathService.solveMath(req, res, user.id, fileId, body);
   }
 }

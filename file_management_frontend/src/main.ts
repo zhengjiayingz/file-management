@@ -3,6 +3,7 @@ import { createPinia } from 'pinia'
 
 import 'element-plus/dist/index.css'
 import 'element-plus/theme-chalk/dark/css-vars.css'
+import 'katex/dist/katex.min.css'
 // 文件列表：多色文件类型图标（iconfont Symbol，见 components/FileTypeColoredIcon）
 import '@/assets/icons/file-types/file-type-icons.js'
 import App from './App.vue'

@@ -615,6 +615,13 @@ export default {
     aiIndexTriggerError: '触发索引失败',
     aiChatModeSelection: '划词问答',
     aiChatModeRag: '全文问答',
+    solveMath: '解题',
+    aiChatModeSolve: '解题',
+    aiSolveHint: '根据题目图片分步解答；可继续追问。公式支持 LaTeX。',
+    solveMathDefaultQuestion:
+      '请根据题目图片分步解答，关键步骤说明理由；公式使用 LaTeX（$...$ / $$...$$）。看不清的条件请明确指出，不要编造。',
+    solveMathVerifyHint: 'AI 辅助解答，请自行验算。',
+    solveMathError: '解题失败',
     aiRagHint: '基于文档索引回答全文问题，无需选中文字；请先建立索引。',
     aiRagNotReady: '请先建立索引并等待完成',
     aiTabChat: '问答',

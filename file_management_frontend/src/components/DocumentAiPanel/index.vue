@@ -4,35 +4,29 @@
       <div class="ai-chat-header-main">
         <h4 class="ai-chat-title">{{ t('preview.aiAskTitle') }}</h4>
         <p class="ai-chat-hint">
-          {{ chatMode === 'selection' ? t('preview.aiAskHint') : t('preview.aiRagHint') }}
+          {{
+            chatMode === 'selection'
+              ? t('preview.aiAskHint')
+              : chatMode === 'rag'
+                ? t('preview.aiRagHint')
+                : t('preview.aiSolveHint')
+          }}
         </p>
       </div>
       <div class="ai-chat-header-actions">
         <template v-if="chatMode === 'selection'">
-          <el-select
-            v-model="translateTargetLang"
-            size="small"
-            class="ai-translate-lang"
-            :disabled="asking"
-            :title="t('preview.aiTranslateTarget')"
-          >
+          <el-select v-model="translateTargetLang" size="small" class="ai-translate-lang" :disabled="asking"
+            :title="t('preview.aiTranslateTarget')">
             <el-option :label="t('preview.aiTranslateDefault')" value="default" />
             <el-option :label="t('preview.aiTranslateZh')" value="zh" />
             <el-option :label="t('preview.aiTranslateEn')" value="en" />
             <el-option :label="t('preview.aiTranslateJa')" value="ja" />
           </el-select>
-          <el-button
-            size="small"
-            type="primary"
-            plain
-            :loading="asking"
-            :disabled="asking"
-            @click="submitTranslate"
-          >
+          <el-button size="small" type="primary" plain :loading="asking" :disabled="asking" @click="submitTranslate">
             {{ t('preview.aiTranslate') }}
           </el-button>
         </template>
-        <el-button v-if="chatMessages.length > 0" size="small" text type="danger" @click="clearChat">
+        <el-button v-if="activeChatMessages.length > 0" size="small" text type="danger" @click="clearChat">
           {{ t('preview.aiChatClear') }}
         </el-button>
       </div>
@@ -60,8 +54,15 @@
             <el-radio-group v-model="chatMode" size="small">
               <el-radio-button value="selection">{{ t('preview.aiChatModeSelection') }}</el-radio-button>
               <el-radio-button value="rag">{{ t('preview.aiChatModeRag') }}</el-radio-button>
+              <el-radio-button v-if="enableSolveMode" value="solve">
+                {{ t('preview.aiChatModeSolve') }}
+              </el-radio-button>
             </el-radio-group>
           </div>
+
+          <p v-if="chatMode === 'solve'" class="ai-solve-verify">
+            {{ t('preview.solveMathVerifyHint') }}
+          </p>
 
           <div v-if="chatMode === 'selection'" class="ai-chat-context">
             <span class="ai-chat-context-label">{{ t('preview.aiChatContext') }}</span>
@@ -70,8 +71,8 @@
           </div>
 
           <div ref="chatScrollRef" class="ai-chat-messages">
-            <p v-if="chatMessages.length === 0" class="ai-chat-empty">{{ t('preview.aiChatEmpty') }}</p>
-            <div v-for="msg in chatMessages" :key="msg.id" class="ai-chat-bubble"
+            <p v-if="activeChatMessages.length === 0" class="ai-chat-empty">{{ t('preview.aiChatEmpty') }}</p>
+            <div v-for="msg in activeChatMessages" :key="msg.id" class="ai-chat-bubble"
               :class="msg.role === 'user' ? 'ai-chat-bubble--user' : 'ai-chat-bubble--assistant'">
               <span class="ai-chat-bubble-role">
                 {{ msg.role === 'user' ? t('preview.aiChatYou') : t('preview.aiChatAssistant') }}
@@ -123,6 +124,7 @@ import {
   streamTranslate,
   triggerDocumentIndex,
   SUMMARY_GENRE_GROUPS,
+  streamSolveMath,
   type AiChatMessage,
   type DocumentIndexStatus,
   type DocumentIndexStatusData,
@@ -164,6 +166,8 @@ const props = defineProps<{
   fileId: number
   fileName?: string
   selectedText?: string
+  /** 仅图片预览开启解题模式入口 */
+  enableSolveMode?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -178,8 +182,14 @@ const selectedText = computed({
 })
 
 const question = ref('')
-const chatMode = ref<'selection' | 'rag'>('selection')
+const chatMode = ref<'selection' | 'rag' | 'solve'>('selection')
 const chatMessages = ref<UiChatMessage[]>([])
+/** 解题独立会话；切回划词/RAG 时不清空 */
+const solveMessages = ref<UiChatMessage[]>([])
+/** 当前模式展示的消息列表 */
+const activeChatMessages = computed(() =>
+  chatMode.value === 'solve' ? solveMessages.value : chatMessages.value,
+)
 const asking = ref(false)
 const askError = ref('')
 const translateTargetLang = ref<TranslateTargetLang>('default')
@@ -380,7 +390,11 @@ function scrollChatToBottom() {
 
 function clearChat() {
   stopAsk()
-  chatMessages.value = []
+  if (chatMode.value === 'solve') {
+    solveMessages.value = []
+  } else {
+    chatMessages.value = []
+  }
   question.value = ''
   askError.value = ''
 }
@@ -390,6 +404,9 @@ function stopAsk() {
   askAbort = null
   asking.value = false
   for (const msg of chatMessages.value) {
+    if (msg.streaming) msg.streaming = false
+  }
+  for (const msg of solveMessages.value) {
     if (msg.streaming) msg.streaming = false
   }
 }
@@ -408,18 +425,23 @@ async function submitChat() {
       askError.value = t('preview.aiAskNoSelection')
       return
     }
-  } else if (indexStatus.value?.status !== 'ready') {
-    askError.value = t('preview.aiRagNotReady')
-    return
+  } else if (chatMode.value === 'rag') {
+    if (indexStatus.value?.status !== 'ready') {
+      askError.value = t('preview.aiRagNotReady')
+      return
+    }
   }
+  // solve：不要求选中 / 索引
 
-  const history: AiChatMessage[] = chatMessages.value
+  const list = chatMode.value === 'solve' ? solveMessages : chatMessages
+  const history: AiChatMessage[] = list.value
     .filter((m) => !m.streaming && m.content.trim())
     .map(({ role, content }) => ({ role, content }))
+
   const userId = genChatId()
   const assistantId = genChatId()
-  chatMessages.value.push({ id: userId, role: 'user', content: userContent })
-  chatMessages.value.push({ id: assistantId, role: 'assistant', content: '', streaming: true })
+  list.value.push({ id: userId, role: 'user', content: userContent })
+  list.value.push({ id: assistantId, role: 'assistant', content: '', streaming: true })
   question.value = ''
   scrollChatToBottom()
 
@@ -427,41 +449,58 @@ async function submitChat() {
   askAbort = new AbortController()
 
   try {
-    const streamParams = {
-      fileId: props.fileId,
-      question: userContent,
-      messages: history,
-      signal: askAbort.signal,
-      onChunk: (chunk: string) => {
-        const msg = chatMessages.value.find((m) => m.id === assistantId)
-        if (msg) {
-          msg.content += chunk
-          scrollChatToBottom()
-        }
-      },
+    const onChunk = (chunk: string) => {
+      const msg = list.value.find((m) => m.id === assistantId)
+      if (msg) {
+        msg.content += chunk
+        scrollChatToBottom()
+      }
     }
 
-    if (chatMode.value === 'selection') {
-      await streamAskAboutSelection({
-        ...streamParams,
-        selectedText: selectedText.value,
+    if (chatMode.value === 'solve') {
+      await streamSolveMath({
+        fileId: props.fileId,
+        question: userContent,
+        messages: history,
         fileName: props.fileName,
+        signal: askAbort.signal,
+        onChunk,
+      })
+    } else if (chatMode.value === 'selection') {
+      await streamAskAboutSelection({
+        fileId: props.fileId,
+        question: userContent,
+        selectedText: selectedText.value,
+        messages: history,
+        fileName: props.fileName,
+        signal: askAbort.signal,
+        onChunk,
       })
     } else {
-      await streamRagAsk(streamParams)
+      await streamRagAsk({
+        fileId: props.fileId,
+        question: userContent,
+        messages: history,
+        signal: askAbort.signal,
+        onChunk,
+      })
     }
   } catch (e: unknown) {
     if (e instanceof DOMException && e.name === 'AbortError') {
       return
     }
-    const idx = chatMessages.value.findIndex((m) => m.id === assistantId)
-    if (idx >= 0 && !chatMessages.value[idx]?.content) {
-      chatMessages.value.splice(idx, 1)
+    const idx = list.value.findIndex((m) => m.id === assistantId)
+    if (idx >= 0 && !list.value[idx]?.content) {
+      list.value.splice(idx, 1)
     }
-    const msg = e instanceof Error ? e.message : t('preview.aiAskError')
-    askError.value = msg || t('preview.aiAskError')
+    const fallback =
+      chatMode.value === 'solve'
+        ? t('preview.solveMathError')
+        : t('preview.aiAskError')
+    const msg = e instanceof Error ? e.message : fallback
+    askError.value = msg || fallback
   } finally {
-    const msg = chatMessages.value.find((m) => m.id === assistantId)
+    const msg = list.value.find((m) => m.id === assistantId)
     if (msg) msg.streaming = false
     asking.value = false
     askAbort = null
@@ -539,6 +578,7 @@ function reset() {
   selectedText.value = ''
   question.value = ''
   chatMessages.value = []
+  solveMessages.value = []
   askError.value = ''
   translateTargetLang.value = 'default'
   indexStatus.value = null
@@ -558,7 +598,66 @@ function activate() {
   void refreshIndexStatus()
 }
 
-defineExpose({ reset, activate })
+/** 切入解题：清空划词/RAG 历史，重开解题会话并发起首轮流式 */
+async function startSolve() {
+  if (!props.enableSolveMode) return
+  stopAsk()
+  askError.value = ''
+  chatMessages.value = []
+  solveMessages.value = []
+  question.value = ''
+  chatMode.value = 'solve'
+  rightPanelTab.value = 'chat'
+
+  const userContent = t('preview.solveMathDefaultQuestion')
+  const userId = genChatId()
+  const assistantId = genChatId()
+  solveMessages.value.push({ id: userId, role: 'user', content: userContent })
+  solveMessages.value.push({
+    id: assistantId,
+    role: 'assistant',
+    content: '',
+    streaming: true,
+  })
+  scrollChatToBottom()
+
+  asking.value = true
+  askAbort = new AbortController()
+  try {
+    await streamSolveMath({
+      fileId: props.fileId,
+      question: userContent,
+      messages: [],
+      fileName: props.fileName,
+      signal: askAbort.signal,
+      // 传入回调，当后端流逝返回结果的时候，
+      // 会调用这个函数，把结果拼接到solveMessages.value中，然后滚动到最底部
+      onChunk: (chunk: string) => {
+        const msg = solveMessages.value.find((m) => m.id === assistantId)
+        if (msg) {
+          msg.content += chunk
+          scrollChatToBottom()
+        }
+      },
+    })
+  } catch (e: unknown) {
+    if (e instanceof DOMException && e.name === 'AbortError') return
+    const idx = solveMessages.value.findIndex((m) => m.id === assistantId)
+    if (idx >= 0 && !solveMessages.value[idx]?.content) {
+      solveMessages.value.splice(idx, 1)
+    }
+    askError.value =
+      (e instanceof Error ? e.message : '') || t('preview.solveMathError')
+  } finally {
+    const msg = solveMessages.value.find((m) => m.id === assistantId)
+    if (msg) msg.streaming = false
+    asking.value = false
+    askAbort = null
+    scrollChatToBottom()
+  }
+}
+
+defineExpose({ reset, activate, startSolve })
 </script>
 
 <style lang="scss" scoped>
@@ -612,6 +711,12 @@ defineExpose({ reset, activate })
   font-size: 12px;
   line-height: 1.45;
   color: var(--el-text-color-secondary);
+}
+
+.ai-solve-verify {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--el-color-warning);
 }
 
 .ai-index-bar {

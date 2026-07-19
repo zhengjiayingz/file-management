@@ -85,6 +85,16 @@ export type StreamTranslateParams = {
   onChunk: (text: string) => void
 }
 
+/** 截图数学解题流式参数（F-27） */
+export type StreamSolveMathParams = {
+  fileId: number
+  question: string
+  messages?: AiChatMessage[]
+  fileName?: string
+  signal?: AbortSignal
+  onChunk: (text: string) => void
+}
+
 /** 建索引体裁分组（与后端 summary-genre.types 一致） */
 export const SUMMARY_GENRE_GROUPS: ReadonlyArray<{
   groupKey: 'reading' | 'learning' | 'research'
@@ -99,6 +109,7 @@ async function readTextStream(
   res: Response,
   onChunk: (text: string) => void,
 ): Promise<void> {
+  // ! 读取响应流
   const reader = res.body?.getReader()
   if (!reader) {
     throw new Error('无法读取响应流')
@@ -108,10 +119,12 @@ async function readTextStream(
   while (true) {
     const { done, value } = await reader.read()
     if (done) break
+    // ! 如果 value 有内容，就调用 onChunk 回调往外传
     if (value) {
       onChunk(decoder.decode(value, { stream: true }))
     }
   }
+  // ! 最后再解码剩余内容，确保没有丢弃任何字符
   onChunk(decoder.decode())
 }
 
@@ -272,6 +285,42 @@ export async function streamTranslate(params: StreamTranslateParams): Promise<vo
       body: JSON.stringify({
         text: params.text,
         targetLang: params.targetLang,
+        fileName: params.fileName,
+      }),
+      signal: params.signal,
+    },
+  )
+
+  if (!res.ok) {
+    throw new Error(await parseErrorResponse(res))
+  }
+
+  await readTextStream(res, params.onChunk)
+}
+
+/**
+ * 网盘图片 VL 解题（text/plain 流式，F-27）
+ * 成功时无返回值；内容通过 onChunk 回调往外传
+ */
+export async function streamSolveMath(
+  params: StreamSolveMathParams,
+): Promise<void> {
+  const token = localStorage.getItem('token')
+  if (!token) {
+    throw new Error('未登录')
+  }
+  const res = await fetch(
+    `${API_BASE_URL}/api/files/${params.fileId}/ai/solve-math`,
+    // 这个参数会传入后端controller的body里面
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        question: params.question,
+        messages: params.messages,
         fileName: params.fileName,
       }),
       signal: params.signal,

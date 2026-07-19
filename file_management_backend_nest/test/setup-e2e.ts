@@ -48,6 +48,19 @@ jest.mock('ai', () => ({
   })),
 }));
 
+jest.mock('@/files/ai/vision/math-vision.provider', () => ({
+  getMathVisionConfig: jest.fn(() => ({
+    apiKey: 'e2e-mock-math-key',
+    baseURL: 'https://api.example.com/v1',
+    model: 'mock-vl',
+  })),
+  streamMathVisionChat: jest.fn(
+    async (input: { onChunk: (text: string) => void }) => {
+      input.onChunk(MOCK_AI_STREAM_TEXT);
+    },
+  ),
+}));
+
 // pdfjs-dist legacy build 为 ESM（含 import.meta），Jest 默认不转译 node_modules
 jest.mock('pdfjs-dist/legacy/build/pdf.mjs', () => ({
   getDocument: jest.fn(() => ({

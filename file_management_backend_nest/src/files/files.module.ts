@@ -28,6 +28,7 @@ import { FilesAiRagService } from '@/files/ai/files-ai-rag.service';
 import { FilesAiSummaryService } from '@/files/ai/files-ai-summary.service';
 import { FilesAiKnowledgeService } from '@/files/ai/files-ai-knowledge.service';
 import { FilesAiTranslateService } from '@/files/ai/files-ai-translate.service';
+import { FilesAiMathService } from '@/files/ai/files-ai-math.service';
 import { FilesSearchService } from './query/files-search.service';
 
 @Module({
@@ -57,6 +58,7 @@ import { FilesSearchService } from './query/files-search.service';
     FilesAiSummaryService,
     FilesAiKnowledgeService,
     FilesAiTranslateService,
+    FilesAiMathService,
     DocumentIndexQueueService,
     FilesPreviewService,
     PreviewQueueService,

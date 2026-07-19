@@ -620,6 +620,14 @@ export default {
     aiIndexTriggerError: 'Failed to start indexing',
     aiChatModeSelection: 'Selection Q&A',
     aiChatModeRag: 'Document Q&A',
+    solveMath: 'Solve',
+    aiChatModeSolve: 'Solve',
+    aiSolveHint:
+      'Step-by-step solutions from the problem image. Follow-up questions allowed. LaTeX supported.',
+    solveMathDefaultQuestion:
+      'Please solve the problem in the image step by step. Use LaTeX for formulas ($...$ / $$...$$). If anything is unclear, say so—do not invent.',
+    solveMathVerifyHint: 'AI-assisted answer—please verify yourself.',
+    solveMathError: 'Failed to solve',
     aiRagHint: 'Ask about the whole document via index; no text selection needed. Build the index first.',
     aiRagNotReady: 'Build the index and wait until it is ready',
     aiTabChat: 'Chat',
