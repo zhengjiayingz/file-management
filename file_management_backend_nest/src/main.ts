@@ -36,6 +36,12 @@ async function bootstrap() {
     origin: (origin, callback) => {
       if (!origin || /^http:\/\/localhost:\d+$/.test(origin)) {
         callback(null, true);
+      } else if (
+        typeof origin === 'string' &&
+        origin.startsWith('chrome-extension://')
+      ) {
+        // MV3 扩展 Side Panel / fetch（阶段 C）
+        callback(null, true);
       } else if (corsOrigin) {
         callback(null, origin === corsOrigin);
       } else {

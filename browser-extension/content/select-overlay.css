@@ -1,0 +1,31 @@
+.fm-select-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483646;
+  cursor: crosshair;
+  background: rgba(15, 23, 42, 0.28);
+  user-select: none;
+}
+
+.fm-select-hint {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2147483647;
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.88);
+  color: #f8fafc;
+  font: 13px/1.4 system-ui, sans-serif;
+  pointer-events: none;
+}
+
+.fm-select-box {
+  position: fixed;
+  z-index: 2147483647;
+  border: 2px solid #38bdf8;
+  background: rgba(56, 189, 248, 0.12);
+  box-shadow: 0 0 0 9999px rgba(15, 23, 42, 0.35);
+  pointer-events: none;
+}

@@ -1,0 +1,44 @@
+{
+  "manifest_version": 3,
+  "name": "网盘截图助手（试用）",
+  "version": "0.1.0",
+  "description": "框选网页截图 → AI 问答存网盘 / 解题存错题本。联调原型，可随时删除本目录回滚。",
+  "action": {
+    "default_title": "打开截图助手",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "side_panel": {
+    "default_path": "sidepanel/index.html"
+  },
+  "permissions": [
+    "sidePanel",
+    "activeTab",
+    "scripting",
+    "storage",
+    "tabs"
+  ],
+  "host_permissions": [
+    "http://localhost:3000/*",
+    "http://127.0.0.1:3000/*",
+    "<all_urls>"
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["content/select-overlay.css"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}

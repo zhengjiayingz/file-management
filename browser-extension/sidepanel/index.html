@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>截图助手</title>
+    <link rel="stylesheet" href="sidepanel.css" />
+  </head>
+  <body>
+    <header class="hdr">
+      <strong>网盘截图助手</strong>
+      <span class="badge">试用</span>
+    </header>
+
+    <section id="loginView" class="card hidden">
+      <h2>登录</h2>
+      <p class="muted">使用网盘账号（需关闭 MFA 的试用账号）</p>
+      <label>API 地址</label>
+      <input id="apiBase" type="text" placeholder="http://localhost:3000" />
+      <label>用户名</label>
+      <input id="username" type="text" autocomplete="username" />
+      <label>密码</label>
+      <input id="password" type="password" autocomplete="current-password" />
+      <button id="loginBtn" class="btn primary">登录</button>
+      <p id="loginErr" class="err"></p>
+    </section>
+
+    <section id="mainView" class="hidden">
+      <div class="row between">
+        <span id="userLabel" class="muted"></span>
+        <button id="logoutBtn" class="btn link">退出</button>
+      </div>
+
+      <div class="card">
+        <h2>1. 截图</h2>
+        <button id="captureBtn" class="btn primary block">框选网页区域</button>
+        <p class="muted tip">先打开题目所在网页，再点此按钮；Esc 取消。</p>
+        <img id="preview" class="preview hidden" alt="截图预览" />
+        <p id="tempMeta" class="mono muted"></p>
+      </div>
+
+      <div class="card">
+        <h2>2. 对话</h2>
+        <div class="tabs">
+          <button class="tab active" data-mode="selection">问答</button>
+          <button class="tab" data-mode="solve">解题</button>
+        </div>
+        <div id="chat" class="chat"></div>
+        <textarea
+          id="draft"
+          rows="3"
+          placeholder="输入问题后发送…"
+        ></textarea>
+        <div class="row">
+          <button id="sendBtn" class="btn primary">发送</button>
+          <button id="stopBtn" class="btn" disabled>停止</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>3. 保存</h2>
+        <div class="row wrap">
+          <button id="saveDriveBtn" class="btn success">保存到网盘</button>
+          <button id="saveWrongBtn" class="btn warn">存入错题本</button>
+        </div>
+        <p id="saveResult" class="muted"></p>
+      </div>
+    </section>
+
+    <p id="toast" class="toast hidden"></p>
+    <script type="module" src="sidepanel.js"></script>
+  </body>
+</html>
