@@ -24,6 +24,7 @@ import { VipModule } from './vip/vip.module';
 import { OperationLogModule } from './operation-log/operation-log.module';
 import { JobsModule } from './jobs/jobs.module';
 import { KnowledgeBasesModule } from './knowledge-bases/knowledge-bases.module';
+import { WrongQuestionsModule } from './wrong-questions/wrong-questions.module';
 
 @Module({
   imports: [
@@ -62,6 +63,7 @@ import { KnowledgeBasesModule } from './knowledge-bases/knowledge-bases.module';
     MessageModule,
     ShareModule,
     KnowledgeBasesModule,
+    WrongQuestionsModule,
     RealtimeModule,
     OperationLogModule,
     AdminModule,

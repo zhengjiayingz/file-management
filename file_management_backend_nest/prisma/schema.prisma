@@ -54,6 +54,7 @@ model User {
   vipUpgradeRequestsAsApplicant VipUpgradeRequest[] @relation("VipApplicant")
   vipUpgradeRequestsProcessed   VipUpgradeRequest[] @relation("VipProcessedBy")
   knowledgeBases KnowledgeBase[]
+  wrongQuestionBookItems WrongQuestionBookItem[]
 
   @@map("users")
 }
@@ -173,6 +174,7 @@ model UserFile {
   documentSummaries DocumentSummary[]
   documentKnowledge DocumentKnowledge?
   knowledgeBaseItems KnowledgeBaseItem[]
+  wrongQuestionBookItems WrongQuestionBookItem[]
 
   @@index([userId, parentId, isDeleted])
   @@index([storageId])
@@ -614,4 +616,31 @@ model DocumentSummary {
   userFile UserFile @relation(fields: [userFileId], references: [id], onDelete: Cascade)
   @@unique([userFileId, type, refKey])
   @@map("document_summaries")
+}
+/// F-29 错题本条目；userFileId 可空预留 F-29+ temp 转正，MVP 创建业务校验必填
+model WrongQuestionBookItem {
+  id           Int                     @id @default(autoincrement())
+  userId       Int                     @map("user_id")
+  userFileId   Int?                    @map("user_file_id")
+  questionText String                  @map("question_text") @db.Text
+  answerText   String                  @map("answer_text") @db.Text
+  tags         Json                    @default("[]")
+  /// 难度：简单 / 中档 / 困难
+  difficulty   WrongQuestionDifficulty @default(medium)
+  createdAt    DateTime                @default(now()) @map("created_at")
+  updatedAt    DateTime                @updatedAt @map("updated_at")
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userFile UserFile? @relation(fields: [userFileId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([userId, difficulty])
+  @@index([userFileId])
+  @@map("wrong_question_book_items")
+}
+
+enum WrongQuestionDifficulty {
+  easy
+  medium
+  hard
 }

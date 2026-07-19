@@ -63,6 +63,53 @@
           <p v-if="chatMode === 'solve'" class="ai-solve-verify">
             {{ t('preview.solveMathVerifyHint') }}
           </p>
+          <div v-if="chatMode === 'solve'" class="ai-solve-save-bar">
+            <el-select
+              v-model="saveDifficulty"
+              size="small"
+              class="ai-solve-difficulty"
+              :disabled="asking || savingWrongBook"
+              :title="t('wrongBook.colDifficulty')"
+            >
+              <el-option
+                v-for="d in WRONG_QUESTION_DIFFICULTIES"
+                :key="d"
+                :label="t(`wrongBook.difficulty.${d}`)"
+                :value="d"
+              />
+            </el-select>
+            <el-select
+              v-model="saveTags"
+              multiple
+              filterable
+              allow-create
+              default-first-option
+              clearable
+              collapse-tags
+              collapse-tags-tooltip
+              size="small"
+              class="ai-solve-tags"
+              :placeholder="t('wrongBook.tagsPlaceholder')"
+              :disabled="asking || savingWrongBook"
+            >
+              <el-option
+                v-for="tag in tagOptions"
+                :key="tag"
+                :label="tag"
+                :value="tag"
+              />
+            </el-select>
+            <el-button
+              type="success"
+              size="small"
+              plain
+              :loading="savingWrongBook"
+              :disabled="asking || !canSaveToWrongBook"
+              @click="saveToWrongBook"
+            >
+              {{ t('preview.saveToWrongBook') }}
+            </el-button>
+          </div>
 
           <div v-if="chatMode === 'selection'" class="ai-chat-context">
             <span class="ai-chat-context-label">{{ t('preview.aiChatContext') }}</span>
@@ -133,9 +180,18 @@ import {
   type SummaryGenre,
   type TranslateTargetLang,
 } from '@api/ai'
+import {
+  createWrongQuestion,
+  listWrongQuestions,
+  WRONG_QUESTION_DIFFICULTIES,
+  type WrongQuestionDifficulty,
+  type WrongQuestionItem,
+} from '@api/wrong-questions'
 import { renderMarkdown } from '@utils/renderMarkdown'
 import SummaryPanel from '@components/SummaryPanel/index.vue'
 import KnowledgePanel from '@components/KnowledgePanel/index.vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { useRouter } from 'vue-router'
 
 const SELECTED_PREVIEW_MAX = 200
 const INDEX_POLL_INTERVAL_MS = 2500
@@ -175,6 +231,7 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
+const router = useRouter()
 
 const selectedText = computed({
   get: () => props.selectedText ?? '',
@@ -194,6 +251,41 @@ const asking = ref(false)
 const askError = ref('')
 const translateTargetLang = ref<TranslateTargetLang>('default')
 let askAbort: AbortController | null = null
+
+/** 存入错题本：考点（可多选 / 可新建） */
+const saveTags = ref<string[]>([])
+const tagOptions = ref<string[]>([])
+const saveDifficulty = ref<WrongQuestionDifficulty>('medium')
+const savingWrongBook = ref(false)
+
+function collectTags(rows: WrongQuestionItem[]): string[] {
+  const set = new Set<string>()
+  for (const row of rows) {
+    for (const tag of row.tags || []) {
+      const t0 = tag.trim()
+      if (t0) set.add(t0)
+    }
+  }
+  return [...set].sort((a, b) => a.localeCompare(b, 'zh-CN'))
+}
+
+async function refreshTagOptions() {
+  try {
+    const res = await listWrongQuestions({ page: 1, pageSize: 100 })
+    tagOptions.value = collectTags(res.items)
+  } catch {
+    /* 选项刷新失败不影响存入 */
+  }
+}
+
+/** 有完整助手解答时可存入 */
+const canSaveToWrongBook = computed(() => {
+  if (chatMode.value !== 'solve') return false
+  const lastAssistant = [...solveMessages.value]
+    .reverse()
+    .find((m) => m.role === 'assistant' && !m.streaming && m.content.trim())
+  return Boolean(lastAssistant)
+})
 
 const indexStatus = ref<DocumentIndexStatusData | null>(null)
 const indexTriggering = ref(false)
@@ -259,6 +351,12 @@ watch(rightPanelTab, (tab) => {
 watch(showKnowledgeTab, (visible) => {
   if (!visible && rightPanelTab.value === 'knowledge') {
     rightPanelTab.value = 'chat'
+  }
+})
+
+watch(chatMode, (mode) => {
+  if (mode === 'solve') {
+    void refreshTagOptions()
   }
 })
 
@@ -657,6 +755,53 @@ async function startSolve() {
   }
 }
 
+/** 将当前解题结果存入错题本（题干由服务端对原图 OCR，不传提示词） */
+async function saveToWrongBook() {
+  if (!canSaveToWrongBook.value || savingWrongBook.value) return
+  const lastAssistant = [...solveMessages.value]
+    .reverse()
+    .find((m) => m.role === 'assistant' && !m.streaming && m.content.trim())
+  if (!lastAssistant) return
+
+  const tags = saveTags.value.map((s) => s.trim()).filter(Boolean)
+
+  savingWrongBook.value = true
+  try {
+    const item = await createWrongQuestion({
+      userFileId: props.fileId,
+      answerText: lastAssistant.content,
+      tags,
+      difficulty: saveDifficulty.value,
+    })
+    if (tags.length) {
+      const set = new Set(tagOptions.value)
+      for (const tag of tags) set.add(tag)
+      tagOptions.value = [...set].sort((a, b) => a.localeCompare(b, 'zh-CN'))
+    }
+    ElMessage.success(t('preview.saveToWrongBookSuccess'))
+    try {
+      await ElMessageBox.confirm(
+        t('preview.saveToWrongBookGoConfirm'),
+        t('preview.saveToWrongBook'),
+        {
+          type: 'success',
+          confirmButtonText: t('preview.saveToWrongBookGo'),
+          cancelButtonText: t('preview.saveToWrongBookStay'),
+        },
+      )
+      void router.push(`/wrong-questions/${item.id}`)
+    } catch {
+      /* 用户选择留在预览 */
+    }
+  } catch (e) {
+    ElMessage.error(
+      (e instanceof Error ? e.message : '') || t('preview.saveToWrongBookError'),
+    )
+  } finally {
+    savingWrongBook.value = false
+  }
+}
+
 defineExpose({ reset, activate, startSolve })
 </script>
 
@@ -717,8 +862,28 @@ defineExpose({ reset, activate, startSolve })
 
 .ai-solve-verify {
   margin: 0 0 8px;
+  padding: 0 14px;
   font-size: 12px;
   color: var(--el-color-warning);
+  flex-shrink: 0;
+}
+
+.ai-solve-save-bar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 0 14px 8px;
+  flex-shrink: 0;
+}
+
+.ai-solve-difficulty {
+  width: 110px;
+  flex-shrink: 0;
+}
+
+.ai-solve-tags {
+  flex: 1;
+  min-width: 0;
 }
 
 .ai-index-bar {
