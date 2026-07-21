@@ -167,7 +167,7 @@ export class ImageSearchService {
       const f = byId.get(r.userFileId);
       if (!f) continue; // 理论上不应发生；防御性跳过
 
-      //! 把相似度score结果拼成前端需要的 items
+      //! 把相似度 score 结果拼成前端需要的 items
       items.push({
         id: f.id,
         fileName: f.fileName,

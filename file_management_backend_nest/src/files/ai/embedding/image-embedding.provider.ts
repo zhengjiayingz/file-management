@@ -77,7 +77,6 @@ async function parseEmbeddingsResponse(
 export async function embedImage(buffer: Buffer, mimeHint?: string | null) {
   const { apiKey, baseURL, model } = getImageEmbeddingConfig();
   const dataUrl = await prepareImageDataUrl(buffer, mimeHint);
-  //! 发送请求到硅基 VL Embedding API，把图片转成向量
   const res = await fetch(`${baseURL}/embeddings`, {
     method: 'POST',
     headers: {
@@ -89,18 +88,15 @@ export async function embedImage(buffer: Buffer, mimeHint?: string | null) {
       input: { image: dataUrl },
     }),
   });
-  //! 解析响应
   const json = await parseEmbeddingsResponse(res);
   if (!res.ok) {
     throw new Error(
       json.error?.message || `Image Embedding API failed: ${res.status}`,
     );
   }
-  //! 解析响应
   const row = json.data?.[0];
   if (!Array.isArray(row?.embedding) || row.embedding.length === 0) {
     throw new Error('Image Embedding API 返回了空向量');
   }
-  //! 返回向量
   return row.embedding;
 }
