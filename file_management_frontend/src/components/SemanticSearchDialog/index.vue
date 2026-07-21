@@ -1,28 +1,68 @@
 <template>
-    <el-dialog v-model="visible" :title="t('semanticSearch.title')" width="min(640px, 96vw)" destroy-on-close
-        @opened="onOpened">
-        <div class="semantic-search">
-            <div class="search-row">
-                <el-input ref="inputRef" v-model="q" clearable :placeholder="t('semanticSearch.placeholder')"
-                    @keyup.enter="runSearch" />
-                <el-button type="primary" :loading="loading" @click="runSearch">
-                    {{ t('semanticSearch.search') }}
-                </el-button>
-            </div>
+    <el-dialog v-model="visible" :title="t('semanticSearch.title')" width="min(720px, 96vw)" destroy-on-close
+        @opened="onOpened" @closed="onClosed">
+        <el-tabs v-model="activeTab" class="search-tabs">
+            <el-tab-pane :label="t('semanticSearch.tabText')" name="text">
+                <div class="semantic-search">
+                    <div class="search-row">
+                        <el-input ref="inputRef" v-model="q" clearable :placeholder="t('semanticSearch.placeholder')"
+                            @keyup.enter="runSearch" />
+                        <el-button type="primary" :loading="loading" @click="runSearch">
+                            {{ t('semanticSearch.search') }}
+                        </el-button>
+                    </div>
 
-            <div v-loading="loading" class="result-area">
-                <el-empty v-if="searched && !loading && items.length === 0" :description="emptyText" />
-                <ul v-else-if="items.length" class="result-list">
-                    <li v-for="item in items" :key="item.id" class="result-item" @click="emit('select', item)">
-                        <div class="result-title">
-                            <span class="name">{{ item.fileName }}</span>
-                            <span class="score">{{ item.score }}</span>
+                    <div v-loading="loading" class="result-area">
+                        <el-empty v-if="searched && !loading && items.length === 0" :description="emptyText" />
+                        <ul v-else-if="items.length" class="result-list">
+                            <li v-for="item in items" :key="item.id" class="result-item" @click="emit('select', item)">
+                                <div class="result-title">
+                                    <span class="name">{{ item.fileName }}</span>
+                                    <span class="score">{{ item.score }}</span>
+                                </div>
+                                <p class="excerpt">{{ item.excerpt }}</p>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </el-tab-pane>
+
+            <el-tab-pane :label="t('semanticSearch.tabImage')" name="image">
+                <div class="semantic-search">
+                    <p class="image-hint">{{ t('semanticSearch.imageHint') }}</p>
+                    <div class="search-row image-row">
+                        <el-upload :auto-upload="false" :show-file-list="false" accept="image/*"
+                            :on-change="onQueryImageChange">
+                            <el-button>{{ t('semanticSearch.imagePick') }}</el-button>
+                        </el-upload>
+                        <span v-if="queryFileName" class="query-name">{{ queryFileName }}</span>
+                        <el-button type="primary" :loading="imageLoading" :disabled="!queryFile"
+                            @click="runImageSearch">
+                            {{ t('semanticSearch.search') }}
+                        </el-button>
+                    </div>
+                    <div v-if="queryPreviewUrl" class="query-preview">
+                        <img :src="queryPreviewUrl" alt="query" />
+                    </div>
+
+                    <div v-loading="imageLoading" :element-loading-text="t('semanticSearch.imageSearching')"
+                        class="result-area">
+                        <el-empty v-if="imageSearched && !imageLoading && imageItems.length === 0"
+                            :description="imageEmptyText" />
+                        <div v-else-if="imageItems.length" class="image-grid">
+                            <button v-for="item in imageItems" :key="item.id" type="button" class="image-card"
+                                @click="onSelectImage(item)">
+                                <img :src="thumbUrl(item.id)" :alt="item.fileName" loading="lazy" />
+                                <div class="image-meta">
+                                    <span class="name">{{ item.fileName }}</span>
+                                    <span class="score">{{ item.score }}</span>
+                                </div>
+                            </button>
                         </div>
-                        <p class="excerpt">{{ item.excerpt }}</p>
-                    </li>
-                </ul>
-            </div>
-        </div>
+                    </div>
+                </div>
+            </el-tab-pane>
+        </el-tabs>
     </el-dialog>
 </template>
 
@@ -30,22 +70,36 @@
 import { computed, nextTick, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
+import type { UploadFile } from 'element-plus'
 import fileApiService from '@api/file'
-import type { SemanticSearchItem } from '@typing/file'
+import { useAuthStore } from '@stores/auth'
+import type { ImageSearchItem, SemanticSearchItem } from '@typing/file'
 
 const props = defineProps<{ modelValue: boolean }>()
 const emit = defineEmits<{
     (e: 'update:modelValue', v: boolean): void
-    (e: 'select', item: SemanticSearchItem): void
+    (e: 'select', item: SemanticSearchItem | ImageSearchItem): void
 }>()
 
 const { t } = useI18n()
+const authStore = useAuthStore()
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
+
 const inputRef = ref<{ focus: () => void } | null>(null)
+const activeTab = ref<'text' | 'image'>('text')
 const q = ref('')
 const loading = ref(false)
 const searched = ref(false)
 const items = ref<SemanticSearchItem[]>([])
 const indexedFileCount = ref(0)
+
+const queryFile = ref<File | null>(null)
+const queryFileName = ref('')
+const queryPreviewUrl = ref('')
+const imageLoading = ref(false)
+const imageSearched = ref(false)
+const imageItems = ref<ImageSearchItem[]>([])
+const galleryCount = ref(0)
 
 const visible = computed({
     get: () => props.modelValue,
@@ -57,9 +111,44 @@ const emptyText = computed(() => {
     return t('semanticSearch.emptyNoMatch')
 })
 
+const imageEmptyText = computed(() => {
+    if (galleryCount.value === 0) return t('semanticSearch.imageEmptyGallery')
+    return t('semanticSearch.imageEmptyNoMatch')
+})
+
+const thumbUrl = (id: number) => {
+    const token = authStore.token || ''
+    return `${API_BASE_URL}/api/files/${id}/thumbnail?token=${encodeURIComponent(token)}`
+}
+/** 清除图片预览 URL */
+const clearQueryPreview = () => {
+    if (queryPreviewUrl.value) {
+        URL.revokeObjectURL(queryPreviewUrl.value)
+        queryPreviewUrl.value = ''
+    }
+}
+
 const onOpened = async () => {
     await nextTick()
-    inputRef.value?.focus?.()
+    if (activeTab.value === 'text') inputRef.value?.focus?.()
+}
+
+const onClosed = () => {
+    clearQueryPreview()
+    queryFile.value = null
+    queryFileName.value = ''
+}
+
+const onQueryImageChange = (uploadFile: UploadFile) => {
+    const raw = uploadFile.raw
+    if (!raw) return
+    clearQueryPreview()
+    queryFile.value = raw // 真正的 File，点「搜索」时才发给后端
+    queryFileName.value = raw.name // 文件名，显示在按钮旁边
+    //! 创建图片预览 URL
+    queryPreviewUrl.value = URL.createObjectURL(raw)
+    imageSearched.value = false // 搜索结果重置
+    imageItems.value = []
 }
 
 const runSearch = async () => {
@@ -81,6 +170,35 @@ const runSearch = async () => {
         loading.value = false
     }
 }
+
+// 点击「搜索」按钮
+const runImageSearch = async () => {
+    if (!queryFile.value) {
+        ElMessage.warning(t('semanticSearch.imageNeedFile'))
+        return
+    }
+    imageLoading.value = true
+    imageSearched.value = true
+    try {
+        // 把整个图片传到后端
+        const data = await fileApiService.searchFilesByImage(queryFile.value)
+        imageItems.value = data?.items ?? [] // 搜索结果填充到图片网格
+        galleryCount.value = data?.galleryCount ?? 0 // 后端最多拉 100 张网盘图参与比对，galleryCount 是实际参与的数量
+    } catch {
+        imageItems.value = []
+        galleryCount.value = 0
+    } finally {
+        imageLoading.value = false
+    }
+}
+
+const onSelectImage = (item: ImageSearchItem) => {
+    emit('select', {
+        ...item,
+        excerpt: '',
+        chunkIndex: 0,
+    })
+}
 </script>
 
 <style scoped>
@@ -94,6 +212,40 @@ const runSearch = async () => {
 .search-row {
     display: flex;
     gap: 8px;
+    align-items: center;
+}
+
+.image-row {
+    flex-wrap: wrap;
+}
+
+.image-hint {
+    margin: 0;
+    font-size: 13px;
+    color: var(--el-text-color-secondary);
+}
+
+.query-name {
+    font-size: 13px;
+    color: var(--el-text-color-regular);
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.query-preview {
+    width: 120px;
+    height: 120px;
+    border-radius: 6px;
+    overflow: hidden;
+    background: var(--el-fill-color-light);
+}
+
+.query-preview img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
 }
 
 .result-area {
@@ -140,5 +292,50 @@ const runSearch = async () => {
     -webkit-box-orient: vertical;
     overflow: hidden;
     white-space: pre-wrap;
+}
+
+.image-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 10px;
+}
+
+.image-card {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 0;
+    border: 1px solid var(--el-border-color-lighter);
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--el-bg-color);
+    cursor: pointer;
+    text-align: left;
+}
+
+.image-card:hover {
+    border-color: var(--el-color-primary-light-5);
+}
+
+.image-card img {
+    width: 100%;
+    aspect-ratio: 1;
+    object-fit: cover;
+    background: var(--el-fill-color-light);
+}
+
+.image-meta {
+    display: flex;
+    justify-content: space-between;
+    gap: 6px;
+    padding: 0 8px 8px;
+    font-size: 12px;
+}
+
+.image-meta .name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 500;
 }
 </style>

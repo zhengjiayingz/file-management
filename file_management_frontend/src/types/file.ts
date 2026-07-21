@@ -93,5 +93,22 @@ export interface SemanticSearchResult {
   q: string
 }
 
+/** 以图搜图单条结果（POST /ai/image-search/by-image） */
+export interface ImageSearchItem {
+  id: number
+  fileName: string
+  fileType: string
+  mimeType: string | null
+  fileSize: number | null
+  parentId: number | null
+  score: number
+}
+
+export interface ImageSearchResult {
+  items: ImageSearchItem[]
+  galleryCount: number
+  fingerprintReadyCount: number
+}
+
 // 上传进度回调类型
 export type OnUploadProgress = (progressEvent: any) => void;

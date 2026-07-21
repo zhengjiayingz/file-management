@@ -187,6 +187,7 @@ import type {
   FileQueryParams,
   FileTypeCategory,
   SemanticSearchItem,
+  ImageSearchItem,
 } from '@typing/file'
 import type { FileFilterState, FileFilterFeatures } from '@typing/fileFilter'
 import { defaultFileFilterState, defaultFileFilterFeatures } from '@typing/fileFilter'
@@ -529,7 +530,7 @@ const handleFileClick = (file: FileInfo) => {
 
 const semanticSearchVisible = ref(false)
 
-const onSemanticSearchSelect = async (item: SemanticSearchItem) => {
+const onSemanticSearchSelect = async (item: SemanticSearchItem | ImageSearchItem) => {
   semanticSearchVisible.value = false
   const file: FileInfo = {
     id: item.id,

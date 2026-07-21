@@ -83,12 +83,21 @@ export default {
   },
   semanticSearch: {
     title: 'Smart search',
+    tabText: 'Semantic',
+    tabImage: 'Image search',
     placeholder: 'Describe what you are looking for in natural language…',
     search: 'Search',
     needQuery: 'Please enter a search query',
     emptyNoIndex:
       'No indexed files yet. Build an index in file preview first; filename search still works.',
     emptyNoMatch: 'No content-related indexed files found',
+    imageHint:
+      'Upload an image to find visually similar files in your drive (first run may be slow)',
+    imagePick: 'Choose image',
+    imageNeedFile: 'Please choose an image first',
+    imageEmptyGallery: 'No images in your drive yet. Upload some and try again',
+    imageEmptyNoMatch: 'No visually similar images found',
+    imageSearching: 'Computing similarity…',
   },
   sessionManage: {
     title: 'Session management',

@@ -31,6 +31,8 @@ import { FilesAiTranslateService } from '@/files/ai/files-ai-translate.service';
 import { FilesAiMathService } from '@/files/ai/files-ai-math.service';
 import { FilesAiChatSessionService } from '@/files/ai/files-ai-chat-session.service';
 import { FilesSearchService } from './query/files-search.service';
+import { ImageSearchController } from '@/files/ai/image-search.controller';
+import { ImageSearchService } from '@/files/ai/image-search.service';
 
 @Module({
   imports: [StorageModule, ShareModule, OperationLogModule],
@@ -43,6 +45,7 @@ import { FilesSearchService } from './query/files-search.service';
     FilesPreviewController,
     FilesQueryController,
     FilesManageController,
+    ImageSearchController,
   ],
   providers: [
     FilesUploadService,
@@ -51,6 +54,7 @@ import { FilesSearchService } from './query/files-search.service';
     FilesArchiveService,
     FilesQueryService,
     FilesSearchService,
+    ImageSearchService,
     FilesManageService,
     FilesTagService,
     FilesAiService,

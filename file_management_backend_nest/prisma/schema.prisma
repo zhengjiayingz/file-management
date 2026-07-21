@@ -58,6 +58,7 @@ model User {
   fileAiChatSessions FileAiChatSession[]
   mathTempImages MathTempImage[]
   tempAiChatSessions TempAiChatSession[]
+  fileFingerprints FileFingerprint[]
 
   @@map("users")
 }
@@ -179,6 +180,7 @@ model UserFile {
   knowledgeBaseItems KnowledgeBaseItem[]
   wrongQuestionBookItems WrongQuestionBookItem[]
   fileAiChatSessions FileAiChatSession[]
+  fileFingerprint FileFingerprint?
 
   @@index([userId, parentId, isDeleted])
   @@index([storageId])
@@ -652,6 +654,31 @@ model DocumentChunk {
   @@unique([userFileId, chunkIndex])
   @@index([userFileId, section])
   @@map("document_chunks")
+}
+
+enum FileFingerprintStatus {
+  pending
+  ready
+  failed
+}
+
+/// F-38 图片视觉指纹（以图搜图）；MVP 搜索时按需 embed 并缓存
+model FileFingerprint {
+  id             Int                   @id @default(autoincrement())
+  userFileId     Int                   @unique @map("user_file_id")
+  userId         Int                   @map("user_id")
+  /// 视觉 embedding（number[]）；与文本 embedding 模型不同
+  imageEmbedding Json?                 @map("image_embedding")
+  status         FileFingerprintStatus @default(pending)
+  errorMessage   String?               @map("error_message") @db.VarChar(500)
+  createdAt      DateTime              @default(now()) @map("created_at")
+  updatedAt      DateTime              @updatedAt @map("updated_at")
+
+  userFile UserFile @relation(fields: [userFileId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@map("file_fingerprints")
 }
 
 model DocumentSummary {

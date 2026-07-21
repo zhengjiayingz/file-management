@@ -7,7 +7,8 @@ import type {
   RenameFileParams,
   MoveFileParams,
   FileQueryParams,
-  SemanticSearchResult
+  SemanticSearchResult,
+  ImageSearchResult,
 } from '@typing/file'
 
 // 上传进度回调类型
@@ -152,6 +153,18 @@ async searchFilesSemantic(params: {
   limit?: number
 }): Promise<SemanticSearchResult> {
   const res = await request.get<any>('/files/search', { params })
+  return res.data.data
+},
+
+/** 以图搜图：上传查询图，按视觉相似度找网盘图片 */
+async searchFilesByImage(file: File, limit = 20): Promise<ImageSearchResult> {
+  const form = new FormData()
+  form.append('file', file)
+  const res = await request.post<any>('/ai/image-search/by-image', form, {
+    params: { limit },
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 120000,
+  })
   return res.data.data
 },
 
