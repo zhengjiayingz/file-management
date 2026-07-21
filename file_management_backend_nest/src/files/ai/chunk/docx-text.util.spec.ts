@@ -41,6 +41,8 @@ describe('docx-text.util', () => {
 
   it('正文过短应抛 EmptyDocxError', async () => {
     const buf = await buildMinimalDocx('short');
-    await expect(extractDocxText(buf)).rejects.toThrow('Word 文档未检测到可索引文字');
+    await expect(extractDocxText(buf)).rejects.toThrow(
+      'Word 文档未检测到可索引文字',
+    );
   });
 });

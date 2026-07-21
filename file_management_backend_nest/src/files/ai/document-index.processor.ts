@@ -88,6 +88,18 @@ export class DocumentIndexProcessor extends WorkerHost {
           fileName: userFile.fileName,
           mimeType: userFile.storage.mimeType,
         },
+        {
+          onProgress: async (p) => {
+            if (p.kind !== 'pdf_ocr_page') return;
+            // extracting 阶段：10%～28% 之间随页推进
+            const progress =
+              10 + Math.floor((p.page / Math.max(p.totalPages, 1)) * 18);
+            await this.patchJob(userFileId, {
+              progress,
+              progressMsg: `OCR 第 ${p.page}/${p.totalPages} 页`,
+            });
+          },
+        },
       );
       // 更新状态 → chunking，进度 30%
       await this.patchJob(userFileId, {

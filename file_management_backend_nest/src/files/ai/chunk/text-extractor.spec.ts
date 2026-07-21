@@ -7,6 +7,16 @@ jest.mock('./pdf-text.util', () => ({
   extractPdfTextWithPdfJs: jest.fn().mockResolvedValue(''),
 }));
 
+jest.mock('./pdf-ocr.util', () => ({
+  extractScannedPdfText: jest.fn(),
+  PdfOcrPageLimitError: class PdfOcrPageLimitError extends Error {
+    constructor(message?: string) {
+      super(message ?? 'PDF 页数超过 OCR 上限');
+      this.name = 'PdfOcrPageLimitError';
+    }
+  },
+}));
+
 jest.mock('@/files/ai/vision/vision.provider', () => ({
   extractTextFromImage: jest.fn().mockResolvedValue('OCR hello world'),
 }));
@@ -22,11 +32,15 @@ import {
   softInsertEnglishSpaces,
 } from './text-extractor';
 import { extractPdfTextWithPdfJs } from './pdf-text.util';
+import { extractScannedPdfText } from './pdf-ocr.util';
 
 const mockedExtractPdfTextWithPdfJs =
   extractPdfTextWithPdfJs as jest.MockedFunction<
     typeof extractPdfTextWithPdfJs
   >;
+
+const mockedExtractScannedPdfText =
+  extractScannedPdfText as jest.MockedFunction<typeof extractScannedPdfText>;
 
 const MINIMAL_PDF = Buffer.from(
   '%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Count 1/Kids[3 0 R]>>endobj\n3 0 obj<</Type/Page/MediaBox[0 0 3 3]>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF',
@@ -80,6 +94,10 @@ describe('text-extractor', () => {
   beforeEach(() => {
     mockedExtractPdfTextWithPdfJs.mockReset();
     mockedExtractPdfTextWithPdfJs.mockResolvedValue('');
+    mockedExtractScannedPdfText.mockReset();
+    mockedExtractScannedPdfText.mockResolvedValue(
+      '--- Page 1 ---\n扫描件 OCR 正文内容足够长用于通过长度校验',
+    );
     mockedExtractTextFromImage.mockReset();
     mockedExtractTextFromImage.mockResolvedValue('OCR hello world');
   });
@@ -256,16 +274,17 @@ describe('text-extractor', () => {
       ).rejects.toThrow(UnsupportedDocumentFormatError);
     });
 
-    it('无文字层 PDF 应抛 ScannedPdfError', async () => {
-      await expect(
-        extractTextFromBuffer(MINIMAL_PDF, {
-          fileName: 'scan.pdf',
-          mimeType: 'application/pdf',
-        }),
-      ).rejects.toThrow(ScannedPdfError);
+    it('无文字层 PDF 应 fallback 扫描 OCR', async () => {
+      const text = await extractTextFromBuffer(MINIMAL_PDF, {
+        fileName: 'scan.pdf',
+        mimeType: 'application/pdf',
+      });
+      expect(text).toContain('--- Page 1 ---');
+      expect(text).toContain('扫描件 OCR');
+      expect(mockedExtractScannedPdfText).toHaveBeenCalled();
     });
 
-    it('PDF 坐标抽取有字时应返回带空格文本', async () => {
+    it('PDF 坐标抽取有字时应返回带空格文本且不 OCR', async () => {
       mockedExtractPdfTextWithPdfJs.mockResolvedValue(
         'Harry Potter and the Philosophers Stone',
       );
@@ -276,13 +295,26 @@ describe('text-extractor', () => {
       expect(text).toContain('Harry Potter');
       expect(text).toContain(' ');
       expect(mockedExtractPdfTextWithPdfJs).toHaveBeenCalled();
+      expect(mockedExtractScannedPdfText).not.toHaveBeenCalled();
     });
 
-    it('PDF 抽取抛错时应转为 ScannedPdfError', async () => {
+    it('PDF 文字层抽取抛错时应 fallback OCR', async () => {
       mockedExtractPdfTextWithPdfJs.mockRejectedValue(new Error('broken'));
+      const text = await extractTextFromBuffer(MINIMAL_PDF, {
+        fileName: 'bad.pdf',
+        mimeType: 'application/pdf',
+      });
+      expect(text).toContain('扫描件 OCR');
+      expect(mockedExtractScannedPdfText).toHaveBeenCalled();
+    });
+
+    it('扫描 OCR 仍失败时应抛 ScannedPdfError', async () => {
+      mockedExtractScannedPdfText.mockRejectedValue(
+        new Error('OCR 未识别到可用文字'),
+      );
       await expect(
         extractTextFromBuffer(MINIMAL_PDF, {
-          fileName: 'bad.pdf',
+          fileName: 'blank-scan.pdf',
           mimeType: 'application/pdf',
         }),
       ).rejects.toThrow(ScannedPdfError);
@@ -391,23 +423,23 @@ describe('text-extractor', () => {
       expect(mockedExtractTextFromImage).toHaveBeenCalled();
     });
 
-    it('PDF 应通过 StorageProvider 读取并解析', async () => {
+    it('扫描 PDF 应通过 StorageProvider 读取并 OCR', async () => {
       const { storage, existsMock, getReadStreamMock } = createMockStorage({
         getReadStream: jest
           .fn()
           .mockResolvedValue(Readable.from([MINIMAL_PDF])),
       });
 
-      await expect(
-        extractTextFromStorage(storage, {
-          storedPath: 'uploads/scan.pdf',
-          fileName: 'scan.pdf',
-          mimeType: 'application/pdf',
-        }),
-      ).rejects.toThrow(ScannedPdfError);
+      const text = await extractTextFromStorage(storage, {
+        storedPath: 'uploads/scan.pdf',
+        fileName: 'scan.pdf',
+        mimeType: 'application/pdf',
+      });
 
+      expect(text).toContain('扫描件 OCR');
       expect(existsMock).toHaveBeenCalledWith('uploads/scan.pdf');
       expect(getReadStreamMock).toHaveBeenCalledWith('uploads/scan.pdf');
+      expect(mockedExtractScannedPdfText).toHaveBeenCalled();
     });
   });
 });

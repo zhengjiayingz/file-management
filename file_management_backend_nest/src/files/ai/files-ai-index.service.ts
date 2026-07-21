@@ -105,7 +105,7 @@ export class FilesAiIndexService {
       })
     ) {
       throw new BadRequestException(
-        '仅支持 UTF-8 编码的 .txt / .md、含文字层的 .pdf、.docx 及可 OCR 的图片（png/jpg/webp/gif）',
+        '仅支持 UTF-8 编码的 .txt / .md、.pdf（含扫描件 OCR）、.docx 及可 OCR 的图片（png/jpg/webp/gif）',
       );
     }
     // 是否已有进行中的任务，每个文件在 document_index_jobs 里最多一行（userFileId 唯一）。

@@ -25,7 +25,10 @@ export function extractTextFromDocumentXml(xml: string): string {
   return paragraphs.join('\n');
 }
 
-function readZipEntry(zipfile: yauzl.ZipFile, entry: yauzl.Entry): Promise<Buffer> {
+function readZipEntry(
+  zipfile: yauzl.ZipFile,
+  entry: yauzl.Entry,
+): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     zipfile.openReadStream(entry, (err, stream) => {
       if (err || !stream) {
@@ -78,7 +81,9 @@ function findDocumentXmlEntry(zipfile: yauzl.ZipFile): Promise<yauzl.Entry> {
       finish(() => reject(new Error('docx 中未找到 document.xml')));
     });
 
-    zipfile.on('error', (err) => finish(() => reject(err)));
+    zipfile.on('error', (err) =>
+      finish(() => reject(err instanceof Error ? err : new Error(String(err)))),
+    );
     zipfile.readEntry();
   });
 }
@@ -114,7 +119,11 @@ export async function extractDocxText(buffer: Buffer): Promise<string> {
 export async function readableToBuffer(stream: Readable): Promise<Buffer> {
   const chunks: Buffer[] = [];
   for await (const chunk of stream) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    chunks.push(
+      Buffer.isBuffer(chunk)
+        ? Buffer.from(chunk.buffer, chunk.byteOffset, chunk.byteLength)
+        : Buffer.from(chunk as Uint8Array | string),
+    );
   }
   return Buffer.concat(chunks);
 }

@@ -14,6 +14,18 @@ jest.mock('./chunk/pdf-text.util', () => ({
   extractPdfTextWithPdfJs: jest.fn().mockResolvedValue(''),
 }));
 
+jest.mock('./chunk/pdf-ocr.util', () => ({
+  extractScannedPdfText: jest.fn().mockResolvedValue(
+    '--- Page 1 ---\n扫描 PDF OCR 正文内容足够长可以完成索引分块与向量化流程',
+  ),
+  PdfOcrPageLimitError: class PdfOcrPageLimitError extends Error {
+    constructor(message?: string) {
+      super(message ?? 'PDF 页数超过 OCR 上限');
+      this.name = 'PdfOcrPageLimitError';
+    }
+  },
+}));
+
 jest.mock('./embedding/embedding.provider', () => ({
   embedMany: jest.fn(),
 }));
@@ -129,8 +141,10 @@ describe('DocumentIndexProcessor', () => {
     summaryGenre: 'novel',
   };
 
-  it('无文字层 PDF 应标记 failed 并返回扫描件友好错误', async () => {
+  it('无文字层 PDF 应经 OCR 后标记 ready', async () => {
     const { processor, prisma } = createProcessor();
+    const ocrText =
+      '--- Page 1 ---\n扫描 PDF OCR 正文内容足够长可以完成索引分块与向量化流程';
     prisma.findFirst.mockResolvedValue({
       fileName: 'scan.pdf',
       storage: {
@@ -139,22 +153,19 @@ describe('DocumentIndexProcessor', () => {
         fileHash: 'pdf-hash',
       },
     });
+    chunkTextMock.mockReturnValue([{ index: 0, content: ocrText }]);
+    embedManyMock.mockResolvedValue([[1, 0, 0]]);
+    prisma.chunkFindMany.mockResolvedValue([
+      { chunkIndex: 0, chapterNo: null, content: ocrText },
+    ]);
 
-    const job = createJob(scanJobData);
+    await processor.process(createJob(scanJobData));
 
-    await expect(processor.process(job)).rejects.toThrow(
-      /未检测到可选中文字|扫描件/,
+    const statuses = prisma.jobUpdate.mock.calls.map((c) => c[0].data.status);
+    expect(statuses.at(-1)).toBe('ready');
+    expect(chunkTextMock).toHaveBeenCalledWith(
+      expect.stringContaining('扫描 PDF OCR'),
     );
-
-    expect(prisma.jobUpdate).toHaveBeenCalled();
-    const lastCall = prisma.jobUpdate.mock.calls.at(-1);
-    expect(lastCall).toBeDefined();
-    const updateCall = lastCall![0];
-
-    expect(updateCall.where).toEqual({ userFileId: scanJobData.userFileId });
-    expect(updateCall.data.status).toBe('failed');
-    expect(updateCall.data.progressMsg).toBe('索引失败');
-    expect(updateCall.data.errorMessage).toMatch(/未检测到可选中文字|扫描件/);
   });
 
   async function runTxtIndex(
