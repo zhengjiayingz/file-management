@@ -33,6 +33,9 @@ import { FilesAiChatSessionService } from '@/files/ai/files-ai-chat-session.serv
 import { FilesSearchService } from './query/files-search.service';
 import { ImageSearchController } from '@/files/ai/image-search.controller';
 import { ImageSearchService } from '@/files/ai/image-search.service';
+import { ImageFingerprintService } from '@/files/ai/fingerprint/image-fingerprint.service';
+import { FilesDuplicatesController } from '@/files/duplicates/files-duplicates.controller';
+import { FilesDuplicatesService } from '@/files/duplicates/files-duplicates.service';
 
 @Module({
   imports: [StorageModule, ShareModule, OperationLogModule],
@@ -43,6 +46,7 @@ import { ImageSearchService } from '@/files/ai/image-search.service';
     FilesArchiveController,
     FilesAiController,
     FilesPreviewController,
+    FilesDuplicatesController,
     FilesQueryController,
     FilesManageController,
     ImageSearchController,
@@ -54,7 +58,9 @@ import { ImageSearchService } from '@/files/ai/image-search.service';
     FilesArchiveService,
     FilesQueryService,
     FilesSearchService,
+    ImageFingerprintService,
     ImageSearchService,
+    FilesDuplicatesService,
     FilesManageService,
     FilesTagService,
     FilesAiService,

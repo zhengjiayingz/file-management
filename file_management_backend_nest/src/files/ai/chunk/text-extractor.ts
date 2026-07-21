@@ -149,7 +149,7 @@ function isDocxDocument(input: {
   );
 }
 
-function isImageDocument(input: {
+export function isImageDocument(input: {
   fileName: string;
   mimeType?: string | null;
 }) {

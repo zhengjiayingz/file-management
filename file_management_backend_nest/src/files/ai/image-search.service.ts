@@ -3,13 +3,11 @@ import {
   Injectable,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { Readable } from 'node:stream';
 
 import { PrismaService } from '@/prisma/prisma.service';
-import { StorageService } from '@/storage/storage.service';
 import { cosineSimilarity } from '@/files/ai/embedding/similarity.util';
 import { embedImage } from '@/files/ai/embedding/image-embedding.provider';
-import { asEmbedding } from '@/files/query/files-search.service';
+import { ImageFingerprintService } from '@/files/ai/fingerprint/image-fingerprint.service';
 
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 50;
@@ -35,18 +33,6 @@ export type ImageSearchResult = {
   fingerprintReadyCount: number;
 };
 
-async function readStreamToBuffer(stream: Readable): Promise<Buffer> {
-  const chunks: Buffer[] = [];
-  for await (const chunk of stream) {
-    chunks.push(
-      typeof chunk === 'string'
-        ? Buffer.from(chunk)
-        : Buffer.from(chunk as Uint8Array),
-    );
-  }
-  return Buffer.concat(chunks);
-}
-
 function parseLimit(raw: unknown): number {
   if (raw == null || raw === '') return DEFAULT_LIMIT;
   const n =
@@ -65,7 +51,7 @@ function parseLimit(raw: unknown): number {
 export class ImageSearchService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly storageService: StorageService,
+    private readonly imageFingerprint: ImageFingerprintService,
   ) {}
 
   /**
@@ -134,7 +120,7 @@ export class ImageSearchService {
     for (const row of gallery) {
       if (!row.storage?.filePath) continue;
       // !循环目标图片，获取图片的向量
-      const emb = await this.ensureFingerprint(
+      const emb = await this.imageFingerprint.ensure(
         userId,
         row.id,
         row.storage.filePath,
@@ -194,86 +180,5 @@ export class ImageSearchService {
       return readFile(file.path);
     }
     return Buffer.alloc(0);
-  }
-
-  /**
-   * 读缓存指纹；没有则从存储拉图 embed 并 upsert。
-   * 失败记 failed，返回 null（不阻断整次搜索）。
-   */
-  private async ensureFingerprint(
-    userId: number,
-    userFileId: number,
-    storedPath: string,
-    mimeType: string | null,
-  ): Promise<number[] | null> {
-    const existing = await this.prisma.fileFingerprint.findUnique({
-      where: { userFileId },
-      select: { status: true, imageEmbedding: true },
-    });
-    if (existing?.status === 'ready') {
-      const emb = asEmbedding(existing.imageEmbedding);
-      if (emb) return emb;
-    }
-
-    try {
-      const storage = this.storageService.getStorageProvider();
-      const exists = await storage.exists(storedPath);
-      if (!exists) {
-        await this.markFailed(userId, userFileId, '存储文件不存在');
-        return null;
-      }
-      const buf = await readStreamToBuffer(
-        await storage.getReadStream(storedPath),
-      );
-      if (!buf.length) {
-        await this.markFailed(userId, userFileId, '图片内容为空');
-        return null;
-      }
-      //! 发送请求到硅基 VL Embedding API，把图片转成向量
-      const embedding = await embedImage(buf, mimeType);
-      //! 把图片向量写入数据库
-      await this.prisma.fileFingerprint.upsert({
-        where: { userFileId },
-        create: {
-          userFileId,
-          userId,
-          imageEmbedding: embedding,
-          status: 'ready',
-          errorMessage: null,
-        },
-        update: {
-          imageEmbedding: embedding,
-          status: 'ready',
-          errorMessage: null,
-        },
-      });
-      //! 返回向量
-      return embedding;
-    } catch (err) {
-      const msg =
-        err instanceof Error ? err.message.slice(0, 480) : 'embed 失败';
-      await this.markFailed(userId, userFileId, msg);
-      return null;
-    }
-  }
-
-  private async markFailed(
-    userId: number,
-    userFileId: number,
-    errorMessage: string,
-  ) {
-    await this.prisma.fileFingerprint.upsert({
-      where: { userFileId },
-      create: {
-        userFileId,
-        userId,
-        status: 'failed',
-        errorMessage,
-      },
-      update: {
-        status: 'failed',
-        errorMessage,
-      },
-    });
   }
 }

@@ -101,6 +101,7 @@ export class DocumentIndexProcessor extends WorkerHost {
           },
         },
       );
+
       // 更新状态 → chunking，进度 30%
       await this.patchJob(userFileId, {
         status: 'chunking',

@@ -110,5 +110,28 @@ export interface ImageSearchResult {
   fingerprintReadyCount: number
 }
 
+/** 查重组成员（完全重复） */
+export interface DuplicateMember {
+  id: number
+  fileName: string
+  fileType: string
+  mimeType: string | null
+  fileSize: number | null
+  parentId: number | null
+  fileHash: string | null
+}
+
+export interface DuplicateGroup {
+  groupId: string
+  kind: 'exact_hash'
+  members: DuplicateMember[]
+}
+
+export interface DuplicatesScanResult {
+  groups: DuplicateGroup[]
+  scannedFileCount: number
+  exactGroupCount: number
+}
+
 // 上传进度回调类型
 export type OnUploadProgress = (progressEvent: any) => void;

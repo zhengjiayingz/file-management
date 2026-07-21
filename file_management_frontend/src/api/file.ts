@@ -9,6 +9,7 @@ import type {
   FileQueryParams,
   SemanticSearchResult,
   ImageSearchResult,
+  DuplicatesScanResult,
 } from '@typing/file'
 
 // 上传进度回调类型
@@ -165,6 +166,12 @@ async searchFilesByImage(file: File, limit = 20): Promise<ImageSearchResult> {
     headers: { 'Content-Type': 'multipart/form-data' },
     timeout: 120000,
   })
+  return res.data.data
+},
+
+/** 高度相似查重：精确 hash + 图片向量近重 */
+async scanDuplicateFiles(): Promise<DuplicatesScanResult> {
+  const res = await request.post<any>('/files/duplicates/scan', {}, { timeout: 120000 })
   return res.data.data
 },
 

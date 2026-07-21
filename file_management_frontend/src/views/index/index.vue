@@ -17,6 +17,9 @@
           <el-button @click="semanticSearchVisible = true">
             {{ t('semanticSearch.title') }}
           </el-button>
+          <el-button @click="duplicatesVisible = true">
+            {{ t('duplicates.title') }}
+          </el-button>
         </template>
       </GlobalHeader>
 
@@ -166,6 +169,7 @@
     <ShareLinkDialog v-model="shareDialogVisible" :files="shareDialogFiles" />
 
     <SemanticSearchDialog v-model="semanticSearchVisible" @select="onSemanticSearchSelect" />
+    <DuplicatesDialog v-model="duplicatesVisible" />
   </div>
 </template>
 
@@ -208,6 +212,7 @@ import Sidebar from './cpns/Sidebar.vue'
 import FileList from './cpns/FileList.vue'
 import GlobalHeader from '@components/GlobalHeader/index.vue'
 import SemanticSearchDialog from '@components/SemanticSearchDialog/index.vue'
+import DuplicatesDialog from '@components/DuplicatesDialog/index.vue'
 import FileFilterBar from '@components/FileFilterBar/index.vue'
 import { formatFileSize } from '@utils/fileUpload'
 import {
@@ -529,6 +534,7 @@ const handleFileClick = (file: FileInfo) => {
 }
 
 const semanticSearchVisible = ref(false)
+const duplicatesVisible = ref(false)
 
 const onSemanticSearchSelect = async (item: SemanticSearchItem | ImageSearchItem) => {
   semanticSearchVisible.value = false
