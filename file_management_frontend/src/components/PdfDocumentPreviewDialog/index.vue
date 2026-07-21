@@ -73,6 +73,7 @@
           ref="aiPanelRef"
           :file-id="fileId!"
           :file-name="fileName"
+          :selection-enabled="selectionEnabled"
           v-model:selected-text="selectedText"
         />
       </template>
@@ -114,6 +115,8 @@ const isFullscreen = ref(false)
 const dialogReady = ref(false)
 const pdfCacheBust = ref(0)
 const selectedText = ref('')
+/** 是否有可选中文字层；扫描件为 false，划词问答禁用 */
+const selectionEnabled = ref(true)
 const pdfViewerRef = ref<InstanceType<typeof PdfJsViewer> | null>(null)
 const aiPanelRef = ref<InstanceType<typeof DocumentAiPanel> | null>(null)
 
@@ -140,19 +143,22 @@ function onOpened() {
   aiPanelRef.value?.activate()
 }
 
-function handlePdfLoaded() {
+function handlePdfLoaded(payload: { totalPages: number; hasSelectableText: boolean }) {
   loading.value = false
   error.value = null
+  selectionEnabled.value = payload.hasSelectableText
 }
 
 function handlePdfError(message: string) {
   loading.value = false
   error.value = message || t('preview.loadFailed')
+  selectionEnabled.value = true
 }
 
 function retryPreview() {
   loading.value = true
   error.value = null
+  selectionEnabled.value = true
   pdfCacheBust.value = Date.now()
 }
 
@@ -167,6 +173,7 @@ function toggleFullscreen() {
 
 function handleClose() {
   selectedText.value = ''
+  selectionEnabled.value = true
   aiPanelRef.value?.reset()
   isFullscreen.value = false
 }
@@ -179,6 +186,7 @@ watch(
       loading.value = true
       error.value = null
       selectedText.value = ''
+      selectionEnabled.value = true
       pdfCacheBust.value = Date.now()
       void nextTick(() => {
         dialogReady.value = true

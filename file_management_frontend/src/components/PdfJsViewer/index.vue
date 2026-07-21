@@ -67,7 +67,7 @@ const props = withDefaults(
 )
 
 const emit = defineEmits<{
-    (e: 'loaded', payload: { totalPages: number }): void
+    (e: 'loaded', payload: { totalPages: number; hasSelectableText: boolean }): void
     (e: 'error', message: string): void
     (e: 'pageChange', page: number): void
     (e: 'selection-change', text: string): void
@@ -100,7 +100,7 @@ const {
 function safeEmit<E extends 'loaded' | 'error' | 'pageChange' | 'selection-change'>(
     event: E,
     ...args: E extends 'loaded'
-        ? [{ totalPages: number }]
+        ? [{ totalPages: number; hasSelectableText: boolean }]
         : E extends 'error'
           ? [string]
           : E extends 'selection-change'
@@ -110,6 +110,29 @@ function safeEmit<E extends 'loaded' | 'error' | 'pageChange' | 'selection-chang
     if (!alive) return
     // @ts-expect-error vue emit overload
     emit(event, ...args)
+}
+
+/** 与后端 MIN_PDF_TEXT_CHARS 对齐：探测前几页文字层是否足够可划词 */
+const MIN_SELECTABLE_TEXT_CHARS = 30
+/** 最多探测页数，避免大 PDF 打开过慢 */
+const MAX_TEXT_PROBE_PAGES = 5
+
+/** 抽样探测 PDF 是否有可选中文字层（扫描件通常为 0） */
+async function probeHasSelectableText(doc: PDFDocumentProxy): Promise<boolean> {
+    const limit = Math.min(doc.numPages, MAX_TEXT_PROBE_PAGES)
+    let total = 0
+    for (let pageNum = 1; pageNum <= limit; pageNum++) {
+        const page = await doc.getPage(pageNum)
+        const content = await page.getTextContent({ includeMarkedContent: false })
+        for (const item of content.items) {
+            if (item && typeof item === 'object' && 'str' in item) {
+                const str = (item as { str?: string }).str
+                if (typeof str === 'string') total += str.trim().length
+            }
+        }
+        if (total >= MIN_SELECTABLE_TEXT_CHARS) return true
+    }
+    return false
 }
 
 function setPageEl(page: number, el: HTMLElement | null) {
@@ -194,7 +217,10 @@ async function loadDocument() {
         await goToPage(target)
         if (token !== loadToken) return
 
-        safeEmit('loaded', { totalPages: doc.numPages })
+        const hasSelectableText = await probeHasSelectableText(doc)
+        if (token !== loadToken) return
+
+        safeEmit('loaded', { totalPages: doc.numPages, hasSelectableText })
     } catch (err) {
         if (token !== loadToken) return
         const msg = err instanceof Error ? err.message : 'PDF load failed'

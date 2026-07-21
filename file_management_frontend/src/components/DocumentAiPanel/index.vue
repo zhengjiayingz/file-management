@@ -5,11 +5,13 @@
         <h4 class="ai-chat-title">{{ t('preview.aiAskTitle') }}</h4>
         <p class="ai-chat-hint">
           {{
-            chatMode === 'selection'
-              ? t('preview.aiAskHint')
-              : chatMode === 'rag'
-                ? t('preview.aiRagHint')
-                : t('preview.aiSolveHint')
+            !selectionEnabled
+              ? t('preview.aiSelectionDisabledHint')
+              : chatMode === 'selection'
+                ? t('preview.aiAskHint')
+                : chatMode === 'rag'
+                  ? t('preview.aiRagHint')
+                  : t('preview.aiSolveHint')
           }}
         </p>
       </div>
@@ -52,12 +54,21 @@
         <div class="ai-chat-tab">
           <div class="ai-chat-mode">
             <el-radio-group v-model="chatMode" size="small">
-              <el-radio-button value="selection">{{ t('preview.aiChatModeSelection') }}</el-radio-button>
+              <el-radio-button
+                value="selection"
+                :disabled="!selectionEnabled"
+                :title="selectionEnabled ? undefined : t('preview.aiSelectionDisabledHint')"
+              >
+                {{ t('preview.aiChatModeSelection') }}
+              </el-radio-button>
               <el-radio-button value="rag">{{ t('preview.aiChatModeRag') }}</el-radio-button>
               <el-radio-button v-if="enableSolveMode" value="solve">
                 {{ t('preview.aiChatModeSolve') }}
               </el-radio-button>
             </el-radio-group>
+            <p v-if="!selectionEnabled" class="ai-selection-disabled-tip">
+              {{ t('preview.aiSelectionDisabledHint') }}
+            </p>
           </div>
 
           <p v-if="chatMode === 'solve'" class="ai-solve-verify">
@@ -222,13 +233,24 @@ function genChatId(): string {
   return `chat-${Date.now()}-${chatIdSeq}`
 }
 
-const props = defineProps<{
-  fileId: number
-  fileName?: string
-  selectedText?: string
-  /** 仅图片预览开启解题模式入口 */
-  enableSolveMode?: boolean
-}>()
+const props = withDefaults(
+  defineProps<{
+    fileId: number
+    fileName?: string
+    selectedText?: string
+    /** 仅图片预览开启解题模式入口 */
+    enableSolveMode?: boolean
+    /**
+     * 是否允许划词问答。
+     * 扫描 PDF 无文字层时应为 false：禁用划词并默认全文问答。
+     */
+    selectionEnabled?: boolean
+  }>(),
+  {
+    enableSolveMode: false,
+    selectionEnabled: true,
+  },
+)
 
 const emit = defineEmits<{
   (e: 'update:selectedText', v: string): void
@@ -243,7 +265,10 @@ const selectedText = computed({
 })
 
 const question = ref('')
-const chatMode = ref<FileAiChatMode>('selection')
+/** 默认划词；扫描件等无文字层场景由 selectionEnabled 切到 rag */
+const chatMode = ref<FileAiChatMode>(
+  props.selectionEnabled === false ? 'rag' : 'selection',
+)
 /** 划词 / RAG / 解题 三套独立会话（与落盘 mode 对齐） */
 const selectionMessages = ref<UiChatMessage[]>([])
 const ragMessages = ref<UiChatMessage[]>([])
@@ -373,6 +398,16 @@ watch(chatMode, (mode) => {
   if (suppressHistoryLoad) return
   void loadChatHistory(mode)
 })
+
+/** 扫描件探测完成后：禁用划词并切到全文问答 */
+watch(
+  () => props.selectionEnabled,
+  (enabled) => {
+    if (!enabled && chatMode.value === 'selection') {
+      chatMode.value = 'rag'
+    }
+  },
+)
 
 watch(
   () => props.fileId,
@@ -782,7 +817,7 @@ function reset() {
   translateTargetLang.value = 'default'
   indexStatus.value = null
   indexTriggering.value = false
-  chatMode.value = 'selection'
+  chatMode.value = props.selectionEnabled === false ? 'rag' : 'selection'
   rightPanelTab.value = 'chat'
   summaryGenre.value = 'novel'
   summaryData.value = null
@@ -1061,6 +1096,13 @@ defineExpose({ reset, activate, startSolve })
 .ai-chat-mode {
   padding: 8px 14px 0;
   flex-shrink: 0;
+}
+
+.ai-selection-disabled-tip {
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--el-text-color-secondary);
 }
 
 .ai-chat-context {

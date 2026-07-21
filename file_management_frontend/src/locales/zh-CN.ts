@@ -585,6 +585,7 @@ export default {
     textChunkReflow: '流式重排：合并段内换行，按阅读区宽度换行（取消则与源文件换行一致）',
     aiAskTitle: 'AI 问答',
     aiAskHint: '在左侧选中文字作为上下文，右侧可连续对话追问。',
+    aiSelectionDisabledHint: '扫描件无文字层，划词不可用，请用全文问答',
     aiAskSelected: '已选中',
     aiAskSelectedEmpty: '请先在左侧正文中选中文字',
     aiAskQuestionPlaceholder: '输入消息，Enter 发送，Shift+Enter 换行…',

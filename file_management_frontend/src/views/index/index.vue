@@ -47,20 +47,22 @@
       <FileFilterBar :model-value="fileFilters" :features="driveFilterBarFeatures" :tag-options="tagOptions"
         @update:model-value="onFileFiltersUpdate" @apply="loadFiles" />
 
-      <!-- 批量操作工具栏 (当有选中文件时显示) -->
-      <div class="batch-toolbar" v-if="selectedFiles.size > 0">
-        <div class="batch-info">
-          已选中 {{ selectedFiles.size }} 项
-          <el-button link type="primary" @click="clearSelection">取消选择</el-button>
-        </div>
-        <div class="batch-actions">
-          <el-button type="primary" :icon="Document" @click="batchDownload">{{ t('fileList.action.download') || '下载'
-          }}</el-button>
-          <el-button type="primary" plain :icon="Share" @click="openShareDialog">分享</el-button>
-          <el-button type="success" :icon="Folder" @click="batchMove">{{ t('fileList.action.move') }}</el-button>
-          <el-button type="warning" plain @click="openBatchTagDialog">打标签</el-button>
-          <el-button type="danger" :icon="Delete" @click="batchDelete">{{ t('fileList.action.delete') }}</el-button>
-        </div>
+      <!-- 批量操作工具栏：始终占位，避免选中时高度变化导致双击第二次点空 -->
+      <div class="batch-toolbar" :class="{ 'is-idle': selectedFiles.size === 0 }">
+        <template v-if="selectedFiles.size > 0">
+          <div class="batch-info">
+            已选中 {{ selectedFiles.size }} 项
+            <el-button link type="primary" @click="clearSelection">取消选择</el-button>
+          </div>
+          <div class="batch-actions">
+            <el-button type="primary" :icon="Document" @click="batchDownload">{{ t('fileList.action.download') || '下载'
+            }}</el-button>
+            <el-button type="primary" plain :icon="Share" @click="openShareDialog">分享</el-button>
+            <el-button type="success" :icon="Folder" @click="batchMove">{{ t('fileList.action.move') }}</el-button>
+            <el-button type="warning" plain @click="openBatchTagDialog">打标签</el-button>
+            <el-button type="danger" :icon="Delete" @click="batchDelete">{{ t('fileList.action.delete') }}</el-button>
+          </div>
+        </template>
       </div>
 
 
@@ -1109,13 +1111,26 @@ const formatStorage = (bytes: number) => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  box-sizing: border-box;
+  /* 与有按钮时高度一致，防止选中瞬间撑开导致双击落空 */
+  min-height: 52px;
   padding: 10px 20px;
   background-color: #ecf5ff;
   border-bottom: 1px solid #d9ecff;
 
+  &.is-idle {
+    background-color: transparent;
+    border-bottom-color: transparent;
+  }
+
   @at-root html.dark & {
     background-color: #2b2b2b;
     border-bottom-color: #4c4d4f;
+
+    &.is-idle {
+      background-color: transparent;
+      border-bottom-color: transparent;
+    }
   }
 
   .batch-info {

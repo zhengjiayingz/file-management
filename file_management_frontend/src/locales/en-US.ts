@@ -590,6 +590,8 @@ export default {
       'Reflow: join line breaks within paragraphs, wrap to panel width (off = match source newlines)',
     aiAskTitle: 'Ask AI',
     aiAskHint: 'Select text on the left for context; chat on the right and keep asking follow-ups.',
+    aiSelectionDisabledHint:
+      'This scanned PDF has no text layer. Selection Q&A is unavailable—use Document Q&A.',
     aiAskSelected: 'Selected',
     aiAskSelectedEmpty: 'Select text in the document on the left first',
     aiAskQuestionPlaceholder: 'Type a message. Enter to send, Shift+Enter for newline…',

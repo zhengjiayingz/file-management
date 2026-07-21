@@ -41,19 +41,21 @@
         @apply="loadFiles"
       />
 
-      <!-- 批量操作 -->
-      <div class="batch-toolbar" v-if="selectedFiles.size > 0">
-        <div class="batch-info">
-          {{ t('recycleBin.selectedCount', { count: selectedFiles.size }) }}
-          <el-button link type="primary" @click="clearSelection">{{ t('recycleBin.cancelSelection') }}</el-button>
-        </div>
-        <div class="batch-actions">
-          <el-button type="primary" :icon="RefreshRight" @click="batchRestore">{{ t('recycleBin.batchRestore')
-          }}</el-button>
-          <el-button type="warning" plain @click="openBatchTagDialog">打标签</el-button>
-          <el-button type="danger" :icon="Delete" @click="batchPermanentDelete">{{ t('recycleBin.batchPermanentDelete')
-          }}</el-button>
-        </div>
+      <!-- 批量操作：始终占位，避免选中时列表跳动 -->
+      <div class="batch-toolbar" :class="{ 'is-idle': selectedFiles.size === 0 }">
+        <template v-if="selectedFiles.size > 0">
+          <div class="batch-info">
+            {{ t('recycleBin.selectedCount', { count: selectedFiles.size }) }}
+            <el-button link type="primary" @click="clearSelection">{{ t('recycleBin.cancelSelection') }}</el-button>
+          </div>
+          <div class="batch-actions">
+            <el-button type="primary" :icon="RefreshRight" @click="batchRestore">{{ t('recycleBin.batchRestore')
+            }}</el-button>
+            <el-button type="warning" plain @click="openBatchTagDialog">打标签</el-button>
+            <el-button type="danger" :icon="Delete" @click="batchPermanentDelete">{{ t('recycleBin.batchPermanentDelete')
+            }}</el-button>
+          </div>
+        </template>
       </div>
 
       <!-- 文件列表区域 -->
@@ -809,13 +811,25 @@ const handleEmptyRecycleBin = async () => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  box-sizing: border-box;
+  min-height: 52px;
   padding: 10px 20px;
   background-color: #ecf5ff;
   border-bottom: 1px solid #d9ecff;
 
+  &.is-idle {
+    background-color: transparent;
+    border-bottom-color: transparent;
+  }
+
   @at-root html.dark & {
     background-color: #2b2b2b;
     border-bottom-color: #4c4d4f;
+
+    &.is-idle {
+      background-color: transparent;
+      border-bottom-color: transparent;
+    }
   }
 
   .batch-info {
