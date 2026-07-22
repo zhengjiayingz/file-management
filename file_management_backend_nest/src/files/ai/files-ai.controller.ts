@@ -191,4 +191,13 @@ export class FilesAiController {
   ): Promise<void> {
     await this.filesAiMathService.solveMath(req, res, user.id, fileId, body);
   }
+
+  /** 获取带时间轴的转写文稿（音频索引分句） */
+  @Get(':id/ai/transcript')
+  getTranscript(
+    @CurrentUser() user: RequestUser,
+    @Param('id', ParseIntPipe) fileId: number,
+  ) {
+    return this.filesAiIndexService.getTranscript(user.id, fileId);
+  }
 }

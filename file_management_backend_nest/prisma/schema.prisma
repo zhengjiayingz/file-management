@@ -645,6 +645,8 @@ model DocumentChunk {
   sectionTitle String?              @map("section_title") @db.VarChar(255)
   chapterNo   Int?                  @map("chapter_no")
   content     String                @db.Text
+  startMs     Int?                  @map("start_ms")
+  endMs       Int?                  @map("end_ms")
   tokenEstimate Int?                @map("token_estimate")
   embedding   Json?                 // number[]，MVP 存 MySQL；量大迁向量库
   createdAt   DateTime              @default(now()) @map("created_at")

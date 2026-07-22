@@ -115,6 +115,60 @@ const INDEXABLE_IMAGE_MIMES = new Set([
   'image/gif',
 ]);
 
+// 音频白名单
+const INDEXABLE_AUDIO_EXTS = new Set([
+  '.mp3',
+  '.wav',
+  '.m4a',
+  '.aac',
+  '.flac',
+  '.ogg',
+  '.opus',
+  '.webm',
+]);
+const INDEXABLE_AUDIO_MIMES = new Set([
+  'audio/mpeg',
+  'audio/mp3',
+  'audio/wav',
+  'audio/x-wav',
+  'audio/wave',
+  'audio/mp4',
+  'audio/aac',
+  'audio/flac',
+  'audio/ogg',
+  'audio/opus',
+  'audio/webm',
+  'application/octet-stream', // 部分上传会落到这个，需靠扩展名兜住
+]);
+
+// 判读文件名的扩展名是否是合法的音频文件中的一种
+function isAudioExtension(fileName: string): boolean {
+  const lower = fileName.toLowerCase();
+  const dot = lower.lastIndexOf('.');
+  if (dot < 0) return false;
+  return INDEXABLE_AUDIO_EXTS.has(lower.slice(dot));
+}
+
+// 判读MIME类型是否是合法的音频文件中的一种
+function isAudioMime(mimeType: string): boolean {
+  return INDEXABLE_AUDIO_MIMES.has(mimeType) || mimeType.startsWith('audio/');
+}
+/**
+ * 是否为可索引音频（扩展名 + MIME 双判断）。
+ * @param input.fileName 原始文件名（看扩展名）
+ * @param input.mimeType Storage 里的 MIME（可空）
+ */
+export function isIndexableAudio(input: {
+  fileName: string;
+  mimeType?: string | null;
+}): boolean {
+  const mimeType = normalizeMime(input.mimeType);
+  if (!isAudioExtension(input.fileName)) return false;
+  // 无 MIME 时仅信扩展名；有 MIME 时再校验
+  if (!mimeType) return true;
+  return isAudioMime(mimeType);
+}
+
 /** 扩展名 + MIME 双判断：txt / md / 文字层 pdf / docx / 图片 */
 export function isIndexableTextDocument(input: {
   fileName: string;

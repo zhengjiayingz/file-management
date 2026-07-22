@@ -2,6 +2,7 @@ import { Readable } from 'node:stream';
 import archiver from 'archiver';
 import type { StorageProvider } from '@/storage/types';
 import { extractTextFromImage } from '@/files/ai/vision/vision.provider';
+import { isIndexableAudio } from './text-extractor';
 
 jest.mock('./pdf-text.util', () => ({
   extractPdfTextWithPdfJs: jest.fn().mockResolvedValue(''),
@@ -441,5 +442,18 @@ describe('text-extractor', () => {
       expect(getReadStreamMock).toHaveBeenCalledWith('uploads/scan.pdf');
       expect(mockedExtractScannedPdfText).toHaveBeenCalled();
     });
+  });
+});
+
+describe('isIndexableAudio', () => {
+  it('接受 mp3 + audio/mpeg', () => {
+    expect(
+      isIndexableAudio({ fileName: 'a.mp3', mimeType: 'audio/mpeg' }),
+    ).toBe(true);
+  });
+  it('拒绝 pdf', () => {
+    expect(
+      isIndexableAudio({ fileName: 'a.pdf', mimeType: 'application/pdf' }),
+    ).toBe(false);
   });
 });

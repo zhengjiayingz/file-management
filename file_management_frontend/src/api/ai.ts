@@ -94,6 +94,12 @@ export type StreamSolveMathParams = {
   signal?: AbortSignal
   onChunk: (text: string) => void
 }
+// 音频索引分句
+export type TranscriptSegment = {
+  text: string
+  startMs: number | null
+  endMs: number | null
+}
 
 /** 建索引体裁分组（与后端 summary-genre.types 一致） */
 export const SUMMARY_GENRE_GROUPS: ReadonlyArray<{
@@ -390,4 +396,12 @@ export async function streamSolveMath(
   }
 
   await readTextStream(res, params.onChunk)
+}
+
+export async function getFileTranscript(fileId: number) {
+  const res = await request.get<{
+    success: boolean
+    data: { segments: TranscriptSegment[] }
+  }>(`/files/${fileId}/ai/transcript`)
+  return res.data.data
 }

@@ -6,7 +6,11 @@ import {
 } from '@nestjs/common';
 import type { DocumentIndexMode, DocumentIndexStatus } from '@prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
-import { isIndexableTextDocument } from './chunk/text-extractor';
+import {
+  isIndexableAudio,
+  isIndexableTextDocument,
+} from './chunk/text-extractor';
+
 import { DocumentIndexQueueService } from '@/files/ai/document-index-queue.service';
 import {
   isSummaryGenre,
@@ -24,6 +28,7 @@ const ACTIVE_STATUSES: DocumentIndexStatus[] = [
   'summarizing',
   'extracting_knowledge',
 ];
+
 // 校验 summaryGenre
 function validateIndexBody(body: unknown): {
   summaryGenre: SummaryGenreValue;
@@ -97,15 +102,17 @@ export class FilesAiIndexService {
     if (!userFile.storage) {
       throw new NotFoundException('文件不存在');
     }
-    // 格式校验 txt/md，扩展名 + MIME 双判断
+    // 格式校验：文档/图片 或 常见音频（扩展名 + MIME）
+    const indexableInput = {
+      fileName: userFile.fileName,
+      mimeType: userFile.storage.mimeType,
+    };
     if (
-      !isIndexableTextDocument({
-        fileName: userFile.fileName,
-        mimeType: userFile.storage.mimeType,
-      })
+      !isIndexableTextDocument(indexableInput) &&
+      !isIndexableAudio(indexableInput)
     ) {
       throw new BadRequestException(
-        '仅支持 UTF-8 编码的 .txt / .md、.pdf（含扫描件 OCR）、.docx 及可 OCR 的图片（png/jpg/webp/gif）',
+        '仅支持 UTF-8 的 .txt / .md、.pdf（含扫描件）、.docx、可 OCR 图片，以及常见音频（mp3/wav/m4a 等）',
       );
     }
     // 是否已有进行中的任务，每个文件在 document_index_jobs 里最多一行（userFileId 唯一）。
@@ -235,6 +242,45 @@ export class FilesAiIndexService {
     return {
       success: true,
       data: { text, chunkCount: rows.length },
+    };
+  }
+
+  /**
+   * GET /api/files/:id/ai/transcript
+   * 返回带时间轴的转写分句（音频索引）；普通文档若无时间戳则 startMs/endMs 可能为 null。
+   * @param userId 当前用户 ID
+   * @param fileId 用户文件 ID
+   */
+  async getTranscript(userId: number, fileId: number) {
+    const userFile = await this.prisma.userFile.findFirst({
+      where: { id: fileId, userId, isDeleted: false },
+      select: { id: true },
+    });
+    if (!userFile) {
+      throw new NotFoundException('文件不存在');
+    }
+    const job = await this.prisma.documentIndexJob.findUnique({
+      where: { userFileId: fileId },
+      select: { status: true },
+    });
+    if (!job || job.status !== 'ready') {
+      throw new BadRequestException('请先完成索引后再查看转写文稿');
+    }
+    const rows = await this.prisma.documentChunk.findMany({
+      where: { userFileId: fileId },
+      orderBy: { chunkIndex: 'asc' },
+      // 音频索引写入的时间轴；普通文档一般为 null
+      select: { content: true, startMs: true, endMs: true },
+    });
+    return {
+      success: true,
+      data: {
+        segments: rows.map((r) => ({
+          text: r.content,
+          startMs: r.startMs,
+          endMs: r.endMs,
+        })),
+      },
     };
   }
 }

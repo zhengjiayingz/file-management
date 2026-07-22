@@ -5,7 +5,12 @@ import { Job } from 'bullmq';
 import { PrismaService } from '@/prisma/prisma.service';
 import { StorageService } from '@/storage/storage.service';
 import { chunkText } from './chunk/text-chunker';
-import { extractTextFromStorage } from './chunk/text-extractor';
+import {
+  extractTextFromStorage,
+  isIndexableAudio,
+} from './chunk/text-extractor';
+import { extractAudioTranscriptFromStorage } from '@/files/ai/asr/audio-transcript.extractor';
+
 import {
   DOCUMENT_INDEX_JOB_NAME, // 任务名
   DOCUMENT_INDEX_QUEUE_NAME, // 队列名
@@ -73,54 +78,108 @@ export class DocumentIndexProcessor extends WorkerHost {
       if (!userFile?.storage) {
         throw new Error('文件不存在或 storage 缺失');
       }
-      // 更新状态 → extracting，进度 10%，清空旧错误
-      await this.patchJob(userFileId, {
-        status: 'extracting',
-        progress: 10,
-        progressMsg: '正在提取文本',
-        errorMessage: null,
-      });
-      // 用 storage provider 读文件，按扩展名/MIME 解析成字符串（PDF、Office、txt 等由 text-extractor 处理）
-      const fullText = await extractTextFromStorage(
-        this.storageService.getStorageProvider(),
-        {
-          storedPath: userFile.storage.filePath,
-          fileName: userFile.fileName,
-          mimeType: userFile.storage.mimeType,
-        },
-        {
-          onProgress: async (p) => {
-            if (p.kind !== 'pdf_ocr_page') return;
-            // extracting 阶段：10%～28% 之间随页推进
-            const progress =
-              10 + Math.floor((p.page / Math.max(p.totalPages, 1)) * 18);
-            await this.patchJob(userFileId, {
-              progress,
-              progressMsg: `OCR 第 ${p.page}/${p.totalPages} 页`,
-            });
-          },
-        },
-      );
+      // 从数据库记录中取出 storedPath / fileName / mimeType
+      const fileRef = {
+        storedPath: userFile.storage.filePath,
+        fileName: userFile.fileName,
+        mimeType: userFile.storage.mimeType,
+      };
 
-      // 更新状态 → chunking，进度 30%
-      await this.patchJob(userFileId, {
-        status: 'chunking',
-        progress: 30,
-        progressMsg: '正在分块',
-      });
-      // 按固定策略把长文本切成 { index, content }[]
-      const chunks = chunkText(fullText);
-      if (chunks.length === 0) {
-        throw new Error('文档内容为空，无法索引');
+      type IndexChunk = {
+        index: number;
+        content: string;
+        startMs?: number | null;
+        endMs?: number | null;
+      };
+
+      let chunks: IndexChunk[];
+      // 音频：走 ASR 转写
+      if (isIndexableAudio(fileRef)) {
+        // 更新状态 → extracting：音频走 ASR 转写
+        await this.patchJob(userFileId, {
+          status: 'extracting',
+          progress: 10,
+          progressMsg: '正在转写音频',
+          errorMessage: null,
+        });
+        // ! 调用 ASR 转写接口，得到带时间轴文稿
+        const transcript = await extractAudioTranscriptFromStorage(
+          this.storageService.getStorageProvider(),
+          fileRef,
+        );
+        // 每句转写对应一条 chunk（带时间轴，供点击跳播）,剔除掉全文text，只保留segments
+        chunks = transcript.segments.map((seg, i) => ({
+          index: i,
+          content: seg.text,
+          startMs: seg.startMs,
+          endMs: seg.endMs,
+        }));
+      } else {
+        // 更新状态 → extracting，进度 10%，清空旧错误
+        await this.patchJob(userFileId, {
+          status: 'extracting',
+          progress: 10,
+          progressMsg: '正在提取文本',
+          errorMessage: null,
+        });
+        // 用 storage provider 读文件，按扩展名/MIME 解析成字符串（PDF、Office、txt 等由 text-extractor 处理）
+        const fullText = await extractTextFromStorage(
+          this.storageService.getStorageProvider(),
+          fileRef,
+          {
+            onProgress: async (p) => {
+              if (p.kind !== 'pdf_ocr_page') return;
+              // extracting 阶段：10%～28% 之间随页推进
+              const progress =
+                10 + Math.floor((p.page / Math.max(p.totalPages, 1)) * 18);
+              await this.patchJob(userFileId, {
+                progress,
+                progressMsg: `OCR 第 ${p.page}/${p.totalPages} 页`,
+              });
+            },
+          },
+        );
+
+        // 更新状态 → chunking，进度 30%
+        await this.patchJob(userFileId, {
+          status: 'chunking',
+          progress: 30,
+          progressMsg: '正在分块',
+        });
+        // 按固定策略把长文本切成 { index, content }[]
+        chunks = chunkText(fullText).map((c) => ({
+          index: c.index,
+          content: c.content,
+        }));
       }
+
+      if (chunks.length === 0) {
+        throw new Error(
+          isIndexableAudio(fileRef)
+            ? '音频转写结果为空，无法索引'
+            : '文档内容为空，无法索引',
+        );
+      }
+
+      // 音频：转写句已是「块」，补一条 chunking 进度便于前端显示
+      if (isIndexableAudio(fileRef)) {
+        await this.patchJob(userFileId, {
+          status: 'chunking',
+          progress: 30,
+          progressMsg: '正在写入转写分句',
+        });
+      }
+
       // 重试入队时可能已有半截 chunks（例如 embedding 失败后 BullMQ 再次执行 process）
       await this.prisma.documentChunk.deleteMany({ where: { userFileId } });
-      // 批量插入 documentChunk（此时还没有 embedding）
+      // 批量插入 documentChunk（此时还没有 embedding；音频带 startMs/endMs）
       await this.prisma.documentChunk.createMany({
         data: chunks.map((chunk) => ({
           userFileId,
           chunkIndex: chunk.index,
           content: chunk.content,
+          startMs: chunk.startMs ?? null,
+          endMs: chunk.endMs ?? null,
         })),
       });
       // 更新状态 → embedding，进度 50%，记录 chunk 总数
