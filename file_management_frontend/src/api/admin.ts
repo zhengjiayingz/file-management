@@ -65,6 +65,8 @@ export interface AdminUserRow {
     created_at: string;
     session_version: number;
     last_session_kick_at: string | null;
+    tts_enabled: boolean;
+    can_use_tts: boolean;
 }
 
 export const adminApi = {
@@ -93,6 +95,17 @@ export const adminApi = {
 
     async updateUserStatus(userId: number, status: 'active' | 'disabled'): Promise<void> {
         await request.patch(`/admin/users/${userId}/status`, { status });
+    },
+
+    async updateUserTts(
+        userId: number,
+        enabled: boolean,
+    ): Promise<{ id: number; tts_enabled: boolean; can_use_tts: boolean }> {
+        const res = await request.patch<{
+            success: boolean;
+            data: { id: number; tts_enabled: boolean; can_use_tts: boolean };
+        }>(`/admin/users/${userId}/tts`, { enabled });
+        return res.data.data;
     },
 
     async resetUserPassword(userId: number): Promise<void> {

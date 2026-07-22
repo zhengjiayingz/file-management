@@ -15,6 +15,8 @@ import type { LoginDto } from '../dto/login.dto';
 import { SessionService } from './session.service';
 import { MfaService } from './mfa.service';
 
+import { canUseTts } from '@/files/ai/tts/tts-access.util';
+
 type UserWithTotp = User & {
   totpEnabled: boolean;
   totpSecret: string | null;
@@ -163,6 +165,7 @@ export class AuthService {
         username: true,
         email: true,
         role: true,
+        ttsEnabled: true,
         storageQuota: true,
         storageUsed: true,
         status: true,
@@ -178,6 +181,7 @@ export class AuthService {
       username: string;
       email: string | null;
       role: string;
+      ttsEnabled: boolean;
       storageQuota: bigint;
       storageUsed: bigint;
       status: string;
@@ -209,6 +213,10 @@ export class AuthService {
         vip_expire_at: user.vipExpireAt ? user.vipExpireAt.toISOString() : null,
         totp_enabled: user.totpEnabled,
         mfa_setup_pending: Boolean(user.totpSetupSecret),
+        can_use_tts: canUseTts({
+          role: user.role,
+          ttsEnabled: user.ttsEnabled,
+        }),
       },
     };
   }
@@ -242,6 +250,7 @@ export class AuthService {
       vip_expire_at: user.vipExpireAt ? user.vipExpireAt.toISOString() : null,
       created_at: user.createdAt.toISOString(),
       totp_enabled: user.totpEnabled,
+      can_use_tts: canUseTts(user),
     };
   }
 }

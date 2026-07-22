@@ -85,6 +85,29 @@ export type StreamTranslateParams = {
   onChunk: (text: string) => void
 }
 
+/** TTS 预设音色 */
+export type TtsVoice = {
+  id: string
+  label: string
+  gender: 'male' | 'female'
+}
+
+/** TTS 方言/风格 id（与后端 TTS_STYLE_PRESETS 对齐） */
+export type TtsStyleId =
+  | 'default'
+  | 'english'
+  | 'cantonese'
+  | 'sichuan'
+  | 'shanghai'
+  | 'tianjin'
+
+/** GET /ai/tts/voices 的 data */
+export type TtsVoicesData = {
+  maxChars: number
+  voices: TtsVoice[]
+  styles?: { id: string }[]
+}
+
 /** 截图数学解题流式参数（F-27） */
 export type StreamSolveMathParams = {
   fileId: number
@@ -404,4 +427,48 @@ export async function getFileTranscript(fileId: number) {
     data: { segments: TranscriptSegment[] }
   }>(`/files/${fileId}/ai/transcript`)
   return res.data.data
+}
+
+/** 拉取音色列表与字数上限 */
+export async function getTtsVoices(): Promise<TtsVoicesData> {
+  const token = localStorage.getItem('token')
+  if (!token) throw new Error('未登录')
+  const res = await fetch(`${API_BASE_URL}/api/ai/tts/voices`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok) {
+    throw new Error(await parseErrorResponse(res))
+  }
+  const json = (await res.json()) as { success: boolean; data: TtsVoicesData }
+  return json.data
+}
+/**
+ * 文本转语音，返回 mp3 Blob。
+ * @param params.text 要朗读的文本
+ * @param params.voiceId 可选音色短 id
+ * @param params.style 方言/风格（如 cantonese）；缺省普通话
+ */
+export async function synthesizeSpeech(params: {
+  text: string
+  voiceId?: string
+  style?: string
+}): Promise<Blob> {
+  const token = localStorage.getItem('token')
+  if (!token) throw new Error('未登录')
+  const res = await fetch(`${API_BASE_URL}/api/ai/tts/speech`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      text: params.text,
+      voiceId: params.voiceId,
+      style: params.style,
+    }),
+  })
+  if (!res.ok) {
+    throw new Error(await parseErrorResponse(res))
+  }
+  return res.blob()
 }

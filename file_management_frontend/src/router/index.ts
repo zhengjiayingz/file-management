@@ -91,7 +91,13 @@ const router = createRouter({
       name: 'share-save',
       component: () => import('../views/share-save/index.vue'),
       meta: { requiresAuth: true }
-    }
+    },
+    {
+      path: '/tts',
+      name: 'tts',
+      component: () => import('../views/tts/index.vue'),
+      meta: { requiresAuth: true },
+    },
   ]
 })
 

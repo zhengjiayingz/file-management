@@ -15,6 +15,7 @@ function mapAuthUser(backendUser: {
   vip_expire_at?: string | null
   created_at?: string
   totp_enabled?: boolean
+  can_use_tts?: boolean
 }): User {
   return {
     id: backendUser.id,
@@ -28,6 +29,7 @@ function mapAuthUser(backendUser: {
     avatar: backendUser.avatar_url ?? undefined,
     vipExpireAt: backendUser.vip_expire_at ?? null,
     totpEnabled: Boolean(backendUser.totp_enabled),
+    canUseTts: Boolean(backendUser.can_use_tts),
   }
 }
 
@@ -59,6 +61,7 @@ export const authApi = {
           vip_expire_at?: string | null
           created_at?: string
           totp_enabled?: boolean
+          can_use_tts?: boolean
         }
         accessToken: string
         refreshToken: string
@@ -289,6 +292,7 @@ export const authApi = {
         vip_expire_at?: string | null;
         totp_enabled?: boolean;
         mfa_setup_pending?: boolean;
+        can_use_tts?: boolean;
       }
     }>('/auth/me')
 
@@ -307,6 +311,7 @@ export const authApi = {
       vipExpireAt: backendUser.vip_expire_at ?? null,
       totpEnabled: Boolean(backendUser.totp_enabled),
       mfaSetupPending: Boolean(backendUser.mfa_setup_pending),
+      canUseTts: Boolean(backendUser.can_use_tts),
     }
   }
 }

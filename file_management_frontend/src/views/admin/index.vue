@@ -101,22 +101,15 @@
                 <el-form-item :label="t('admin.systemSettings.requiredCategories')">
                   <div class="password-policy-block">
                     <el-checkbox-group v-model="systemSettings.passwordRequiredCategories" class="password-cat-group">
-                      <el-checkbox
-                        v-for="key in passwordCategoryOrder"
-                        :key="key"
-                        :label="key"
-                      >
+                      <el-checkbox v-for="key in passwordCategoryOrder" :key="key" :label="key">
                         {{ t(`admin.systemSettings.categoryLabels.${key}`) }}
                       </el-checkbox>
                     </el-checkbox-group>
                     <div class="password-pool-min-row">
                       <span class="pool-min-label">{{ t('admin.systemSettings.minCategoriesInPool') }}</span>
-                      <el-input-number
-                        v-model="systemSettings.passwordMinCategoriesInPool"
-                        :min="1"
+                      <el-input-number v-model="systemSettings.passwordMinCategoriesInPool" :min="1"
                         :max="Math.max(1, systemSettings.passwordRequiredCategories.length)"
-                        :disabled="systemSettings.passwordRequiredCategories.length === 0"
-                      />
+                        :disabled="systemSettings.passwordRequiredCategories.length === 0" />
                     </div>
                     <p class="form-hint categories-hint-block">{{ t('admin.systemSettings.categoriesHint') }}</p>
                   </div>
@@ -154,7 +147,8 @@
                 <div class="card-header">
                   <span>{{ t('admin.userManagement.title') }}</span>
                   <div class="user-mgmt-actions">
-                    <el-button size="small" type="primary" plain :loading="syncFriendsLoading" @click="syncFriendsWithAdmin">
+                    <el-button size="small" type="primary" plain :loading="syncFriendsLoading"
+                      @click="syncFriendsWithAdmin">
                       {{ t('admin.userManagement.syncFriends') }}
                     </el-button>
                     <el-button size="small" @click="loadUsers">{{ t('common.search') }}</el-button>
@@ -164,7 +158,8 @@
               <el-table :data="userList" stripe style="width: 100%">
                 <el-table-column prop="id" :label="t('admin.userManagement.id')" width="72" />
                 <el-table-column prop="username" :label="t('admin.userManagement.username')" min-width="120" />
-                <el-table-column prop="email" :label="t('admin.userManagement.email')" min-width="140" show-overflow-tooltip />
+                <el-table-column prop="email" :label="t('admin.userManagement.email')" min-width="140"
+                  show-overflow-tooltip />
                 <el-table-column :label="t('admin.userManagement.role')" width="100">
                   <template #default="{ row }">
                     {{ roleLabel(row.role) }}
@@ -172,24 +167,22 @@
                 </el-table-column>
                 <el-table-column :label="t('admin.userManagement.status')" width="120" align="center">
                   <template #default="{ row }">
-                    <el-switch
-                      :model-value="row.status === 'active'"
-                      :disabled="isStatusSwitchDisabled(row)"
-                      @change="(val: string | number | boolean) => onUserStatusChange(row, Boolean(val))"
-                    />
+                    <el-switch :model-value="row.status === 'active'" :disabled="isStatusSwitchDisabled(row)"
+                      @change="(val: string | number | boolean) => onUserStatusChange(row, Boolean(val))" />
                   </template>
                 </el-table-column>
                 <el-table-column :label="t('admin.userManagement.loginSession')" width="148" align="center">
                   <template #default="{ row }">
-                    <el-switch
-                      :model-value="isLoginSessionOn(row)"
-                      :disabled="isKickSwitchDisabled(row)"
-                      inline-prompt
-                      size="small"
-                      :active-text="t('admin.userManagement.sessionOnline')"
+                    <el-switch :model-value="isLoginSessionOn(row)" :disabled="isKickSwitchDisabled(row)" inline-prompt
+                      size="small" :active-text="t('admin.userManagement.sessionOnline')"
                       :inactive-text="t('admin.userManagement.sessionKicked')"
-                      @change="(val: string | number | boolean) => onLoginSessionSwitch(row, Boolean(val))"
-                    />
+                      @change="(val: string | number | boolean) => onLoginSessionSwitch(row, Boolean(val))" />
+                  </template>
+                </el-table-column>
+                <el-table-column :label="t('admin.userManagement.tts')" width="130" align="center">
+                  <template #default="{ row }">
+                    <el-switch :model-value="row.can_use_tts" :disabled="row.role === 'admin'"
+                      @change="(val: string | number | boolean) => onUserTtsChange(row, Boolean(val))" />
                   </template>
                 </el-table-column>
                 <el-table-column :label="t('admin.userManagement.storage')" min-width="140">
@@ -435,6 +428,23 @@ async function syncFriendsWithAdmin() {
     ElMessage.error(err.response?.data?.message || t('admin.userManagement.syncFriendsError'))
   } finally {
     syncFriendsLoading.value = false
+  }
+}
+
+async function onUserTtsChange(row: AdminUserRow, enabled: boolean) {
+  if (row.role === 'admin') {
+    ElMessage.warning(t('admin.userManagement.ttsAdminFixed'))
+    return
+  }
+  try {
+    const data = await adminApi.updateUserTts(row.id, enabled)
+    row.tts_enabled = data.tts_enabled
+    row.can_use_tts = data.can_use_tts
+    ElMessage.success(t('admin.userManagement.ttsUpdated'))
+  } catch (e: unknown) {
+    const err = e as { response?: { data?: { message?: string } } }
+    ElMessage.error(err.response?.data?.message || t('admin.loadErrorUnknown'))
+    await loadUsers()
   }
 }
 

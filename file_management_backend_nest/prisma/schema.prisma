@@ -30,6 +30,8 @@ model User {
   vipExpireAt    DateTime? @map("vip_expire_at")
   /// 管理员可选：TOTP 两步验证已启用
   totpEnabled    Boolean  @default(false) @map("totp_enabled")
+  /// 是否开通预览「划词朗读」；独立 TTS 页不依赖此字段。管理员逻辑上始终可用划词朗读
+  ttsEnabled     Boolean  @default(false) @map("tts_enabled")
   /// 已激活的 TOTP 密钥（Base32）；仅当 totpEnabled 为 true 时有值
   totpSecret     String?  @map("totp_secret") @db.VarChar(64)
   /// 设置流程中的临时密钥，确认前未生效

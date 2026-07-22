@@ -27,6 +27,46 @@
           <el-button size="small" type="primary" plain :loading="asking" :disabled="asking" @click="submitTranslate">
             {{ t('preview.aiTranslate') }}
           </el-button>
+          <template v-if="canUseTts">
+            <el-select
+              v-model="ttsVoiceId"
+              size="small"
+              class="ai-tts-voice"
+              :disabled="ttsLoading || asking"
+              :title="t('preview.aiTtsVoice')"
+            >
+              <el-option
+                v-for="v in ttsVoices"
+                :key="v.id"
+                :label="v.label"
+                :value="v.id"
+              />
+            </el-select>
+            <el-select
+              v-model="ttsStyleId"
+              size="small"
+              class="ai-tts-style"
+              :disabled="ttsLoading || asking"
+              :title="t('ttsPage.style')"
+            >
+              <el-option :label="t('ttsPage.styleDefault')" value="default" />
+              <el-option :label="t('ttsPage.styleEnglish')" value="english" />
+              <el-option :label="t('ttsPage.styleCantonese')" value="cantonese" />
+              <el-option :label="t('ttsPage.styleSichuan')" value="sichuan" />
+              <el-option :label="t('ttsPage.styleShanghai')" value="shanghai" />
+              <el-option :label="t('ttsPage.styleTianjin')" value="tianjin" />
+            </el-select>
+            <el-button
+              size="small"
+              type="primary"
+              plain
+              :loading="ttsLoading"
+              :disabled="ttsLoading || asking"
+              @click="submitTts"
+            >
+              {{ t('preview.aiTtsSpeak') }}
+            </el-button>
+          </template>
         </template>
         <el-button v-if="activeChatMessages.length > 0" size="small" text type="danger" @click="clearChat">
           {{ t('preview.aiChatClear') }}
@@ -128,6 +168,17 @@
             <p v-else class="ai-chat-context-empty">{{ t('preview.aiAskSelectedEmpty') }}</p>
           </div>
 
+          <div v-if="canUseTts && ttsAudioUrl" class="ai-tts-player">
+            <audio :src="ttsAudioUrl" controls class="ai-tts-audio" />
+            <el-button size="small" link type="primary" @click="downloadTts">
+              {{ t('preview.aiTtsDownload') }}
+            </el-button>
+            <p v-if="ttsError" class="ai-tts-error">{{ ttsError }}</p>
+          </div>
+          <p v-else-if="canUseTts && ttsError" class="ai-tts-error ai-tts-error--alone">
+            {{ ttsError }}
+          </p>
+
           <div ref="chatScrollRef" class="ai-chat-messages">
             <p v-if="activeChatMessages.length === 0" class="ai-chat-empty">{{ t('preview.aiChatEmpty') }}</p>
             <div v-for="msg in activeChatMessages" :key="msg.id" class="ai-chat-bubble"
@@ -186,6 +237,8 @@ import {
   getFileAiChatSession,
   clearFileAiChatSession,
   appendFileAiChatMessage,
+  getTtsVoices,
+  synthesizeSpeech,
   type AiChatMessage,
   type DocumentIndexStatus,
   type DocumentIndexStatusData,
@@ -194,7 +247,10 @@ import {
   type FileAiChatMode,
   type SummaryGenre,
   type TranslateTargetLang,
+  type TtsStyleId,
+  type TtsVoice,
 } from '@api/ai'
+import { useAuthStore } from '@stores/auth'
 import {
   createWrongQuestion,
   listWrongQuestions,
@@ -258,6 +314,7 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 const router = useRouter()
+const authStore = useAuthStore()
 
 const selectedText = computed({
   get: () => props.selectedText ?? '',
@@ -288,6 +345,71 @@ const asking = ref(false)
 const askError = ref('')
 const translateTargetLang = ref<TranslateTargetLang>('default')
 let askAbort: AbortController | null = null
+
+/** 管理员或后台开通后可用划词朗读 */
+const canUseTts = computed(
+  () =>
+    authStore.user?.role === 'admin' || authStore.user?.canUseTts === true,
+)
+const ttsVoices = ref<TtsVoice[]>([])
+const ttsVoiceId = ref('alex')
+const ttsStyleId = ref<TtsStyleId>('default')
+const ttsLoading = ref(false)
+const ttsAudioUrl = ref('')
+const ttsError = ref('')
+
+function revokeTtsUrl() {
+  if (ttsAudioUrl.value) {
+    URL.revokeObjectURL(ttsAudioUrl.value)
+    ttsAudioUrl.value = ''
+  }
+}
+
+async function loadTtsVoices() {
+  if (!canUseTts.value) return
+  try {
+    const data = await getTtsVoices()
+    ttsVoices.value = data.voices
+    if (
+      !data.voices.some((v) => v.id === ttsVoiceId.value) &&
+      data.voices[0]
+    ) {
+      ttsVoiceId.value = data.voices[0].id
+    }
+  } catch {
+    /* 无权限或失败时保持空列表，由 submit 报错 */
+  }
+}
+
+async function submitTts() {
+  ttsError.value = ''
+  if (!selectedText.value.trim()) {
+    ttsError.value = t('preview.aiTtsNoSelection')
+    return
+  }
+  ttsLoading.value = true
+  try {
+    const blob = await synthesizeSpeech({
+      text: selectedText.value,
+      voiceId: ttsVoiceId.value,
+      style: ttsStyleId.value,
+    })
+    revokeTtsUrl()
+    ttsAudioUrl.value = URL.createObjectURL(blob)
+  } catch (e: unknown) {
+    ttsError.value = e instanceof Error ? e.message : t('preview.aiTtsError')
+  } finally {
+    ttsLoading.value = false
+  }
+}
+
+function downloadTts() {
+  if (!ttsAudioUrl.value) return
+  const a = document.createElement('a')
+  a.href = ttsAudioUrl.value
+  a.download = 'speech.mp3'
+  a.click()
+}
 
 /** 存入错题本：考点（可多选 / 可新建） */
 const saveTags = ref<string[]>([])
@@ -422,6 +544,7 @@ watch(
 onUnmounted(() => {
   stopAsk()
   stopIndexPolling()
+  revokeTtsUrl()
 })
 
 /** 从服务端加载当前文件某模式历史 */
@@ -815,6 +938,8 @@ function reset() {
   solveMessages.value = []
   askError.value = ''
   translateTargetLang.value = 'default'
+  revokeTtsUrl()
+  ttsError.value = ''
   indexStatus.value = null
   indexTriggering.value = false
   chatMode.value = props.selectionEnabled === false ? 'rag' : 'selection'
@@ -831,6 +956,7 @@ function reset() {
 function activate() {
   void refreshIndexStatus()
   void loadChatHistory(chatMode.value)
+  void loadTtsVoices()
 }
 
 /**
@@ -992,6 +1118,39 @@ defineExpose({ reset, activate, startSolve })
 
 .ai-translate-lang {
   width: 100px;
+}
+
+.ai-tts-voice {
+  width: 110px;
+}
+
+.ai-tts-style {
+  width: 100px;
+}
+
+.ai-tts-player {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  flex-shrink: 0;
+}
+
+.ai-tts-audio {
+  max-width: 100%;
+  height: 32px;
+}
+
+.ai-tts-error {
+  margin: 0;
+  width: 100%;
+  font-size: 12px;
+  color: var(--el-color-danger);
+}
+
+.ai-tts-error--alone {
+  padding: 0 14px 8px;
 }
 
 .ai-chat-title {

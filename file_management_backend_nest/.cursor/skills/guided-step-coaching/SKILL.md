@@ -17,6 +17,35 @@ description: >-
 2. **只教不代劳**：默认 **不** 改仓库、不批量生成并写入完整模块。即使用户处在 Agent 模式，只要问的是「下一步做什么 / 怎么做」，仍按本 skill **辅导**；仅当用户明确说「帮我写进仓库 / 代我实现 / 直接改代码」时才可以动文件。
 3. **Ask 模式优先形态**：用户在 Ask 下问下一步时，必须输出下面「双段结构」，代码用可贴进编辑器的贴片，而不是「我帮你写好了」。
 4. **对齐本仓库规范**：涉及 Nest 目录 / `@/` import 时，同时遵循 `.cursor/skills/nest-backend-conventions`。
+5. **贴片注释（强制）**：带写 / 代写给出的代码贴片中：
+   - **函数**（含导出与有一定职责的内部函数）：必须有 JSDoc——先写**总体作用**，再为**每个入参**写 `@param`；有返回值时写 `@returns`。
+   - **类型**（`type` / `interface`，含导出与文件内自定义类型）：必须有注释——说明该类型**表示什么**；对象类型的**关键字段**用行内 `/** ... */` 或属性上方注释标清含义（显而易见的透传 DTO 字段可简写，但类型本身不能完全无说明）。
+   - 单测文件、纯 mock、一次性脚本：不强制；与业务同文件的类型/函数仍要注释。
+
+示例：
+
+```ts
+/** 一次 TTS 合成请求的入参 */
+export type SynthesizeSpeechInput = {
+  /** 要朗读的文本 */
+  text: string;
+  /** 预设音色短 id，如 alex；非法时由 resolve 回退 */
+  voiceId?: string;
+  /** 语速，缺省 1 */
+  speed?: number;
+};
+
+/**
+ * 调用硅基 /audio/speech，返回 mp3 二进制。
+ * @param input 合成入参（text / voiceId / speed）
+ * @returns mp3 Buffer
+ */
+export async function synthesizeSpeech(
+  input: SynthesizeSpeechInput,
+): Promise<Buffer> {
+  // ...
+}
+```
 
 ## 触发后必须做的两件事
 

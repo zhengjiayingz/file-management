@@ -70,6 +70,14 @@ export class AdminController {
     return this.adminService.updateUserStatus(admin.id, id, body.status);
   }
 
+  @Patch('users/:id/tts')
+  updateUserTts(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { enabled?: unknown },
+  ) {
+    return this.adminService.updateUserTts(id, body.enabled);
+  }
+
   @Post('users/:id/reset-password')
   @HttpCode(HttpStatus.OK)
   resetUserPassword(@Param('id', ParseIntPipe) id: number) {

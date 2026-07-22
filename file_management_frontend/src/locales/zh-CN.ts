@@ -69,6 +69,7 @@ export default {
     myShares: '我的分享',
     knowledgeBases: '知识库',
     wrongBook: '错题本',
+    tts: '文字转语音',
     mathTempLab: '临时截图调试',
   },
   header: {
@@ -554,7 +555,10 @@ export default {
         admin: '管理员',
         user: '用户',
         vip: '会员'
-      }
+      },
+      tts: '划词朗读',
+      ttsUpdated: '划词朗读权限已更新',
+      ttsAdminFixed: '管理员固定开放划词朗读',
     }
   },
   file: {
@@ -632,6 +636,11 @@ export default {
     aiTranslateNoSelection: '请先在左侧选中要翻译的内容',
     aiTranslateUserMsg: '翻译 → {lang}',
     aiTranslateError: '翻译失败',
+    aiTtsSpeak: '朗读',
+    aiTtsVoice: '音色',
+    aiTtsDownload: '下载音频',
+    aiTtsNoSelection: '请先选中要朗读的文字',
+    aiTtsError: '语音合成失败',
     aiChatEmpty: '选中左侧文字后，在这里开始与 AI 对话',
     aiChatContext: '当前选中上下文',
     aiChatClear: '清空对话',
@@ -870,5 +879,20 @@ export default {
     followUpPlaceholder: '针对本题继续提问…',
     followUpSubmit: '发送',
     followUpError: '追问失败',
+  },
+  ttsPage: {
+    title: '文字转语音',
+    hint: '粘贴要朗读的文本（最多 {max} 字），选择音色与方言后生成。',
+    placeholder: '在此输入或粘贴文本…',
+    generate: '生成语音',
+    empty: '请输入要合成的文本',
+    tooLong: '文本过长，最多 {max} 字',
+    style: '方言/风格',
+    styleDefault: '普通话',
+    styleEnglish: '英语',
+    styleCantonese: '粤语',
+    styleSichuan: '四川话',
+    styleShanghai: '上海话',
+    styleTianjin: '天津话',
   },
 }

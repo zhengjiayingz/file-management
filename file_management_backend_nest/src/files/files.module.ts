@@ -36,6 +36,8 @@ import { ImageSearchService } from '@/files/ai/image-search.service';
 import { ImageFingerprintService } from '@/files/ai/fingerprint/image-fingerprint.service';
 import { FilesDuplicatesController } from '@/files/duplicates/files-duplicates.controller';
 import { FilesDuplicatesService } from '@/files/duplicates/files-duplicates.service';
+import { FilesAiTtsController } from '@/files/ai/tts/files-ai-tts.controller';
+import { FilesAiTtsService } from '@/files/ai/tts/files-ai-tts.service';
 
 @Module({
   imports: [StorageModule, ShareModule, OperationLogModule],
@@ -50,6 +52,7 @@ import { FilesDuplicatesService } from '@/files/duplicates/files-duplicates.serv
     FilesQueryController,
     FilesManageController,
     ImageSearchController,
+    FilesAiTtsController,
   ],
   providers: [
     FilesUploadService,
@@ -76,6 +79,7 @@ import { FilesDuplicatesService } from '@/files/duplicates/files-duplicates.serv
     PreviewQueueService,
     FileBatchHelper,
     PasswordPolicyService,
+    FilesAiTtsService,
   ],
 })
 export class FilesModule {}

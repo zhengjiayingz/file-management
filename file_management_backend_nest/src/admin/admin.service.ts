@@ -7,12 +7,12 @@ import {
 import type { Prisma } from '@prisma/client';
 import {
   ADMIN_TEMP_RESET_PASSWORD,
-  PASSWORD_CATEGORY_ORDER,
   PasswordPolicyService,
   type PasswordCategoryKey,
 } from '@/common/password-policy/password-policy.service';
 import { AdminFriendService } from '@/common/admin-friend/admin-friend.service';
 import { PrismaService } from '@/prisma/prisma.service';
+import { canUseTts } from '@/files/ai/tts/tts-access.util';
 
 const defaultPasswordCategories: PasswordCategoryKey[] = [
   'digit',
@@ -21,7 +21,12 @@ const defaultPasswordCategories: PasswordCategoryKey[] = [
   'special',
 ];
 
-function clampInt(n: unknown, min: number, max: number, fallback: number): number {
+function clampInt(
+  n: unknown,
+  min: number,
+  max: number,
+  fallback: number,
+): number {
   if (typeof n !== 'number' || !Number.isFinite(n)) return fallback;
   return Math.max(min, Math.min(max, Math.floor(n)));
 }
@@ -174,6 +179,7 @@ export class AdminService {
           email: true,
           role: true,
           status: true,
+          ttsEnabled: true,
           storageQuota: true,
           storageUsed: true,
           createdAt: true,
@@ -197,6 +203,8 @@ export class AdminService {
           last_session_kick_at: u.lastSessionKickAt
             ? u.lastSessionKickAt.toISOString()
             : null,
+          tts_enabled: u.ttsEnabled,
+          can_use_tts: canUseTts(u),
         })),
       };
     } catch {
@@ -204,11 +212,7 @@ export class AdminService {
     }
   }
 
-  async updateUserStatus(
-    adminId: number,
-    targetId: number,
-    status: unknown,
-  ) {
+  async updateUserStatus(adminId: number, targetId: number, status: unknown) {
     if (Number.isNaN(targetId)) {
       throw new BadRequestException('无效的用户 ID');
     }
@@ -234,9 +238,12 @@ export class AdminService {
       await tx.user.update({
         where: { id: targetId },
         data: {
-          status: status as 'active' | 'disabled',
+          status: status,
           ...(status === 'disabled'
-            ? { sessionVersion: { increment: 1 }, lastSessionKickAt: new Date() }
+            ? {
+                sessionVersion: { increment: 1 },
+                lastSessionKickAt: new Date(),
+              }
             : { lastSessionKickAt: null }),
         },
       });
@@ -256,7 +263,9 @@ export class AdminService {
       throw new BadRequestException('无效的用户 ID');
     }
 
-    const target = await this.prisma.user.findUnique({ where: { id: targetId } });
+    const target = await this.prisma.user.findUnique({
+      where: { id: targetId },
+    });
     if (!target) {
       throw new NotFoundException('用户不存在');
     }
@@ -347,7 +356,10 @@ export class AdminService {
         s.passwordRequiredCategories,
         [...defaultPasswordCategories],
       );
-      const poolMin = Math.max(1, Math.min(pool.length, s.passwordMinCategoriesInPool));
+      const poolMin = Math.max(
+        1,
+        Math.min(pool.length, s.passwordMinCategoriesInPool),
+      );
 
       return {
         success: true,
@@ -438,7 +450,12 @@ export class AdminService {
             body.storageQuotaAdminBytes,
             current.storageQuotaAdminBytes,
           ),
-          maxTagsUser: clampInt(body.maxTagsUser, 0, 100000, current.maxTagsUser),
+          maxTagsUser: clampInt(
+            body.maxTagsUser,
+            0,
+            100000,
+            current.maxTagsUser,
+          ),
           maxTagsVip: clampInt(body.maxTagsVip, 0, 100000, current.maxTagsVip),
         },
       });
@@ -471,5 +488,45 @@ export class AdminService {
       if (e instanceof BadRequestException) throw e;
       throw new InternalServerErrorException('保存系统配置失败');
     }
+  }
+
+  /**
+   * 管理员为指定用户开通/关闭预览「划词朗读」。
+   * @param targetId 目标用户 id
+   * @param enabled 是否开通；对 admin 目标禁止设为 false
+   */
+  async updateUserTts(targetId: number, enabled: unknown) {
+    if (Number.isNaN(targetId)) {
+      throw new BadRequestException('无效的用户 ID');
+    }
+    if (typeof enabled !== 'boolean') {
+      throw new BadRequestException('enabled 必须为 boolean');
+    }
+
+    const target = await this.prisma.user.findUnique({
+      where: { id: targetId },
+      select: { id: true, role: true, ttsEnabled: true },
+    });
+    if (!target) {
+      throw new NotFoundException('用户不存在');
+    }
+    if (target.role === 'admin' && enabled === false) {
+      throw new BadRequestException('管理员固定开放划词朗读，不能关闭');
+    }
+
+    const updated = await this.prisma.user.update({
+      where: { id: targetId },
+      data: { ttsEnabled: enabled },
+      select: { id: true, role: true, ttsEnabled: true },
+    });
+
+    return {
+      success: true,
+      data: {
+        id: updated.id,
+        tts_enabled: updated.ttsEnabled,
+        can_use_tts: canUseTts(updated),
+      },
+    };
   }
 }

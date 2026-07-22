@@ -69,6 +69,7 @@ export default {
     myShares: 'My shares',
     knowledgeBases: 'Knowledge Bases',
     wrongBook: 'Wrong Book',
+    tts: 'Text-to-speech',
     mathTempLab: 'Temp Capture Lab',
   },
   header: {
@@ -559,7 +560,10 @@ export default {
         admin: 'Admin',
         user: 'User',
         vip: 'VIP'
-      }
+      },
+      tts: 'Selection speak',
+      ttsUpdated: 'Selection speak permission updated',
+      ttsAdminFixed: 'Admins always have selection speak enabled',
     }
   },
   file: {
@@ -639,6 +643,11 @@ export default {
     aiTranslateNoSelection: 'Select text on the left to translate',
     aiTranslateUserMsg: 'Translate → {lang}',
     aiTranslateError: 'Translation failed',
+    aiTtsSpeak: 'Speak',
+    aiTtsVoice: 'Voice',
+    aiTtsDownload: 'Download audio',
+    aiTtsNoSelection: 'Select text to speak first',
+    aiTtsError: 'Speech synthesis failed',
     aiChatEmpty: 'Select text on the left to start chatting with AI',
     aiChatContext: 'Selected context',
     aiChatClear: 'Clear chat',
@@ -879,5 +888,20 @@ export default {
     followUpPlaceholder: 'Ask more about this problem…',
     followUpSubmit: 'Send',
     followUpError: 'Follow-up failed',
+  },
+  ttsPage: {
+    title: 'Text-to-speech',
+    hint: 'Paste text to speak (max {max} characters), pick a voice and dialect, then generate.',
+    placeholder: 'Type or paste text here…',
+    generate: 'Generate',
+    empty: 'Enter text to synthesize',
+    tooLong: 'Text is too long (max {max} characters)',
+    style: 'Dialect / style',
+    styleDefault: 'Mandarin',
+    styleEnglish: 'English',
+    styleCantonese: 'Cantonese',
+    styleSichuan: 'Sichuan',
+    styleShanghai: 'Shanghainese',
+    styleTianjin: 'Tianjin',
   },
 }

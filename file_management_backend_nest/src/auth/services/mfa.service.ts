@@ -14,6 +14,7 @@ import { PrismaService } from '@/prisma/prisma.service';
 import { InvalidRevokeSessionError, SessionLimitError } from '../auth.errors';
 import type { MfaVerifyDto } from '../dto/mfa-verify.dto';
 import { SessionService } from './session.service';
+import { canUseTts } from '@/files/ai/tts/tts-access.util';
 
 const MFA_LOGIN_JWT_TYP = 'mfa_login';
 const TOTP_ISSUER = 'FileManagement';
@@ -140,6 +141,7 @@ export class MfaService {
               : null,
             created_at: user.createdAt.toISOString(),
             totp_enabled: true,
+            can_use_tts: canUseTts(user),
           },
           accessToken: tokens.accessToken,
           refreshToken: tokens.refreshToken,

@@ -21,6 +21,8 @@ export interface User {
   totpEnabled?: boolean;
   /** 是否有未完成的 TOTP 绑定（已生成密钥未确认） */
   mfaSetupPending?: boolean;
+  /** 是否可用文字转语音（管理员恒为 true；普通用户看后台开关） */
+  canUseTts?: boolean;
 }
 
 // 登录成功响应数据

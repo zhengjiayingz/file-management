@@ -73,6 +73,12 @@
                 </el-icon>
                 <span>{{ t('sidebar.wrongBook') }}</span>
             </el-menu-item>
+            <el-menu-item index="tts" @click="router.push('/tts')">
+                <el-icon>
+                    <Microphone />
+                </el-icon>
+                <span>{{ t('sidebar.tts') }}</span>
+            </el-menu-item>
             <!-- 阶段 B 联调页：暂隐藏；需要时恢复或访问 /dev/math-temp
             <el-menu-item index="math-temp-lab" @click="router.push('/dev/math-temp')">
                 <el-icon>
@@ -109,7 +115,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { Folder, Delete, List, Upload, Picture, VideoPlay, Headset, Document, Collection, Setting, ChatDotRound, Share, Notebook } from '@element-plus/icons-vue'
+import { Folder, Delete, List, Upload, Picture, VideoPlay, Headset, Document, Collection, Setting, ChatDotRound, Share, Notebook, Microphone } from '@element-plus/icons-vue'
 import { useI18n } from 'vue-i18n'
 import { useThemeStore } from '@stores/theme'
 import { useAuthStore } from '@stores/auth'
@@ -139,6 +145,7 @@ const activeMenu = computed(() => {
     if (path.startsWith('/transfer-records')) return 'transfer-records'
     if (path.startsWith('/knowledge-bases')) return 'knowledge-bases'
     if (path.startsWith('/wrong-questions')) return 'wrong-questions'
+    if (path.startsWith('/tts')) return 'tts'
     if (path === '/' && query.type) {
         return `file-type-${query.type}`
     }
