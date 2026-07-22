@@ -8,6 +8,7 @@ jest.mock('@/files/ai/utils/env.util', () => ({
 import {
   buildTtsInput,
   getTtsMaxChars,
+  listTtsVoiceOptions,
   resolveTtsVoice,
   synthesizeSpeech,
 } from './tts.provider';
@@ -23,6 +24,7 @@ describe('tts.provider', () => {
     process.env.AI_TTS_API_KEY = 'test-tts-key';
     process.env.AI_TTS_MODEL = 'FunAudioLLM/CosyVoice2-0.5B';
     delete process.env.AI_TTS_MAX_CHARS;
+    delete process.env.AI_TTS_CUSTOM_VOICE_URI;
     fetchMock = jest.fn() as FetchMock;
     global.fetch = fetchMock;
   });
@@ -39,6 +41,30 @@ describe('tts.provider', () => {
     expect(resolveTtsVoice('nope', 'FunAudioLLM/CosyVoice2-0.5B')).toBe(
       'FunAudioLLM/CosyVoice2-0.5B:alex',
     );
+  });
+
+  it('resolveTtsVoice 支持 custom / speech: uri', () => {
+    process.env.AI_TTS_CUSTOM_VOICE_URI =
+      'speech:jianggu-ref:aaa:bbb';
+    expect(resolveTtsVoice('custom', 'FunAudioLLM/CosyVoice2-0.5B')).toBe(
+      'speech:jianggu-ref:aaa:bbb',
+    );
+    expect(
+      resolveTtsVoice('speech:other:x:y', 'FunAudioLLM/CosyVoice2-0.5B'),
+    ).toBe('speech:other:x:y');
+    delete process.env.AI_TTS_CUSTOM_VOICE_URI;
+    expect(() => resolveTtsVoice('custom', 'm')).toThrow(/未配置自定义音色/);
+  });
+
+  it('listTtsVoiceOptions 配置 uri 时首项为自定义', () => {
+    expect(listTtsVoiceOptions()[0]?.id).toBe('alex');
+    process.env.AI_TTS_CUSTOM_VOICE_URI = 'speech:jianggu-ref:aaa:bbb';
+    const list = listTtsVoiceOptions();
+    expect(list[0]).toEqual({
+      id: 'custom',
+      label: '自定义',
+      gender: 'male',
+    });
   });
 
   it('buildTtsInput 粤语/英语加 instruct；已有 endofprompt 不重复包', () => {

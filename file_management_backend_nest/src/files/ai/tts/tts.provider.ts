@@ -12,6 +12,9 @@ export const TTS_VOICE_PRESETS = [
   { id: 'diana', label: 'Diana', gender: 'female' as const },
 ] as const;
 
+/** 自定义克隆音色在前端下拉中的短 id（对应 env AI_TTS_CUSTOM_VOICE_URI） */
+export const TTS_CUSTOM_VOICE_ID = 'custom';
+
 /** 预置音色短 id（如 alex / anna） */
 export type TtsVoiceId = (typeof TTS_VOICE_PRESETS)[number]['id'];
 
@@ -90,18 +93,59 @@ export function getTtsMaxChars(): number {
 }
 
 /**
+ * 读取自定义克隆音色 uri（硅基 upload-voice 返回的 speech:…）。
+ * 未配置或非法时返回 undefined，「自定义」选项不会出现在列表里。
+ */
+export function getCustomVoiceUri(): string | undefined {
+  const uri = process.env.AI_TTS_CUSTOM_VOICE_URI?.trim();
+  if (!uri || !uri.startsWith('speech:')) return undefined;
+  return uri;
+}
+
+/**
+ * 列表用：系统预置 +（若已配置 uri）自定义。
+ */
+export function listTtsVoiceOptions(): Array<{
+  id: string;
+  label: string;
+  gender: 'male' | 'female';
+}> {
+  const presets = TTS_VOICE_PRESETS.map((v) => ({
+    id: v.id,
+    label: v.label,
+    gender: v.gender,
+  }));
+  if (!getCustomVoiceUri()) return [...presets];
+  return [
+    { id: TTS_CUSTOM_VOICE_ID, label: '自定义', gender: 'male' },
+    ...presets,
+  ];
+}
+
+/**
  * 把短 id 拼成硅基 voice 字符串；非法 id 回退 alex。
- * @param voiceId 预设 id，如 alex；可为空
+ * `custom` 使用 AI_TTS_CUSTOM_VOICE_URI；也可直接传 speech: 完整 uri。
+ * @param voiceId 预设 id / custom / speech:uri；可为空
  * @param model 当前 TTS 模型名
- * @returns 形如 `FunAudioLLM/CosyVoice2-0.5B:alex` 的 voice
+ * @returns 形如 `FunAudioLLM/CosyVoice2-0.5B:alex` 或 speech:… 的 voice
  */
 export function resolveTtsVoice(
   voiceId: string | undefined,
   model: string,
 ): string {
+  const raw = voiceId?.trim();
+  if (raw?.startsWith('speech:')) {
+    return raw;
+  }
+  if (raw === TTS_CUSTOM_VOICE_ID) {
+    const uri = getCustomVoiceUri();
+    if (!uri) {
+      throw new Error('未配置自定义音色（AI_TTS_CUSTOM_VOICE_URI）');
+    }
+    return uri;
+  }
   const id =
-    TTS_VOICE_PRESETS.find((v) => v.id === voiceId)?.id ??
-    TTS_VOICE_PRESETS[0].id;
+    TTS_VOICE_PRESETS.find((v) => v.id === raw)?.id ?? TTS_VOICE_PRESETS[0].id;
   return `${model}:${id}`;
 }
 

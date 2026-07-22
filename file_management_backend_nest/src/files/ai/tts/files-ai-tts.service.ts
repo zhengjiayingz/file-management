@@ -1,9 +1,9 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import {
   getTtsMaxChars,
+  listTtsVoiceOptions,
   synthesizeSpeech,
   TTS_STYLE_PRESETS,
-  TTS_VOICE_PRESETS,
 } from '@/files/ai/tts/tts.provider';
 
 /** POST /ai/tts/speech 的请求体形状（校验前） */
@@ -18,17 +18,14 @@ type SpeechBody = {
 export class FilesAiTtsService {
   /**
    * 返回预设音色、方言风格与字数上限（登录即可；划词权限不在此校验）。
+   * 若配置了 AI_TTS_CUSTOM_VOICE_URI，音色列表首项为「自定义」。
    */
   listVoices() {
     return {
       success: true,
       data: {
         maxChars: getTtsMaxChars(),
-        voices: TTS_VOICE_PRESETS.map((v) => ({
-          id: v.id,
-          label: v.label,
-          gender: v.gender,
-        })),
+        voices: listTtsVoiceOptions(),
         styles: TTS_STYLE_PRESETS.map((s) => ({ id: s.id })),
       },
     };
@@ -59,8 +56,7 @@ export class FilesAiTtsService {
 
     const voiceId =
       typeof payload.voiceId === 'string' ? payload.voiceId : undefined;
-    const style =
-      typeof payload.style === 'string' ? payload.style : undefined;
+    const style = typeof payload.style === 'string' ? payload.style : undefined;
     const speed = typeof payload.speed === 'number' ? payload.speed : undefined;
 
     try {
