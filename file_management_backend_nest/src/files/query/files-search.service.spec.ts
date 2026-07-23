@@ -1,6 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 
-jest.mock('@/files/ai/embedding/embedding.provider', () => ({
+jest.mock('@/files/ai/index/provider/embedding.provider', () => ({
   embedOne: jest.fn().mockResolvedValue([1, 0, 0]),
 }));
 
@@ -9,7 +9,7 @@ import {
   FilesSearchService,
   parseSemanticSearchQuery,
 } from './files-search.service';
-import { embedOne } from '@/files/ai/embedding/embedding.provider';
+import { embedOne } from '@/files/ai/index/provider/embedding.provider';
 
 describe('parseSemanticSearchQuery', () => {
   it('拒绝空 q', () => {
@@ -137,6 +137,7 @@ describe('FilesSearchService.semanticSearch', () => {
     expect(result.indexedFileCount).toBe(2);
     expect(result.items[0].id).toBe(10);
     expect(result.items[0].excerpt).toContain('Nest');
-    expect(result.items.map((i) => i.id)).toEqual([10, 20]);
+    // 文件 20 与查询向量正交且摘录不含关键词，低于 MIN_SCORE 应被过滤
+    expect(result.items.map((i) => i.id)).toEqual([10]);
   });
 });

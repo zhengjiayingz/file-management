@@ -13,17 +13,17 @@ import {
 import type { Request, Response } from 'express';
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
 import type { RequestUser } from '@/auth/types/jwt-payload.type';
-import { FilesAiIndexService } from '@/files/ai/files-ai-index.service';
-import { FilesAiService } from '@/files/ai/files-ai.service';
-import { FilesAiRagService } from '@/files/ai/files-ai-rag.service';
-import { FilesAiSummaryService } from '@/files/ai/files-ai-summary.service';
-import type { DocumentSummaryResponse } from '@/files/ai/files-ai-summary.service';
-import { FilesAiKnowledgeService } from '@/files/ai/files-ai-knowledge.service';
-import type { DocumentKnowledgeResponse } from '@/files/ai/files-ai-knowledge.service';
-import { FilesAiTranslateService } from '@/files/ai/files-ai-translate.service';
-import { FilesAiMathService } from '@/files/ai/files-ai-math.service';
-import { FilesAiChatSessionService } from '@/files/ai/files-ai-chat-session.service';
-import { AppendFileAiChatMessageDto } from '@/files/ai/dto/file-ai-chat.dto';
+import { FilesAiIndexService } from '@/files/ai/index/service/files-ai-index.service';
+import { FilesAiService } from '@/files/ai/chat/service/files-ai.service';
+import { FilesAiRagService } from '@/files/ai/chat/service/files-ai-rag.service';
+import { FilesAiSummaryService } from '@/files/ai/summary/service/files-ai-summary.service';
+import type { DocumentSummaryResponse } from '@/files/ai/summary/service/files-ai-summary.service';
+import { FilesAiKnowledgeService } from '@/files/ai/knowledge/service/files-ai-knowledge.service';
+import type { DocumentKnowledgeResponse } from '@/files/ai/knowledge/service/files-ai-knowledge.service';
+import { FilesAiTranslateService } from '@/files/ai/translate/service/files-ai-translate.service';
+import { FilesAiMathService } from '@/files/ai/math/service/files-ai-math.service';
+import { FilesAiChatSessionService } from '@/files/ai/chat/service/files-ai-chat-session.service';
+import { AppendFileAiChatMessageDto } from '@/files/ai/chat/types/file-ai-chat.dto';
 
 @Controller('files')
 export class FilesAiController {

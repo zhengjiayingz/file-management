@@ -1,6 +1,6 @@
 <template>
     <el-dialog v-model="visible" :title="t('semanticSearch.title')" width="min(720px, 96vw)" destroy-on-close
-        @opened="onOpened" @closed="onClosed">
+        append-to-body @opened="onOpened" @closed="onClosed">
         <el-tabs v-model="activeTab" class="search-tabs">
             <el-tab-pane :label="t('semanticSearch.tabText')" name="text">
                 <div class="semantic-search">
@@ -31,10 +31,15 @@
                 <div class="semantic-search">
                     <p class="image-hint">{{ t('semanticSearch.imageHint') }}</p>
                     <div class="search-row image-row">
-                        <el-upload :auto-upload="false" :show-file-list="false" accept="image/*"
-                            :on-change="onQueryImageChange">
-                            <el-button>{{ t('semanticSearch.imagePick') }}</el-button>
-                        </el-upload>
+                        <!-- 对话框内 el-upload 常被 focus trap 挡住；改用原生 input 触发选文件 -->
+                        <input
+                            ref="imageInputRef"
+                            type="file"
+                            accept="image/*"
+                            class="image-file-input"
+                            @change="onQueryImageInput"
+                        />
+                        <el-button @click="pickQueryImage">{{ t('semanticSearch.imagePick') }}</el-button>
                         <span v-if="queryFileName" class="query-name">{{ queryFileName }}</span>
                         <el-button type="primary" :loading="imageLoading" :disabled="!queryFile"
                             @click="runImageSearch">
@@ -70,7 +75,6 @@
 import { computed, nextTick, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
-import type { UploadFile } from 'element-plus'
 import fileApiService from '@api/file'
 import { useAuthStore } from '@stores/auth'
 import type { ImageSearchItem, SemanticSearchItem } from '@typing/file'
@@ -86,6 +90,7 @@ const authStore = useAuthStore()
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
 
 const inputRef = ref<{ focus: () => void } | null>(null)
+const imageInputRef = ref<HTMLInputElement | null>(null)
 const activeTab = ref<'text' | 'image'>('text')
 const q = ref('')
 const loading = ref(false)
@@ -137,10 +142,16 @@ const onClosed = () => {
     clearQueryPreview()
     queryFile.value = null
     queryFileName.value = ''
+    if (imageInputRef.value) imageInputRef.value.value = ''
 }
 
-const onQueryImageChange = (uploadFile: UploadFile) => {
-    const raw = uploadFile.raw
+const pickQueryImage = () => {
+    imageInputRef.value?.click()
+}
+
+const onQueryImageInput = (ev: Event) => {
+    const input = ev.target as HTMLInputElement
+    const raw = input.files?.[0]
     if (!raw) return
     clearQueryPreview()
     queryFile.value = raw // 真正的 File，点「搜索」时才发给后端
@@ -217,6 +228,15 @@ const onSelectImage = (item: ImageSearchItem) => {
 
 .image-row {
     flex-wrap: wrap;
+}
+
+.image-file-input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
 }
 
 .image-hint {

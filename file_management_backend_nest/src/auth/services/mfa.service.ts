@@ -14,7 +14,7 @@ import { PrismaService } from '@/prisma/prisma.service';
 import { InvalidRevokeSessionError, SessionLimitError } from '../auth.errors';
 import type { MfaVerifyDto } from '../dto/mfa-verify.dto';
 import { SessionService } from './session.service';
-import { canUseTts } from '@/files/ai/tts/tts-access.util';
+import { canUseTts } from '@/files/ai/tts/utils/tts-access.util';
 
 const MFA_LOGIN_JWT_TYP = 'mfa_login';
 const TOTP_ISSUER = 'FileManagement';

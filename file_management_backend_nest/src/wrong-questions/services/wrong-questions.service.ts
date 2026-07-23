@@ -7,8 +7,8 @@ import {
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
 import { StorageService } from '@/storage/storage.service';
-import { extractTextFromImage } from '@/files/ai/vision/vision.provider';
-import { assertSolveMathImageFile } from '@/files/ai/files-ai-math.service';
+import { extractTextFromImage } from '@/files/ai/index/provider/vision.provider';
+import { assertSolveMathImageFile } from '@/files/ai/math/service/files-ai-math.service';
 import { MathTempPromoteService } from '@/math-temp/services/math-temp-promote.service';
 import type {
   CreateWrongQuestionDto,

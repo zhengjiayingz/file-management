@@ -6,8 +6,8 @@ import {
 } from '@nestjs/common';
 
 import { PrismaService } from '@/prisma/prisma.service';
-import { embedOne } from '@/files/ai/embedding/embedding.provider';
-import { cosineSimilarity } from '@/files/ai/embedding/similarity.util';
+import { embedOne } from '@/files/ai/index/provider/embedding.provider';
+import { cosineSimilarity } from '@/files/ai/index/utils/similarity.util';
 
 // 搜索词最长 500 字，防止超长请求
 const MAX_QUERY_CHARS = 500;

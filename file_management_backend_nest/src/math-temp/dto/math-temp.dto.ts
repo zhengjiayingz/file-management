@@ -12,7 +12,7 @@ import { Type } from 'class-transformer';
 import {
   FILE_AI_CHAT_ROLES,
   type FileAiChatRoleDto,
-} from '@/files/ai/dto/file-ai-chat.dto';
+} from '@/files/ai/chat/types/file-ai-chat.dto';
 
 /** temp 会话仅 selection（问答）/ solve（解题） */
 export const TEMP_AI_CHAT_MODES = ['selection', 'solve'] as const;

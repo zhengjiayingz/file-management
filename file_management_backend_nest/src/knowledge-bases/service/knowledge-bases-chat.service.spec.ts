@@ -4,11 +4,11 @@ jest.mock('ai', () => ({
   streamText: jest.fn(),
 }));
 
-jest.mock('@/files/ai/embedding/embedding.provider', () => ({
+jest.mock('@/files/ai/index/provider/embedding.provider', () => ({
   embedOne: jest.fn().mockResolvedValue([1, 0, 0]),
 }));
 
-jest.mock('@/files/ai/embedding/similarity.util', () => ({
+jest.mock('@/files/ai/index/utils/similarity.util', () => ({
   topKByEmbedding: jest
     .fn()
     .mockImplementation((_q, items: { id: number }[]) =>
@@ -16,15 +16,15 @@ jest.mock('@/files/ai/embedding/similarity.util', () => ({
     ),
 }));
 
-jest.mock('@/files/ai/utils/chat-model.provider', () => ({
+jest.mock('@/files/ai/chat/provider/chat-model.provider', () => ({
   getChatModel: jest.fn(),
 }));
 
 import { KnowledgeBasesChatService } from './knowledge-bases-chat.service';
 import { KnowledgeBasesService } from './knowledge-bases.service';
 import { KnowledgeBasesSessionService } from './knowledge-bases-session.service';
-import { embedOne } from '@/files/ai/embedding/embedding.provider';
-import { topKByEmbedding } from '@/files/ai/embedding/similarity.util';
+import { embedOne } from '@/files/ai/index/provider/embedding.provider';
+import { topKByEmbedding } from '@/files/ai/index/utils/similarity.util';
 
 describe('KnowledgeBasesChatService retrieve scope', () => {
   const prisma = {

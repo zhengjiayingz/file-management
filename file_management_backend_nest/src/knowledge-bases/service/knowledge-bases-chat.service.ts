@@ -2,12 +2,12 @@ import { BadRequestException, HttpException, Injectable } from '@nestjs/common';
 import { streamText } from 'ai';
 import type { Request, Response } from 'express';
 import { PrismaService } from '@/prisma/prisma.service';
-import { embedOne } from '@/files/ai/embedding/embedding.provider';
+import { embedOne } from '@/files/ai/index/provider/embedding.provider';
 import {
   topKByEmbedding,
   type EmbeddingItem,
-} from '@/files/ai/embedding/similarity.util';
-import { getChatModel } from '@/files/ai/utils/chat-model.provider';
+} from '@/files/ai/index/utils/similarity.util';
+import { getChatModel } from '@/files/ai/chat/provider/chat-model.provider';
 import {
   clampText,
   MAX_HISTORY_MESSAGE_CHARS,
@@ -15,7 +15,7 @@ import {
   MAX_OUTPUT_TOKENS,
   MAX_QUESTION_CHARS,
   type ChatMessage,
-} from '@/files/ai/utils/chat-message.util';
+} from '@/files/ai/chat/utils/chat-message.util';
 import { KnowledgeBasesService } from './knowledge-bases.service';
 import { KnowledgeBasesSessionService } from './knowledge-bases-session.service';
 

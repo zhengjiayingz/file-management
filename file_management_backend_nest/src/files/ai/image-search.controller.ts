@@ -11,7 +11,7 @@ import type { MulterOptions } from '@nestjs/platform-express/multer/interfaces/m
 
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
 import type { RequestUser } from '@/auth/types/jwt-payload.type';
-import { ImageSearchService } from '@/files/ai/image-search.service';
+import { ImageSearchService } from '@/files/ai/image-search/service/image-search.service';
 
 /** 查询图走内存，避免临时落盘 */
 const imageSearchUploadOptions: MulterOptions = {

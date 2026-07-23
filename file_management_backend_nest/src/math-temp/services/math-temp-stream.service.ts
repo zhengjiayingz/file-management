@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import type { Request, Response } from 'express';
-import { validateMessages } from '@/files/ai/utils/chat-message.util';
-import { takeLastMessages } from '@/files/ai/files-ai-math.service';
-import { streamMathVisionChat } from '@/files/ai/vision/math-vision.provider';
+import { validateMessages } from '@/files/ai/chat/utils/chat-message.util';
+import { takeLastMessages } from '@/files/ai/math/service/files-ai-math.service';
+import { streamMathVisionChat } from '@/files/ai/math/provider/math-vision.provider';
 import { MathTempImagesService } from './math-temp-images.service';
 
 function isClientErrorMessage(message: string): boolean {

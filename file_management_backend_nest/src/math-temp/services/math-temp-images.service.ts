@@ -8,7 +8,7 @@ import { randomUUID } from 'node:crypto';
 import { extname } from 'node:path';
 import { PrismaService } from '@/prisma/prisma.service';
 import { StorageService } from '@/storage/storage.service';
-import { assertSolveMathImageFile } from '@/files/ai/files-ai-math.service';
+import { assertSolveMathImageFile } from '@/files/ai/math/service/files-ai-math.service';
 import {
   mathTempTtlHours,
   putMathTempFile,

@@ -1,76 +1,83 @@
 <template>
   <div class="ai-chat-panel">
     <header class="ai-chat-header">
-      <div class="ai-chat-header-main">
-        <h4 class="ai-chat-title">{{ t('preview.aiAskTitle') }}</h4>
-        <p class="ai-chat-hint">
-          {{
-            !selectionEnabled
-              ? t('preview.aiSelectionDisabledHint')
-              : chatMode === 'selection'
-                ? t('preview.aiAskHint')
-                : chatMode === 'rag'
-                  ? t('preview.aiRagHint')
-                  : t('preview.aiSolveHint')
-          }}
-        </p>
-      </div>
-      <div class="ai-chat-header-actions">
-        <template v-if="chatMode === 'selection'">
-          <el-select v-model="translateTargetLang" size="small" class="ai-translate-lang" :disabled="asking"
-            :title="t('preview.aiTranslateTarget')">
-            <el-option :label="t('preview.aiTranslateDefault')" value="default" />
-            <el-option :label="t('preview.aiTranslateZh')" value="zh" />
-            <el-option :label="t('preview.aiTranslateEn')" value="en" />
-            <el-option :label="t('preview.aiTranslateJa')" value="ja" />
-          </el-select>
-          <el-button size="small" type="primary" plain :loading="asking" :disabled="asking" @click="submitTranslate">
-            {{ t('preview.aiTranslate') }}
-          </el-button>
-          <template v-if="canUseTts">
-            <el-select
-              v-model="ttsVoiceId"
-              size="small"
-              class="ai-tts-voice"
-              :disabled="ttsLoading || asking"
-              :title="t('preview.aiTtsVoice')"
-            >
-              <el-option
-                v-for="v in ttsVoices"
-                :key="v.id"
-                :label="v.label"
-                :value="v.id"
-              />
-            </el-select>
-            <el-select
-              v-model="ttsStyleId"
-              size="small"
-              class="ai-tts-style"
-              :disabled="ttsLoading || asking"
-              :title="t('ttsPage.style')"
-            >
-              <el-option :label="t('ttsPage.styleDefault')" value="default" />
-              <el-option :label="t('ttsPage.styleEnglish')" value="english" />
-              <el-option :label="t('ttsPage.styleCantonese')" value="cantonese" />
-              <el-option :label="t('ttsPage.styleSichuan')" value="sichuan" />
-              <el-option :label="t('ttsPage.styleShanghai')" value="shanghai" />
-              <el-option :label="t('ttsPage.styleTianjin')" value="tianjin" />
-            </el-select>
-            <el-button
-              size="small"
-              type="primary"
-              plain
-              :loading="ttsLoading"
-              :disabled="ttsLoading || asking"
-              @click="submitTts"
-            >
-              {{ t('preview.aiTtsSpeak') }}
-            </el-button>
-          </template>
-        </template>
-        <el-button v-if="activeChatMessages.length > 0" size="small" text type="danger" @click="clearChat">
+      <div class="ai-chat-header-top">
+        <div class="ai-chat-header-main">
+          <h4 class="ai-chat-title">{{ t('preview.aiAskTitle') }}</h4>
+          <p class="ai-chat-hint">
+            {{
+              !selectionEnabled
+                ? t('preview.aiSelectionDisabledHint')
+                : chatMode === 'selection'
+                  ? t('preview.aiAskHint')
+                  : chatMode === 'rag'
+                    ? t('preview.aiRagHint')
+                    : t('preview.aiSolveHint')
+            }}
+          </p>
+        </div>
+        <el-button
+          v-if="activeChatMessages.length > 0"
+          size="small"
+          text
+          type="danger"
+          class="ai-chat-clear"
+          @click="clearChat"
+        >
           {{ t('preview.aiChatClear') }}
         </el-button>
+      </div>
+      <div v-if="chatMode === 'selection'" class="ai-chat-header-actions">
+        <el-select v-model="translateTargetLang" size="small" class="ai-translate-lang" :disabled="asking"
+          :title="t('preview.aiTranslateTarget')">
+          <el-option :label="t('preview.aiTranslateDefault')" value="default" />
+          <el-option :label="t('preview.aiTranslateZh')" value="zh" />
+          <el-option :label="t('preview.aiTranslateEn')" value="en" />
+          <el-option :label="t('preview.aiTranslateJa')" value="ja" />
+        </el-select>
+        <el-button size="small" type="primary" plain :loading="asking" :disabled="asking" @click="submitTranslate">
+          {{ t('preview.aiTranslate') }}
+        </el-button>
+        <template v-if="canUseTts">
+          <el-select
+            v-model="ttsVoiceId"
+            size="small"
+            class="ai-tts-voice"
+            :disabled="ttsLoading || asking"
+            :title="t('preview.aiTtsVoice')"
+          >
+            <el-option
+              v-for="v in ttsVoices"
+              :key="v.id"
+              :label="v.label"
+              :value="v.id"
+            />
+          </el-select>
+          <el-select
+            v-model="ttsStyleId"
+            size="small"
+            class="ai-tts-style"
+            :disabled="ttsLoading || asking"
+            :title="t('ttsPage.style')"
+          >
+            <el-option :label="t('ttsPage.styleDefault')" value="default" />
+            <el-option :label="t('ttsPage.styleEnglish')" value="english" />
+            <el-option :label="t('ttsPage.styleCantonese')" value="cantonese" />
+            <el-option :label="t('ttsPage.styleSichuan')" value="sichuan" />
+            <el-option :label="t('ttsPage.styleShanghai')" value="shanghai" />
+            <el-option :label="t('ttsPage.styleTianjin')" value="tianjin" />
+          </el-select>
+          <el-button
+            size="small"
+            type="primary"
+            plain
+            :loading="ttsLoading"
+            :disabled="ttsLoading || asking"
+            @click="submitTts"
+          >
+            {{ t('preview.aiTtsSpeak') }}
+          </el-button>
+        </template>
       </div>
     </header>
 
@@ -1094,17 +1101,30 @@ defineExpose({ reset, activate, startSolve })
 
 .ai-chat-header {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
+  flex-direction: column;
+  align-items: stretch;
   gap: 8px;
   padding: 12px 14px 8px;
   border-bottom: 1px solid var(--el-border-color-lighter);
   flex-shrink: 0;
+  min-width: 0;
+}
+
+.ai-chat-header-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
 }
 
 .ai-chat-header-main {
   min-width: 0;
   flex: 1 1 auto;
+}
+
+.ai-chat-clear {
+  flex-shrink: 0;
 }
 
 .ai-chat-header-actions {
@@ -1113,7 +1133,9 @@ defineExpose({ reset, activate, startSolve })
   gap: 8px;
   flex-shrink: 0;
   flex-wrap: wrap;
-  justify-content: flex-end;
+  justify-content: flex-start;
+  min-width: 0;
+  width: 100%;
 }
 
 .ai-translate-lang {
@@ -1218,7 +1240,7 @@ defineExpose({ reset, activate, startSolve })
 .ai-right-tabs {
   flex: 1 1 auto;
   min-height: 0;
-  height: 100%;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -1235,17 +1257,17 @@ defineExpose({ reset, activate, startSolve })
     overflow: hidden;
   }
 
+  /* 勿写 display:flex 覆盖 EP 隐藏未激活 pane；由内部 .ai-chat-tab 承担列布局 */
   :deep(.el-tab-pane) {
     height: 100%;
-    display: flex;
-    flex-direction: column;
     min-height: 0;
     overflow: hidden;
   }
 }
 
 .ai-chat-tab {
-  flex: 1 1 auto;
+  box-sizing: border-box;
+  height: 100%;
   min-height: 0;
   display: flex;
   flex-direction: column;

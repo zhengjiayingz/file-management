@@ -12,7 +12,7 @@ import {
 } from '@/common/password-policy/password-policy.service';
 import { AdminFriendService } from '@/common/admin-friend/admin-friend.service';
 import { PrismaService } from '@/prisma/prisma.service';
-import { canUseTts } from '@/files/ai/tts/tts-access.util';
+import { canUseTts } from '@/files/ai/tts/utils/tts-access.util';
 
 const defaultPasswordCategories: PasswordCategoryKey[] = [
   'digit',

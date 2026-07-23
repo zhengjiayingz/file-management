@@ -7,7 +7,7 @@ import { PrismaService } from '@/prisma/prisma.service';
 import { MathTempImagesService } from './math-temp-images.service';
 import type { AppendTempChatMessageDto } from '../dto/math-temp.dto';
 import { assertTempChatMode } from '../dto/math-temp.dto';
-import { FILE_AI_CHAT_MAX_MESSAGES } from '@/files/ai/files-ai-chat-session.service';
+import { FILE_AI_CHAT_MAX_MESSAGES } from '@/files/ai/chat/service/files-ai-chat-session.service';
 
 @Injectable()
 export class MathTempChatService {

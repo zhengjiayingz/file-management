@@ -15,7 +15,7 @@ import type { LoginDto } from '../dto/login.dto';
 import { SessionService } from './session.service';
 import { MfaService } from './mfa.service';
 
-import { canUseTts } from '@/files/ai/tts/tts-access.util';
+import { canUseTts } from '@/files/ai/tts/utils/tts-access.util';
 
 type UserWithTotp = User & {
   totpEnabled: boolean;
