@@ -70,6 +70,7 @@ export default {
     knowledgeBases: '知識庫',
     wrongBook: '錯題本',
     tts: '文字轉語音',
+    assistant: 'AI 助手',
     mathTempLab: '臨時截圖調試',
   },
   header: {
@@ -894,5 +895,17 @@ export default {
     styleSichuan: '四川話',
     styleShanghai: '上海話',
     styleTianjin: '天津話',
+  },
+  assistantPage: {
+    title: 'AI 助手',
+    hint: '可查詢你的網盤目錄、讀取已索引正文，或對某個檔案做問答。示例：「根目錄有哪些檔案？」「檔案 id=12 講了什麼？」',
+    placeholder: '輸入問題，Enter 發送…',
+    send: '發送',
+    clear: '清空對話',
+    you: '你',
+    bot: '助手',
+    thinking: '正在思考 / 呼叫工具…',
+    emptyReply: '（無回覆內容）',
+    error: '助手請求失敗',
   },
 }

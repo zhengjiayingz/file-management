@@ -70,6 +70,7 @@ export default {
     knowledgeBases: 'Knowledge Bases',
     wrongBook: 'Wrong Book',
     tts: 'Text-to-speech',
+    assistant: 'AI Assistant',
     mathTempLab: 'Temp Capture Lab',
   },
   header: {
@@ -903,5 +904,17 @@ export default {
     styleSichuan: 'Sichuan',
     styleShanghai: 'Shanghainese',
     styleTianjin: 'Tianjin',
+  },
+  assistantPage: {
+    title: 'AI Assistant',
+    hint: 'List your drive, read indexed text, or ask about a file. Examples: “What is in the root folder?” “What is file id=12 about?”',
+    placeholder: 'Ask a question, Enter to send…',
+    send: 'Send',
+    clear: 'Clear chat',
+    you: 'You',
+    bot: 'Assistant',
+    thinking: 'Thinking / calling tools…',
+    emptyReply: '(No reply)',
+    error: 'Assistant request failed',
   },
 }

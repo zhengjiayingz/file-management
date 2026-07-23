@@ -38,6 +38,8 @@ import { FilesDuplicatesController } from '@/files/duplicates/files-duplicates.c
 import { FilesDuplicatesService } from '@/files/duplicates/files-duplicates.service';
 import { FilesAiTtsController } from '@/files/ai/tts/files-ai-tts.controller';
 import { FilesAiTtsService } from '@/files/ai/tts/files-ai-tts.service';
+import { FilesAiAssistantController } from '@/files/ai/assistant/files-ai-assistant.controller';
+import { FilesAiAssistantService } from '@/files/ai/assistant/files-ai-assistant.service';
 
 @Module({
   imports: [StorageModule, ShareModule, OperationLogModule],
@@ -53,6 +55,7 @@ import { FilesAiTtsService } from '@/files/ai/tts/files-ai-tts.service';
     FilesManageController,
     ImageSearchController,
     FilesAiTtsController,
+    FilesAiAssistantController,
   ],
   providers: [
     FilesUploadService,
@@ -80,6 +83,7 @@ import { FilesAiTtsService } from '@/files/ai/tts/files-ai-tts.service';
     FileBatchHelper,
     PasswordPolicyService,
     FilesAiTtsService,
+    FilesAiAssistantService,
   ],
 })
 export class FilesModule {}

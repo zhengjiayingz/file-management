@@ -98,6 +98,12 @@ const router = createRouter({
       component: () => import('../views/tts/index.vue'),
       meta: { requiresAuth: true },
     },
+    {
+      path: '/assistant',
+      name: 'assistant',
+      component: () => import('../views/assistant/index.vue'),
+      meta: { requiresAuth: true },
+    },
   ]
 })
 
