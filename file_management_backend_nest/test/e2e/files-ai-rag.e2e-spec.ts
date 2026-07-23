@@ -1,11 +1,11 @@
-jest.mock('@/files/ai/embedding/embedding.provider', () => ({
+jest.mock('@/files/ai/index/provider/embedding.provider', () => ({
   embedOne: jest.fn().mockResolvedValue([1, 0]),
   embedMany: jest.fn().mockImplementation(async (texts: string[]) =>
     texts.map(() => [1, 0]),
   ),
 }));
 
-jest.mock('@/files/ai/document-index-queue.service', () => ({
+jest.mock('@/files/ai/index/service/document-index-queue.service', () => ({
   DocumentIndexQueueService: class MockDocumentIndexQueueService {
     async enqueueDocumentIndex() {
       return { id: 'mock-document-index-job' };

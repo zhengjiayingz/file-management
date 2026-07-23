@@ -48,7 +48,7 @@ jest.mock('ai', () => ({
   })),
 }));
 
-jest.mock('@/files/ai/vision/math-vision.provider', () => ({
+jest.mock('@/files/ai/math/provider/math-vision.provider', () => ({
   getMathVisionConfig: jest.fn(() => ({
     apiKey: 'e2e-mock-math-key',
     baseURL: 'https://api.example.com/v1',

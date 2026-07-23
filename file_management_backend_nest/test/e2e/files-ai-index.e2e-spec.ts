@@ -1,4 +1,4 @@
-jest.mock('@/files/ai/document-index-queue.service', () => ({
+jest.mock('@/files/ai/index/service/document-index-queue.service', () => ({
   DocumentIndexQueueService: class MockDocumentIndexQueueService {
     enqueueDocumentIndex() {
       return Promise.resolve({ id: 'mock-document-index-job' });
