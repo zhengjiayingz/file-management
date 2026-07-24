@@ -34,7 +34,10 @@ export type E2eCleanupResult = {
 
 function loadE2eEnv(): void {
   const nestEnv = resolve(__dirname, '../../.env');
-  const expressEnv = resolve(__dirname, '../../../file_management_backend/.env');
+  const expressEnv = resolve(
+    __dirname,
+    '../../../intelligent_document_backend/.env',
+  );
   if (existsSync(nestEnv)) {
     dotenv.config({ path: nestEnv });
   } else if (existsSync(expressEnv)) {
@@ -66,7 +69,9 @@ export async function cleanupE2eTestData(options?: {
     }
 
     if (verbose) {
-      console.log(`[e2e cleanup] 将删除 ${testUserCount} 个测试用户及关联数据…`);
+      console.log(
+        `[e2e cleanup] 将删除 ${testUserCount} 个测试用户及关联数据…`,
+      );
     }
 
     const deletedLoginLogs = await prisma.loginLog.deleteMany({

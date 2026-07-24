@@ -215,6 +215,7 @@ import SemanticSearchDialog from '@components/SemanticSearchDialog/index.vue'
 import DuplicatesDialog from '@components/DuplicatesDialog/index.vue'
 import FileFilterBar from '@components/FileFilterBar/index.vue'
 import { formatFileSize } from '@utils/fileUpload'
+import { buildFileThumbnailUrl } from '@utils/fileThumbnailUrl'
 import {
   isArchiveFile,
   isZipExtractableOnline,
@@ -856,11 +857,7 @@ const handleFileAction = async (command: string, file: FileInfo) => {
 
 // 获取文件预览 URL
 const getFilePreviewUrl = (file: FileInfo) => {
-  // 保持与 api/file.ts 一致的 Base URL 逻辑
-  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
-  const token = authStore.token || ''
-  // 构造完整 URL: http://localhost:3000/api/files/:id/thumbnail?token=...
-  return `${API_BASE_URL}/api/files/${file.id}/thumbnail?token=${token}`
+  return buildFileThumbnailUrl(file.id, authStore.token || '')
 }
 
 // 处理裁剪后的上传

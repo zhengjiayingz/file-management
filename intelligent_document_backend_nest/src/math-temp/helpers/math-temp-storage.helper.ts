@@ -11,7 +11,7 @@ const unlinkAsync = promisify(fs.unlink);
 
 /**
  * 将 multer 临时文件写入 math-temp 前缀，返回 storageKey（不进 UserFile）。
- * 本地盘 key 必须与 LocalStorageProvider 一致：`${UPLOAD_PATH}/math-temp/{userId}/{leaf}`。
+ * 本地盘 key：uploads/math-temp/{userId}/{leaf}（相对 UPLOAD_PATH 根）。
  * 不可用 toStoredRelativePath：当 UPLOAD_PATH 在 cwd 外（如 ../xxx/uploads）时，
  * 该工具会退化成「仅 basename」，丢掉 math-temp/{userId} 导致读图 410。
  */
@@ -35,11 +35,7 @@ export async function putMathTempFile(input: {
       fs.copyFileSync(input.localFilePath, absTarget);
       await unlinkAsync(input.localFilePath);
     }
-    const uploadRel = (process.env.UPLOAD_PATH || 'uploads')
-      .trim()
-      .replace(/^\.\//, '')
-      .replace(/\\/g, '/');
-    return `${uploadRel}/${nestedRel}`;
+    return `uploads/${nestedRel}`;
   }
 
   return input.storage.putFromLocalFile({

@@ -40,11 +40,8 @@ export class LocalStorageProvider implements StorageProvider {
       await unlinkAsync(input.localFilePath);
     }
 
-    const uploadRel = (process.env.UPLOAD_PATH || 'uploads')
-      .trim()
-      .replace(/^\.\//, '')
-      .replace(/\\/g, '/');
-    return `${uploadRel}/${fileName}`;
+    // 与 Express / resolveStorageFilePath 约定一致，不写入含目录名的相对路径
+    return `uploads/${fileName}`;
   }
 
   getReadStream(storedPath: string) {

@@ -4,7 +4,10 @@ import { resolve } from 'path';
 import { cleanupE2eTestData } from './helpers/e2e-cleanup';
 
 const nestEnv = resolve(__dirname, '../.env');
-const expressEnv = resolve(__dirname, '../../file_management_backend/.env');
+const expressEnv = resolve(
+  __dirname,
+  '../../intelligent_document_backend/.env',
+);
 if (existsSync(nestEnv)) {
   dotenv.config({ path: nestEnv });
 } else if (existsSync(expressEnv)) {

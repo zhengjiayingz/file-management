@@ -183,7 +183,7 @@ function resolveAvatarAbsPath(publicPath: string): string {
   return join(
     process.cwd(),
     '..',
-    'file_management_backend',
+    'intelligent_document_backend',
     publicPath.replace(/^\//, ''),
   );
 }

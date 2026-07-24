@@ -9,7 +9,7 @@ export function getAvatarUploadDir(): string {
   return join(
     process.cwd(),
     '..',
-    'file_management_backend',
+    'intelligent_document_backend',
     'uploads',
     'avatars',
   );

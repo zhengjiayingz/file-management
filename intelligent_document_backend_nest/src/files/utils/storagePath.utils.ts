@@ -21,20 +21,14 @@ export function toStoredRelativePath(absolutePath: string): string {
   if (rel && !rel.startsWith('..') && !path.isAbsolute(rel)) {
     return rel.replace(/\\/g, '/');
   }
-  const uploadRel = (process.env.UPLOAD_PATH || 'uploads')
-    .trim()
-    .replace(/^\.\//, '')
-    .replace(/\\/g, '/');
+  // 统一写成 uploads/<name>，避免把 ../xxx_backend/uploads 写进库导致目录重命名后失效
   const base = path.basename(resolved);
-  if (!path.isAbsolute((process.env.UPLOAD_PATH || 'uploads').trim())) {
-    return `${uploadRel}/${base}`;
-  }
   return path.join('uploads', base).replace(/\\/g, '/');
 }
 
 export function resolveStorageFilePath(storedPath: string): string {
   if (!storedPath) return storedPath;
-  const normalized = normalizeStoredPath(storedPath);
+  const normalized = normalizeStoredPath(storedPath).replace(/\\/g, '/');
   if (normalized.startsWith('minio://')) {
     throw new Error('minio 对象路径无法直接解析为本地路径');
   }
@@ -42,9 +36,12 @@ export function resolveStorageFilePath(storedPath: string): string {
     return normalized;
   }
 
-  // Express 入库为 uploads/<fileName>，应相对 UPLOAD_PATH 根目录解析，而非 Nest cwd/uploads
-  if (normalized.startsWith('uploads/')) {
-    return path.join(getUploadRootDir(), normalized.slice('uploads/'.length));
+  // 兼容：uploads/x、../旧目录名/uploads/x、../新目录名/uploads/x
+  // 一律相对当前 UPLOAD_PATH 根解析
+  const marker = 'uploads/';
+  const idx = normalized.indexOf(marker);
+  if (idx >= 0) {
+    return path.join(getUploadRootDir(), normalized.slice(idx + marker.length));
   }
 
   return path.resolve(process.cwd(), normalized);

@@ -7,16 +7,16 @@
  *
  * 注：pnpm test:e2e 结束后会自动执行 teardown-e2e.ts 清理，一般无需手动跑。
  */
-import {
-  cleanupE2eTestData,
-  previewE2eCleanup,
-} from '../helpers/e2e-cleanup';
+import { cleanupE2eTestData, previewE2eCleanup } from '../helpers/e2e-cleanup';
 import dotenv from 'dotenv';
 import { existsSync } from 'fs';
 import { resolve } from 'path';
 
 const nestEnv = resolve(__dirname, '../../.env');
-const expressEnv = resolve(__dirname, '../../../file_management_backend/.env');
+const expressEnv = resolve(
+  __dirname,
+  '../../../intelligent_document_backend/.env',
+);
 if (existsSync(nestEnv)) {
   dotenv.config({ path: nestEnv });
 } else if (existsSync(expressEnv)) {

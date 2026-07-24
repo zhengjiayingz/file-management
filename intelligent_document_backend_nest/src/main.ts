@@ -63,7 +63,7 @@ async function bootstrap() {
   const uploadsPath = join(
     process.cwd(),
     '..',
-    'file_management_backend',
+    'intelligent_document_backend',
     'uploads',
   );
   app.useStaticAssets(uploadsPath, { prefix: '/uploads' });

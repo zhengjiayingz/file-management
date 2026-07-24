@@ -78,6 +78,7 @@ import { ElMessage } from 'element-plus'
 import fileApiService from '@api/file'
 import { useAuthStore } from '@stores/auth'
 import type { ImageSearchItem, SemanticSearchItem } from '@typing/file'
+import { buildFileThumbnailUrl } from '@utils/fileThumbnailUrl'
 
 const props = defineProps<{ modelValue: boolean }>()
 const emit = defineEmits<{
@@ -87,8 +88,6 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 const authStore = useAuthStore()
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
-
 const inputRef = ref<{ focus: () => void } | null>(null)
 const imageInputRef = ref<HTMLInputElement | null>(null)
 const activeTab = ref<'text' | 'image'>('text')
@@ -122,8 +121,7 @@ const imageEmptyText = computed(() => {
 })
 
 const thumbUrl = (id: number) => {
-    const token = authStore.token || ''
-    return `${API_BASE_URL}/api/files/${id}/thumbnail?token=${encodeURIComponent(token)}`
+    return buildFileThumbnailUrl(id, authStore.token || '')
 }
 /** 清除图片预览 URL */
 const clearQueryPreview = () => {

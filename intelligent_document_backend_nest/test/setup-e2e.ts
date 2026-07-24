@@ -3,7 +3,10 @@ import { existsSync } from 'fs';
 import { resolve } from 'path';
 
 const nestEnv = resolve(__dirname, '../.env');
-const expressEnv = resolve(__dirname, '../../file_management_backend/.env');
+const expressEnv = resolve(
+  __dirname,
+  '../../intelligent_document_backend/.env',
+);
 
 if (existsSync(nestEnv)) {
   dotenv.config({ path: nestEnv });

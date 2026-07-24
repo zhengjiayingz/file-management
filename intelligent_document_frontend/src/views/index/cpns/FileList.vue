@@ -188,7 +188,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import {
     Folder, Document, MoreFilled, VideoPlay, Picture, Headset,
     CaretTop, CaretBottom
@@ -202,6 +202,7 @@ import FileTypeColoredIcon from '@components/FileTypeColoredIcon/index.vue'
 import type { FileItem as FileInfo, FileTagItem } from '@typing/file'
 import { useAuthStore } from '@stores/auth'
 import dayjs from 'dayjs'
+import { buildFileThumbnailUrl } from '@utils/fileThumbnailUrl'
 
 const { t } = useI18n()
 
@@ -234,6 +235,15 @@ const authStore = useAuthStore()
 const draggedFile = ref<FileInfo | null>(null)
 const imageErrorMap = ref<Record<number, boolean>>({})
 const videoErrorMap = ref<Record<number, boolean>>({})
+
+// 列表刷新后允许重新拉取缩略图（避免曾 404 后永久占位）
+watch(
+    () => props.files.map((f) => f.id).join(','),
+    () => {
+        imageErrorMap.value = {}
+        videoErrorMap.value = {}
+    },
+)
 
 /** 网格内视频悬停预览：仅循环播放前 10 秒（秒），用于控制流量 */
 const GRID_VIDEO_PREVIEW_SECONDS = 10
@@ -333,9 +343,7 @@ const getFileIconColor = (file: FileInfo): string => {
 }
 
 const getFilePreviewUrl = (file: FileInfo) => {
-    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
-    const token = authStore.token || ''
-    return `${API_BASE_URL}/api/files/${file.id}/thumbnail?token=${encodeURIComponent(token)}`
+    return buildFileThumbnailUrl(file.id, authStore.token || '')
 }
 
 /** 网格视频预览：走下载流（inline + Range），供 video 标签播放 */

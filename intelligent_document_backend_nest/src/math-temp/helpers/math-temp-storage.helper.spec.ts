@@ -33,8 +33,8 @@ describe('putMathTempFile', () => {
       ext: '.png',
     });
 
-    expect(key.replace(/\\/g, '/')).toMatch(/math-temp\/2\/.+\.png$/);
-    expect(key).not.toMatch(/uploads\/[0-9a-f-]{36}\.png$/i);
+    expect(key.replace(/\\/g, '/')).toMatch(/^uploads\/math-temp\/2\/.+\.png$/);
+    expect(key).not.toMatch(/^uploads\/[0-9a-f-]{36}\.png$/i);
 
     const uploadAbs = path.resolve(process.cwd(), process.env.UPLOAD_PATH!);
     const leaf = path.basename(key);

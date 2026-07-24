@@ -228,7 +228,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Folder,
@@ -243,6 +243,7 @@ import { defaultFileFilterState } from '@typing/fileFilter'
 import FileTagDialog from '@components/FileTagDialog/index.vue'
 import FileFilterBar from '@components/FileFilterBar/index.vue'
 import { formatFileSize } from '@utils/fileUpload'
+import { buildFileThumbnailUrl } from '@utils/fileThumbnailUrl'
 import { compareFileEntryCategory, getFileEntryCategory } from '@utils/fileCategory'
 import { getFileTypeSymbolId } from '@utils/fileTypeIcons'
 import FileTypeColoredIcon from '@components/FileTypeColoredIcon/index.vue'
@@ -339,9 +340,7 @@ const getFileIconColor = (file: FileInfo): string => {
 }
 
 const getFilePreviewUrl = (file: FileInfo) => {
-  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
-  const token = authStore.token || ''
-  return `${API_BASE_URL}/api/files/${file.id}/thumbnail?token=${encodeURIComponent(token)}`
+  return buildFileThumbnailUrl(file.id, authStore.token || '')
 }
 
 const getFileVideoPreviewUrl = (file: FileInfo) => {
@@ -352,6 +351,14 @@ const getFileVideoPreviewUrl = (file: FileInfo) => {
 
 const imageErrorMap = ref<Record<number, boolean>>({})
 const videoErrorMap = ref<Record<number, boolean>>({})
+
+watch(
+  () => files.value.map((f) => f.id).join(','),
+  () => {
+    imageErrorMap.value = {}
+    videoErrorMap.value = {}
+  },
+)
 
 /** 网格内视频悬停预览：仅循环播放前 10 秒 */
 const GRID_VIDEO_PREVIEW_SECONDS = 10
