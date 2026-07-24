@@ -1,6 +1,6 @@
-# 文件管理系统
+# Intelligent Document System
 
-一个基于 Vue 3 + Node.js + MySQL 的现代化文件管理系统。
+智能文档系统（原文件管理网盘）：Vue 3 + NestJS + MySQL，支持 RAG / 知识库 / 多模态索引等 AI 能力。
 
 ## 🚀 快速开始
 
@@ -14,24 +14,24 @@
 1. **克隆项目**
    ```bash
    git clone <repository-url>
-   cd FileManagement_proj
+   cd intelligent_document
    ```
 
 2. **安装依赖**
    ```bash
    # 后端
-   cd file_management_backend
+   cd intelligent_document_backend
    pnpm install
    
    # 前端
-   cd ../file_management_frontend
+   cd ../intelligent_document_frontend
    pnpm install
    ```
 
 3. **配置数据库**
    ```bash
    # 复制环境变量文件
-   cd ../file_management_backend
+   cd ../intelligent_document_backend
    cp .env.example .env
    
    # 编辑 .env 文件，配置数据库连接
@@ -42,11 +42,11 @@
 4. **启动服务**
    ```bash
    # 启动后端 (端口 3000)
-   cd file_management_backend
+   cd intelligent_document_backend
    pnpm dev
    
    # 启动前端 (端口 5173)
-   cd ../file_management_frontend
+   cd ../intelligent_document_frontend
    pnpm dev
    ```
 
@@ -57,17 +57,17 @@
 ## 📁 项目结构
 
 ```
-FileManagement_proj/
+intelligent_document/
 ├── docs/                          # 📚 项目文档
 │   ├── REQUIREMENTS.md            # 需求文档
 │   ├── DATABASE_DESIGN.md         # 数据库设计
 │   └── BUSINESS_FLOWS.md          # 业务流程
-├── file_management_backend/       # 🔧 后端服务
+├── intelligent_document_backend/       # 🔧 后端服务
 │   ├── src/                       # 源代码
 │   ├── prisma/                    # 数据库模型
 │   ├── README.md                  # 后端说明
 │   └── QUICK_START.md             # 快速开始
-└── file_management_frontend/      # 🎨 前端应用
+└── intelligent_document_frontend/      # 🎨 前端应用
     ├── src/                       # 源代码
     └── README.md                  # 前端说明
 ```
@@ -103,14 +103,14 @@ FileManagement_proj/
 
 ## 🔐 初始账户
 
-在 `file_management_backend` 目录配置好 `.env` 后，可用脚本创建管理员（密码通过环境变量 `ADMIN_PASSWORD` 传入，勿写入仓库）：
+在 `intelligent_document_backend` 目录配置好 `.env` 后，可用脚本创建管理员（密码通过环境变量 `ADMIN_PASSWORD` 传入，勿写入仓库）：
 
 ```bash
-cd file_management_backend
+cd intelligent_document_backend
 pnpm exec tsx scripts/create-admin.ts
 ```
 
-详见 [`.env.example`](./file_management_backend/.env.example)。
+详见 [`.env.example`](./intelligent_document_backend/.env.example)。
 
 ## 🤝 开发规范与 Skills
 

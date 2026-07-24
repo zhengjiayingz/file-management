@@ -1,6 +1,6 @@
 # File Management Backend
 
-> **DEPRECATED（S11）**：Express 版已停止维护。请使用 [`../file_management_backend_nest`](../file_management_backend_nest)（Nest，端口 **3000**）。本文档与代码仅作归档参考。
+> **DEPRECATED（S11）**：Express 版已停止维护。请使用 [`../intelligent_document_backend_nest`](../intelligent_document_backend_nest)（Nest，端口 **3000**）。本文档与代码仅作归档参考。
 
 基于 Node.js + Express + TypeScript + Prisma 的文件管理系统后端。
 
@@ -49,7 +49,7 @@ pnpm worker:preview
 | **LibreOffice** | 仅在 **worker** 容器内，api 容器不含 | 需在本机安装（预览 Worker 在宿主机跑） |
 | **Docker Desktop** | 必须运行 | 仅在使用 compose 时需要 |
 
-前端（`file_management_frontend`）：
+前端（`intelligent_document_frontend`）：
 
 ```env
 # .env
@@ -82,7 +82,7 @@ VITE_API_BASE_URL=http://localhost:3000
 #### 第一次 / 完整启动
 
 ```bash
-cd file_management_backend
+cd intelligent_document_backend
 
 # 1. 确保本机 MySQL 已启动（3306）
 # 2. 确保 Docker Desktop 已运行
@@ -98,11 +98,11 @@ docker compose ps
 
 ```bash
 # 本机 MySQL 启动后
-cd file_management_backend
+cd intelligent_document_backend
 docker compose up -d
 
 # 前端（另开终端）
-cd ../file_management_frontend
+cd ../intelligent_document_frontend
 pnpm dev
 ```
 
@@ -111,7 +111,7 @@ pnpm dev
 #### 停止
 
 ```bash
-cd file_management_backend
+cd intelligent_document_backend
 docker compose stop          # 停止容器，保留数据
 # docker compose down        # 停止并删除容器（卷与 bind mount 数据仍在）
 ```
@@ -123,7 +123,7 @@ docker compose stop          # 停止容器，保留数据
 适合添加功能、调试接口；`tsx watch` 改 `src/` 后自动重启，日志直接打在终端。
 
 ```bash
-cd file_management_backend
+cd intelligent_document_backend
 
 # 1. 停掉 Docker 里的 api/worker（避免占 3000 和抢队列）
 docker compose stop api worker
@@ -157,7 +157,7 @@ docker compose up -d api worker
 与阶段二开发方式一致：Redis 在容器，API/Worker 在宿主机。
 
 ```bash
-cd file_management_backend
+cd intelligent_document_backend
 docker compose -f docker-compose.dev.yml up -d   # 仅 Redis
 pnpm dev                                          # 本机 API + Worker
 ```
@@ -171,7 +171,7 @@ pnpm dev                                          # 本机 API + Worker
 Docker 运行的是编译后的 `dist/`，**改 `src/` 不会自动生效**，需重新构建：
 
 ```bash
-cd file_management_backend
+cd intelligent_document_backend
 
 # 只改了 API 逻辑
 docker compose up -d --build api
@@ -206,7 +206,7 @@ docker compose run --rm api pnpm exec prisma migrate deploy
 Docker 方式下日志在容器内，用 `docker compose logs` 查看（JSON 一行一条，与 pino 输出一致）：
 
 ```bash
-cd file_management_backend
+cd intelligent_document_backend
 
 # 实时跟踪 api
 docker compose logs -f api
@@ -374,7 +374,7 @@ pnpm dev
 
 ```bash
 # 前提：MySQL 可达（本机 3306 或 compose 内 mysql）
-cd file_management_backend
+cd intelligent_document_backend
 docker compose up -d --build
 curl http://localhost:3000/health        # {"status":"ok",...}
 # 浏览器打开 http://localhost:3000/api-docs
@@ -483,7 +483,7 @@ pnpm dev
 
 ### 前端对应配置
 
-**Vue / Vite（`file_management_frontend`）**
+**Vue / Vite（`intelligent_document_frontend`）**
 
 ```env
 # .env.development

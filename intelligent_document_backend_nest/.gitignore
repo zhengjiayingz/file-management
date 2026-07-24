@@ -1,0 +1,15 @@
+# 与 Express 后端一致：仓库根下运行时目录勿提交（勿用裸 upload/，会误伤 src/files/upload）
+/upload/
+/uploads/
+/chunks/
+/thumbnails/
+/ffmpeg/
+/previews/
+
+# 环境变量
+.env
+.env.*
+!.env.example
+
+node_modules/
+dist/

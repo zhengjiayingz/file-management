@@ -9,12 +9,12 @@ dist/
 previews/
 
 # Nest / Express 运行时数据（上传、分片、缩略图等，勿提交）
-file_management_backend_nest/thumbnails/
-file_management_backend_nest/uploads/
-file_management_backend_nest/chunks/
-file_management_backend/uploads/
-file_management_backend/chunks/
-file_management_backend/thumbnails/
+intelligent_document_backend_nest/thumbnails/
+intelligent_document_backend_nest/uploads/
+intelligent_document_backend_nest/chunks/
+intelligent_document_backend/uploads/
+intelligent_document_backend/chunks/
+intelligent_document_backend/thumbnails/
 
 # 本地论文测试页/PDF（可能含第三方页面敏感字段，勿提交）
 test-fixtures/

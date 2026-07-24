@@ -1,7 +1,7 @@
 {
-  "name": "file_management_backend",
+  "name": "intelligent_document_backend",
   "version": "1.0.0",
-  "description": "File Management System Backend API",
+  "description": "Intelligent Document System Backend API",
   "main": "dist/app.js",
   "type": "module",
   "scripts": {

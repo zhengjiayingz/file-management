@@ -3,11 +3,11 @@ name: Backend CI
 on:
   push:
     paths:
-      - 'file_management_backend_nest/**'
+      - 'intelligent_document_backend_nest/**'
       - '.github/workflows/backend-ci.yml'
   pull_request:
     paths:
-      - 'file_management_backend_nest/**'
+      - 'intelligent_document_backend_nest/**'
       - '.github/workflows/backend-ci.yml'
 
 jobs:
@@ -56,20 +56,20 @@ jobs:
         with:
           node-version: '20'
           cache: pnpm
-          cache-dependency-path: file_management_backend_nest/pnpm-lock.yaml
+          cache-dependency-path: intelligent_document_backend_nest/pnpm-lock.yaml
 
       - name: Install dependencies
-        working-directory: file_management_backend_nest
+        working-directory: intelligent_document_backend_nest
         run: pnpm install --frozen-lockfile
 
       - name: Apply database schema
-        working-directory: file_management_backend_nest
+        working-directory: intelligent_document_backend_nest
         run: pnpm exec prisma db push --accept-data-loss
 
       - name: Build
-        working-directory: file_management_backend_nest
+        working-directory: intelligent_document_backend_nest
         run: pnpm build
 
       - name: Run e2e tests
-        working-directory: file_management_backend_nest
+        working-directory: intelligent_document_backend_nest
         run: pnpm test:e2e

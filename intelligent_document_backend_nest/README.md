@@ -33,7 +33,7 @@ pnpm start:dev
 Express 侧 `schema.prisma` 有更新时：
 
 ```powershell
-Copy-Item ..\file_management_backend\prisma\schema.prisma .\prisma\schema.prisma -Force
+Copy-Item ..\intelligent_document_backend\prisma\schema.prisma .\prisma\schema.prisma -Force
 pnpm prisma:generate
 ```
 
