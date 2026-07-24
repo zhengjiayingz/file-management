@@ -161,15 +161,15 @@ describe('Files AI Index (e2e)', () => {
     expect(msgBody.message).toMatch(/文件夹不支持索引/);
   });
 
-  it('POST /api/files/:id/ai/index 非可索引格式（如 mp4）应返回 400', async () => {
+  it('POST /api/files/:id/ai/index 非可索引格式（如 exe）应返回 400', async () => {
     const { accessToken, username } = await loginAndGetTokens(app);
     const userId = await getUserId(app, username);
     const { userFile } = await seedBinaryFile(
       app,
       userId,
-      'fake-video',
-      `not-indexable-${Date.now()}.mp4`,
-      'video/mp4',
+      'fake-binary',
+      `not-indexable-${Date.now()}.exe`,
+      'application/octet-stream',
     );
     const res = await request(app.getHttpServer())
       .post(`/api/files/${userFile.id}/ai/index`)
@@ -177,7 +177,7 @@ describe('Files AI Index (e2e)', () => {
       .send(INDEX_BODY);
     expect(res.status).toBe(400);
     const msgBody = apiMessage(res.body);
-    expect(msgBody.message).toMatch(/仅支持 UTF-8/);
+    expect(msgBody.message).toMatch(/仅支持/);
   });
   it('POST /api/files/:id/ai/index 图片首次触发应返回 pending', async () => {
     const { accessToken, username } = await loginAndGetTokens(app);
