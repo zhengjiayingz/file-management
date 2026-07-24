@@ -159,6 +159,35 @@ function isAudioExtension(fileName: string): boolean {
 function isAudioMime(mimeType: string): boolean {
   return INDEXABLE_AUDIO_MIMES.has(mimeType) || mimeType.startsWith('audio/');
 }
+
+/** 可索引视频扩展名（MVP：常见可抽音轨格式） */
+const INDEXABLE_VIDEO_EXTS = new Set([
+  '.mp4',
+  '.webm',
+  '.mov',
+  '.m4v',
+  '.mkv',
+]);
+
+const INDEXABLE_VIDEO_MIMES = new Set([
+  'video/mp4',
+  'video/webm',
+  'video/quicktime',
+  'video/x-matroska',
+  'application/octet-stream',
+]);
+
+function isVideoExtension(fileName: string): boolean {
+  const lower = fileName.toLowerCase();
+  const dot = lower.lastIndexOf('.');
+  if (dot < 0) return false;
+  return INDEXABLE_VIDEO_EXTS.has(lower.slice(dot));
+}
+
+function isVideoMime(mimeType: string): boolean {
+  return INDEXABLE_VIDEO_MIMES.has(mimeType) || mimeType.startsWith('video/');
+}
+
 /**
  * 是否为可索引音频（扩展名 + MIME 双判断）。
  * @param input.fileName 原始文件名（看扩展名）
@@ -173,6 +202,27 @@ export function isIndexableAudio(input: {
   // 无 MIME 时仅信扩展名；有 MIME 时再校验
   if (!mimeType) return true;
   return isAudioMime(mimeType);
+}
+
+/**
+ * 是否为可索引视频（扩展名 + MIME；抽音轨后走同一 ASR）。
+ */
+export function isIndexableVideo(input: {
+  fileName: string;
+  mimeType?: string | null;
+}): boolean {
+  const mimeType = normalizeMime(input.mimeType);
+  if (!isVideoExtension(input.fileName)) return false;
+  if (!mimeType) return true;
+  return isVideoMime(mimeType);
+}
+
+/** 音频或视频（媒体转写路径） */
+export function isIndexableMedia(input: {
+  fileName: string;
+  mimeType?: string | null;
+}): boolean {
+  return isIndexableAudio(input) || isIndexableVideo(input);
 }
 
 /** 扩展名 + MIME 双判断：txt / md / 文字层 pdf / docx / 图片 */

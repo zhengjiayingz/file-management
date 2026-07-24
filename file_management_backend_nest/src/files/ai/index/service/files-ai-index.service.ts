@@ -7,7 +7,7 @@ import {
 import type { DocumentIndexMode, DocumentIndexStatus } from '@prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
 import {
-  isIndexableAudio,
+  isIndexableMedia,
   isIndexableTextDocument,
 } from '@/files/ai/index/service/text-extractor';
 
@@ -102,17 +102,17 @@ export class FilesAiIndexService {
     if (!userFile.storage) {
       throw new NotFoundException('文件不存在');
     }
-    // 格式校验：文档/图片 或 常见音频（扩展名 + MIME）
+    // 格式校验：文档/图片 或 常见音视频（扩展名 + MIME）
     const indexableInput = {
       fileName: userFile.fileName,
       mimeType: userFile.storage.mimeType,
     };
     if (
       !isIndexableTextDocument(indexableInput) &&
-      !isIndexableAudio(indexableInput)
+      !isIndexableMedia(indexableInput)
     ) {
       throw new BadRequestException(
-        '仅支持 UTF-8 的 .txt / .md、.pdf（含扫描件）、.docx、可 OCR 图片，以及常见音频（mp3/wav/m4a 等）',
+        '仅支持 UTF-8 的 .txt / .md、.pdf（含扫描件）、.docx、可 OCR 图片，以及常见音频（mp3/wav/m4a）或视频（mp4/webm/mov）',
       );
     }
     // 是否已有进行中的任务，每个文件在 document_index_jobs 里最多一行（userFileId 唯一）。

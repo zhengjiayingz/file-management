@@ -30,6 +30,7 @@ import {
   extractTextFromStream,
   isIndexableAudio,
   isIndexableTextDocument,
+  isIndexableVideo,
   softInsertEnglishSpaces,
 } from '@/files/ai/index/service/text-extractor';
 import { extractPdfTextWithPdfJs } from '@/files/ai/index/utils/pdf-text.util';
@@ -454,6 +455,19 @@ describe('isIndexableAudio', () => {
   it('拒绝 pdf', () => {
     expect(
       isIndexableAudio({ fileName: 'a.pdf', mimeType: 'application/pdf' }),
+    ).toBe(false);
+  });
+});
+
+describe('isIndexableVideo', () => {
+  it('接受 mp4 + video/mp4', () => {
+    expect(
+      isIndexableVideo({ fileName: 'a.mp4', mimeType: 'video/mp4' }),
+    ).toBe(true);
+  });
+  it('拒绝纯音频扩展名', () => {
+    expect(
+      isIndexableVideo({ fileName: 'a.mp3', mimeType: 'audio/mpeg' }),
     ).toBe(false);
   });
 });

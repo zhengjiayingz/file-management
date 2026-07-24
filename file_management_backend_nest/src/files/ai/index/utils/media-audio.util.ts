@@ -1,4 +1,4 @@
-// ASR 对格式挑剔,利用ffmpeg 把任意本地音频转成 16kHz / mono / wav
+// ASR 对格式挑剔,利用ffmpeg 把任意本地音/视频转成 16kHz / mono / wav
 import { mkdtemp, rm } from 'node:fs/promises'; // 在 temp 下建一个专属子目录
 import { tmpdir } from 'node:os'; // 创建临时目录
 import { join } from 'node:path';
@@ -7,6 +7,33 @@ import ffmpeg from 'fluent-ffmpeg';
 import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
 
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
+
+/** 视频最长秒数；未配置时默认 30 分钟 */
+export function getMaxVideoDurationSec(): number {
+  const raw = process.env.AI_MAX_VIDEO_DURATION_SEC?.trim();
+  const n = raw ? Number(raw) : 1800;
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 1800;
+}
+
+/**
+ * 用 ffprobe 读取媒体时长（秒）。失败时抛错。
+ */
+export async function probeMediaDurationSec(inputPath: string): Promise<number> {
+  return new Promise((resolve, reject) => {
+    ffmpeg.ffprobe(inputPath, (err, data) => {
+      if (err) {
+        reject(err);
+        return;
+      }
+      const sec = data?.format?.duration;
+      if (typeof sec !== 'number' || !Number.isFinite(sec) || sec <= 0) {
+        reject(new Error('无法读取媒体时长'));
+        return;
+      }
+      resolve(sec);
+    });
+  });
+}
 
 export type PreparedAudio = {
   /** 转码后的 wav 绝对路径 */

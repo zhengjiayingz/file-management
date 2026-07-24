@@ -27,6 +27,7 @@
           ref="mediaRef"
           :src="videoUrl"
           controls
+          crossorigin="anonymous"
           preload="auto"
           class="video-element"
           @loadedmetadata="tryApplySavedProgress"
@@ -37,6 +38,14 @@
           @pause="flushProgress"
           @ended="onEnded"
         >
+          <track
+            v-if="vttObjectUrl"
+            kind="subtitles"
+            srclang="zh"
+            label="AI"
+            :src="vttObjectUrl"
+            default
+          />
           您的浏览器不支持 video 标签。
         </video>
         <audio
@@ -70,34 +79,56 @@
           >
             {{ indexButtonLabel }}
           </el-button>
-          <span class="transcript-status">{{ indexStatusLabel }}</span>
-        </div>
-
-        <p v-if="transcriptError" class="transcript-error">{{ transcriptError }}</p>
-
-        <ul v-else class="transcript-list">
-          <li
-            v-for="(seg, i) in segments"
-            :key="i"
-            class="transcript-item"
-            @click="seekToSegment(seg)"
+          <el-button
+            size="small"
+            plain
+            :disabled="!canExportSrt"
+            @click="onExportSrt"
           >
-            <span v-if="seg.startMs != null" class="transcript-time">
-              {{ formatMs(seg.startMs) }}
-            </span>
-            <span class="transcript-text">{{ seg.text }}</span>
-          </li>
-        </ul>
+            导出 SRT
+          </el-button>
+        </div>
+        <span class="transcript-status">{{ indexStatusLabel }}</span>
 
-        <p
-          v-if="!transcriptError && segments.length === 0 && indexReady"
-          class="transcript-empty"
-        >
-          暂无转写分句
-        </p>
-        <p v-else-if="!transcriptError && !indexReady" class="transcript-empty">
-          请先建立索引以生成文稿
-        </p>
+        <el-tabs v-model="sideTab" class="media-side-tabs">
+          <el-tab-pane label="文稿" name="transcript">
+            <p v-if="transcriptError" class="transcript-error">{{ transcriptError }}</p>
+            <ul v-else class="transcript-list">
+              <li
+                v-for="(seg, i) in segments"
+                :key="i"
+                class="transcript-item"
+                @click="seekToSegment(seg)"
+              >
+                <span v-if="seg.startMs != null" class="transcript-time">
+                  {{ formatMs(seg.startMs) }}
+                </span>
+                <span class="transcript-text">{{ seg.text }}</span>
+              </li>
+            </ul>
+            <p
+              v-if="!transcriptError && segments.length === 0 && indexReady"
+              class="transcript-empty"
+            >
+              暂无转写分句
+            </p>
+            <p v-else-if="!transcriptError && !indexReady" class="transcript-empty">
+              请先建立索引以生成文稿与字幕
+            </p>
+          </el-tab-pane>
+          <el-tab-pane label="摘要" name="summary">
+            <div v-if="summaryLoading" class="transcript-empty">正在加载摘要…</div>
+            <div v-else-if="summaryError" class="transcript-error">{{ summaryError }}</div>
+            <div v-else-if="summaryOneLiner || summaryOverview" class="summary-body">
+              <p v-if="summaryOneLiner" class="summary-oneliner">{{ summaryOneLiner }}</p>
+              <p v-if="summaryOverview" class="summary-overview">{{ summaryOverview }}</p>
+            </div>
+            <p v-else-if="!indexReady" class="transcript-empty">
+              请先建立索引；完成后将自动生成摘要
+            </p>
+            <p v-else class="transcript-empty">暂无摘要（可能仍在生成或体裁无全书摘要）</p>
+          </el-tab-pane>
+        </el-tabs>
       </aside>
     </div>
 
@@ -123,11 +154,17 @@ import {
 } from '@utils/mediaPlaybackProgress'
 import {
   getDocumentIndexStatus,
+  getDocumentSummary,
   getFileTranscript,
   triggerDocumentIndex,
   type DocumentIndexStatusData,
   type TranscriptSegment,
 } from '@api/ai'
+import {
+  downloadTextFile,
+  segmentsToSrt,
+  segmentsToVtt,
+} from '@utils/subtitleFormat'
 
 const INDEX_POLL_MS = 2500
 const INDEX_ACTIVE = [
@@ -161,9 +198,12 @@ const visible = computed({
   set: (val) => emit('update:modelValue', val),
 })
 
-const dialogWidth = computed(() =>
-  mediaKind.value === 'audio' && props.fileId != null ? '860px' : mediaKind.value === 'audio' ? '480px' : '800px',
-)
+const dialogWidth = computed(() => {
+  if (showTranscriptPanel.value) {
+    return mediaKind.value === 'video' ? '960px' : '860px'
+  }
+  return mediaKind.value === 'audio' ? '480px' : '800px'
+})
 
 const showVideoUnsupportedHint = computed(() => {
   if (mediaKind.value !== 'video') return false
@@ -178,9 +218,7 @@ const showVideoUnsupportedHint = computed(() => {
   )
 })
 
-const showTranscriptPanel = computed(
-  () => mediaKind.value === 'audio' && props.fileId != null,
-)
+const showTranscriptPanel = computed(() => props.fileId != null)
 
 const mediaRef = ref<HTMLMediaElement | null>(null)
 const restoreSettled = ref(false)
@@ -194,9 +232,51 @@ const indexTriggering = ref(false)
 const indexPolling = ref(false)
 const segments = ref<TranscriptSegment[]>([])
 const transcriptError = ref('')
+const sideTab = ref<'transcript' | 'summary'>('transcript')
+const summaryLoading = ref(false)
+const summaryError = ref('')
+const summaryOneLiner = ref('')
+const summaryOverview = ref('')
+const vttObjectUrl = ref('')
 let indexPollTimer: ReturnType<typeof setInterval> | null = null
 
 const indexReady = computed(() => indexStatus.value?.status === 'ready')
+
+const canExportSrt = computed(
+  () =>
+    segments.value.some(
+      (s) => s.text?.trim() && s.startMs != null && s.endMs != null,
+    ),
+)
+
+function revokeVttUrl() {
+  if (vttObjectUrl.value) {
+    URL.revokeObjectURL(vttObjectUrl.value)
+    vttObjectUrl.value = ''
+  }
+}
+
+function refreshVttTrack() {
+  revokeVttUrl()
+  if (mediaKind.value !== 'video') return
+  const vtt = segmentsToVtt(segments.value)
+  if (!vtt || vtt.trim() === 'WEBVTT') return
+  const blob = new Blob([vtt], { type: 'text/vtt' })
+  vttObjectUrl.value = URL.createObjectURL(blob)
+}
+
+function onExportSrt() {
+  const srt = segmentsToSrt(segments.value)
+  if (!srt.trim()) {
+    ElMessage.warning('暂无可导出的字幕')
+    return
+  }
+  const base = (props.fileName || props.title || 'subtitle').replace(
+    /\.[^.]+$/,
+    '',
+  )
+  downloadTextFile(`${base}.srt`, srt, 'application/x-subrip')
+}
 
 const indexButtonLabel = computed(() =>
   indexReady.value || indexStatus.value?.status === 'failed'
@@ -257,11 +337,40 @@ async function loadTranscript() {
   try {
     const data = await getFileTranscript(props.fileId)
     segments.value = data.segments ?? []
+    refreshVttTrack()
   } catch (e: unknown) {
     segments.value = []
+    revokeVttUrl()
     transcriptError.value =
       (e as { response?: { data?: { message?: string } } })?.response?.data
         ?.message || '加载转写失败'
+  }
+}
+
+async function loadSummary() {
+  if (props.fileId == null || !indexReady.value) {
+    summaryOneLiner.value = ''
+    summaryOverview.value = ''
+    summaryError.value = ''
+    return
+  }
+  summaryLoading.value = true
+  summaryError.value = ''
+  try {
+    const data = await getDocumentSummary(props.fileId, { type: 'book' })
+    const payload = data.payload || {}
+    summaryOneLiner.value =
+      typeof payload.oneLiner === 'string' ? payload.oneLiner : ''
+    summaryOverview.value =
+      typeof payload.overview === 'string' ? payload.overview : ''
+  } catch (e: unknown) {
+    summaryOneLiner.value = ''
+    summaryOverview.value = ''
+    summaryError.value =
+      (e as { response?: { data?: { message?: string } } })?.response?.data
+        ?.message || '摘要尚未就绪'
+  } finally {
+    summaryLoading.value = false
   }
 }
 
@@ -273,6 +382,7 @@ async function refreshIndexStatus() {
     if (data.status === 'ready') {
       stopIndexPoll()
       await loadTranscript()
+      await loadSummary()
     } else if (data.status === 'failed') {
       stopIndexPoll()
     } else if (
@@ -308,6 +418,7 @@ async function onTriggerIndex() {
       }, INDEX_POLL_MS)
     } else if (data.status === 'ready') {
       await loadTranscript()
+      await loadSummary()
     }
   } catch (e: unknown) {
     ElMessage.error(
@@ -455,19 +566,24 @@ watch(
 )
 
 watch(
-  () => [props.modelValue, props.fileId, mediaKind.value] as const,
-  async ([open, id, kind]) => {
-    if (!open || kind !== 'audio' || id == null) {
+  () => [props.modelValue, props.fileId] as const,
+  async ([open, id]) => {
+    if (!open || id == null) {
       if (!open) {
         segments.value = []
         indexStatus.value = null
         transcriptError.value = ''
+        summaryOneLiner.value = ''
+        summaryOverview.value = ''
+        summaryError.value = ''
+        revokeVttUrl()
       }
       return
     }
     await refreshIndexStatus()
     if (indexStatus.value?.status === 'ready') {
       await loadTranscript()
+      await loadSummary()
     }
   },
 )
@@ -492,6 +608,7 @@ const handleBeforeClose = (done: () => void) => {
 
 const handleClosed = () => {
   stopIndexPoll()
+  revokeVttUrl()
   if (mediaRef.value) {
     mediaRef.value.pause()
     mediaRef.value.src = ''
@@ -584,13 +701,13 @@ const emitDownload = () => {
 }
 
 .transcript-panel {
-  width: 320px;
+  width: 340px;
   flex-shrink: 0;
   border-left: 1px solid #333;
   padding-left: 12px;
   display: flex;
   flex-direction: column;
-  max-height: 360px;
+  max-height: 70vh;
   color: #e5e5e5;
 }
 
@@ -598,8 +715,49 @@ const emitDownload = () => {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
+}
+
+.media-side-tabs {
+  margin-top: 8px;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.media-side-tabs :deep(.el-tabs__header) {
   margin-bottom: 8px;
-  flex-shrink: 0;
+}
+
+.media-side-tabs :deep(.el-tabs__item) {
+  color: #aaa;
+}
+
+.media-side-tabs :deep(.el-tabs__item.is-active) {
+  color: #fff;
+}
+
+.media-side-tabs :deep(.el-tabs__content) {
+  flex: 1;
+  overflow: auto;
+}
+
+.summary-body {
+  font-size: 13px;
+  line-height: 1.55;
+  color: #ddd;
+}
+
+.summary-oneliner {
+  font-weight: 600;
+  margin: 0 0 8px;
+  color: #fff;
+}
+
+.summary-overview {
+  margin: 0;
+  white-space: pre-wrap;
 }
 
 .transcript-status {

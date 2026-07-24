@@ -6,6 +6,7 @@ import type { Readable } from 'node:stream';
 import type { StorageProvider } from '@/storage/types';
 import {
   isIndexableAudio,
+  isIndexableVideo,
   type TextDocumentRef,
 } from '@/files/ai/index/service/text-extractor';
 import { UnsupportedDocumentFormatError } from '@/files/ai/index/service/text-extractor';
@@ -14,7 +15,9 @@ import { transcribeFile } from '@/files/ai/index/provider/asr.provider';
 import type { AsrTranscript } from '@/files/ai/index/types/asr.types';
 import {
   cleanupPreparedAudio,
+  getMaxVideoDurationSec,
   prepareAudioForAsr,
+  probeMediaDurationSec,
 } from '@/files/ai/index/utils/media-audio.util';
 
 async function readStreamToBuffer(stream: Readable): Promise<Buffer> {
@@ -27,7 +30,7 @@ async function readStreamToBuffer(stream: Readable): Promise<Buffer> {
 }
 
 /**
- * 从 Storage 拉取音频 → 转 16k mono → ASR，得到带时间轴文稿。
+ * 从 Storage 拉取音频或视频 →（视频校验时长）→ 转 16k mono → ASR。
  * @param storage 当前 StorageProvider（与文档索引同一套）
  * @param input storedPath / fileName / mimeType
  * @returns 全文 + segments（startMs/endMs）
@@ -36,9 +39,11 @@ export async function extractAudioTranscriptFromStorage(
   storage: StorageProvider,
   input: TextDocumentRef,
 ): Promise<AsrTranscript> {
-  if (!isIndexableAudio(input)) {
+  const isAudio = isIndexableAudio(input);
+  const isVideo = isIndexableVideo(input);
+  if (!isAudio && !isVideo) {
     throw new UnsupportedDocumentFormatError(
-      '不支持的音频格式，请使用 mp3/wav/m4a 等常见音频',
+      '不支持的媒体格式，请使用常见音频（mp3/wav/m4a）或视频（mp4/webm/mov）',
     );
   }
 
@@ -52,11 +57,23 @@ export async function extractAudioTranscriptFromStorage(
 
   // 原始字节落临时文件，供 ffmpeg / ASR 读路径
   const downloadDir = await mkdtemp(join(tmpdir(), 'asr-dl-'));
-  const sourcePath = join(downloadDir, input.fileName || 'audio.bin');
+  const sourcePath = join(
+    downloadDir,
+    input.fileName || (isVideo ? 'video.bin' : 'audio.bin'),
+  );
   let prepared: Awaited<ReturnType<typeof prepareAudioForAsr>> | null = null;
 
   try {
     await writeFile(sourcePath, buffer);
+    if (isVideo) {
+      const durationSec = await probeMediaDurationSec(sourcePath);
+      const maxSec = getMaxVideoDurationSec();
+      if (durationSec > maxSec) {
+        throw new Error(
+          `视频时长约 ${Math.ceil(durationSec / 60)} 分钟，超过上限 ${Math.floor(maxSec / 60)} 分钟`,
+        );
+      }
+    }
     prepared = await prepareAudioForAsr(sourcePath);
     return await transcribeFile(prepared.wavPath);
   } finally {

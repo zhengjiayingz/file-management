@@ -7,7 +7,8 @@ import { StorageService } from '@/storage/storage.service';
 import { chunkText } from '@/files/ai/index/service/text-chunker';
 import {
   extractTextFromStorage,
-  isIndexableAudio,
+  isIndexableMedia,
+  isIndexableVideo,
 } from '@/files/ai/index/service/text-extractor';
 import { extractAudioTranscriptFromStorage } from '@/files/ai/index/service/audio-transcript.extractor';
 
@@ -94,13 +95,14 @@ export class DocumentIndexProcessor extends WorkerHost {
       };
 
       let chunks: IndexChunk[];
-      // 音频：走 ASR 转写
-      if (isIndexableAudio(fileRef)) {
-        // 更新状态 → extracting：音频走 ASR 转写
+      // 音视频：走 ASR 转写（视频先抽音轨）
+      if (isIndexableMedia(fileRef)) {
+        const isVideo = isIndexableVideo(fileRef);
+        // 更新状态 → extracting
         await this.patchJob(userFileId, {
           status: 'extracting',
           progress: 10,
-          progressMsg: '正在转写音频',
+          progressMsg: isVideo ? '正在抽取音轨并转写' : '正在转写音频',
           errorMessage: null,
         });
         // ! 调用 ASR 转写接口，得到带时间轴文稿
@@ -156,18 +158,20 @@ export class DocumentIndexProcessor extends WorkerHost {
 
       if (chunks.length === 0) {
         throw new Error(
-          isIndexableAudio(fileRef)
-            ? '音频转写结果为空，无法索引'
+          isIndexableMedia(fileRef)
+            ? '转写结果为空，无法索引'
             : '文档内容为空，无法索引',
         );
       }
 
-      // 音频：转写句已是「块」，补一条 chunking 进度便于前端显示
-      if (isIndexableAudio(fileRef)) {
+      // 音视频：转写句已是「块」，补一条 chunking 进度便于前端显示
+      if (isIndexableMedia(fileRef)) {
         await this.patchJob(userFileId, {
           status: 'chunking',
           progress: 30,
-          progressMsg: '正在写入转写分句',
+          progressMsg: isIndexableVideo(fileRef)
+            ? '正在写入视频文稿分句'
+            : '正在写入转写分句',
         });
       }
 
